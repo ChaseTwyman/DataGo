@@ -643,4 +643,32 @@ describe("migration 000008 (grokbot)", () => {
     );
     expect(col.rows[0]?.data_type).toBe("jsonb");
   });
+
+  it("adds missions + impact_cards (server-only), submissions.revisit_of/mission_id, and the flood revisit schedule", async () => {
+    const proto = await db.query<{ r: unknown }>("select definition->'revisit' as r from public.protocols where slug = 'street-flood-depth'");
+    expect(proto.rows[0]?.r).toMatchObject({ intervals_min: [30, 60, 120], max: 3 });
+    const cols = await db.query<{ column_name: string }>(
+      "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'submissions' and column_name in ('revisit_of', 'mission_id')",
+    );
+    expect(cols.rows.map((r) => r.column_name).sort()).toEqual(["mission_id", "revisit_of"]);
+    // window sanity is enforced by the table
+    await expect(
+      db.query(`insert into public.missions (bounty_id, cell, source_submission_id, sequence, interval_min, opens_at, due_at, dibs_until, closes_at)
+                values ($1, 'x', gen_random_uuid(), 1, 30, now(), now() - interval '1 minute', now(), now())`, [DEMO.bountyId]),
+    ).rejects.toThrow();
+    await expect(db.query(`insert into public.impact_cards (submission_id, path) values (gen_random_uuid(), 'observations/x.png')`)).rejects.toThrow();
+    await asUser(CONTRIB_A, async () => {
+      for (const t of ["missions", "impact_cards"]) {
+        const r = await db.query(`select 1 from public.${t}`).then(
+          (x) => x.rows,
+          () => [],
+        );
+        expect(r).toHaveLength(0);
+      }
+      await expect(
+        db.query(`insert into public.missions (bounty_id, cell, source_submission_id, sequence, interval_min, opens_at, due_at, dibs_until, closes_at)
+                  values ($1, 'x', gen_random_uuid(), 1, 30, now(), now(), now(), now())`, [DEMO.bountyId]),
+      ).rejects.toThrow();
+    });
+  });
 });

@@ -10,3 +10,5 @@ export * from "./extractionSanity";
 export * from "./provenance";
 export * from "./contracts";
 export * from "./demo";
+export * from "./revisit";
+export * from "./lateUpload";

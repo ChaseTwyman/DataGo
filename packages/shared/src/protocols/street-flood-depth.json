@@ -170,5 +170,12 @@
   "pricing": {
     "urgency_tau_hours": 3
   },
+  "revisit": {
+    "intervals_min": [30, 60, 120],
+    "max": 3,
+    "first_dibs_min": 10,
+    "window_min": 20,
+    "early_min": 5
+  },
   "example_image_prompt": "Photorealistic landscape street-level photo of shallow floodwater on an urban street reaching halfway up a standard concrete curb and the lower part of a parked car's tire, overcast daylight, camera held level about 3 meters away, waterline clearly visible on the curb and tire. Instructional reference photo."
 }

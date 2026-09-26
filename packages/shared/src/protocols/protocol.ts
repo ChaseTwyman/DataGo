@@ -55,6 +55,21 @@ export const ExtractionRuleSchema = z.discriminatedUnion("kind", [
 ]);
 export type ExtractionRule = z.infer<typeof ExtractionRuleSchema>;
 
+/**
+ * Revisit schedule. `intervals_min`: minutes after the original capture each follow-up is due;
+ * `max`: at most this many missions per original reading; `first_dibs_min`: the original contributor
+ * alone may fill a mission for this long after it opens; `window_min`: a mission stays open this long
+ * after it is due (it opens `early_min` before).
+ */
+export const RevisitConfigSchema = z.object({
+  intervals_min: z.array(z.number().int().min(5).max(24 * 60)).min(1).max(6),
+  max: z.number().int().min(1).max(6),
+  first_dibs_min: z.number().int().min(0).max(120).optional(),
+  window_min: z.number().int().min(5).max(180).optional(),
+  early_min: z.number().int().min(0).max(30).optional(),
+});
+export type RevisitConfig = z.infer<typeof RevisitConfigSchema>;
+
 export const ProtocolSchema = z.object({
   slug: z.string().regex(/^[a-z0-9-]+$/),
   version: z.number().int().positive(),
@@ -98,6 +113,11 @@ export const ProtocolSchema = z.object({
     element_absent_reject_confidence: z.number().min(0).max(1).optional(),
   }),
   pricing: z.object({ urgency_tau_hours: z.number().positive() }).optional(),
+  /**
+   * Revisit missions (optional; see contracts/missions.ts): when a reading is accepted, follow-up
+   * missions for the same H3 cell open at each interval after the capture (e.g. flood recession).
+   */
+  revisit: RevisitConfigSchema.optional(),
   example_image_prompt: z.string().min(1),
 });
 
