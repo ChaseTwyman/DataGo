@@ -12,7 +12,7 @@ import {
   STAGE_STATUS_META,
 } from "./checkFormat";
 import { chooseStreamMode, initialStreamState, mergeSubmissions, streamReducer } from "./stream";
-import { dollarsToCents, localInputToIso, previewPrices } from "./pricePreview";
+import { dollarsToCents, localInputToIso } from "./pricePreview";
 
 const cell = (over: Partial<CellPrice> = {}): CellPrice => ({
   cell: "8944c0a3053ffff",
@@ -220,32 +220,7 @@ describe("submission stream reducer", () => {
   });
 });
 
-describe("create-bounty price preview", () => {
-  it("reproduces the PRD worked example for empty cells (capped at max)", () => {
-    const now = new Date("2026-09-26T12:00:00Z");
-    const p = previewPrices({
-      cells: ["a", "b"],
-      baseCents: 200,
-      maxCents: 1000,
-      targetPerCell: 5,
-      priority: 1,
-      tauHours: 3,
-      eventStartedAt: "2026-09-26T11:30:00Z",
-      now,
-    });
-    expect(p.priceCents).toBe(1000);
-    expect(p.surge).toBe(5);
-    expect(p.cells).toHaveLength(2);
-    expect(p.cells[0]).toMatchObject({ accepted: 0, target: 5, price_cents: 1000, paused: false });
-    expect(p.maxExposureCents).toBe(2 * 5 * 1000);
-  });
-
-  it("applies scarcity only when there is no event", () => {
-    const p = previewPrices({ cells: ["a"], baseCents: 200, maxCents: 10_000, targetPerCell: 5, priority: 1, tauHours: 3, eventStartedAt: null });
-    expect(p.priceCents).toBe(600);
-    expect(p.surge).toBe(3);
-  });
-
+describe("data-request form helpers (prices come from POST /api/pricing/preview)", () => {
   it("parses dollar inputs and datetime-local values", () => {
     expect(dollarsToCents("2")).toBe(200);
     expect(dollarsToCents("$4.24")).toBe(424);

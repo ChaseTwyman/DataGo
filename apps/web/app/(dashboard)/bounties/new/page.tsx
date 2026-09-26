@@ -1,25 +1,31 @@
 "use client";
-import { ArrowLeft, LoaderCircle, Radar, TriangleAlert } from "lucide-react";
+import { ArrowLeft, LoaderCircle, Radar } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { cellsForCircle, DEMO, formatCents, formatSurge, isHotSurge, urgencyTauHours } from "@groundtruth/shared";
+import { cellsForCircle, DEMO, formatCents, formatSurge, isHotSurge, type CellPrice, type PricingPreviewResponse } from "@groundtruth/shared";
+import { Notice, Panel, PanelHeader, Readout } from "@/components/ds/primitives";
 import { HexMap, MapLegend } from "@/components/map";
-import { ErrorBox, PageHeader, Stat } from "@/components/page";
+import { ErrorBox, PageHeader } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
 import { fieldErrorSummary } from "@/lib/client/errors";
-import { dollarsToCents, isoToLocalInput, localInputToIso, previewPrices } from "@/lib/client/pricePreview";
+import { isoToLocalInput, localInputToIso } from "@/lib/client/pricePreview";
 import { FORM_RADIUS_MAX as RADIUS_MAX, FORM_RADIUS_MIN as RADIUS_MIN, parseBountyPrefill, pickProtocolId, zoomForRadiusM, type BountyPrefill } from "@/lib/client/radar";
 import { useApi } from "@/lib/client/useApi";
 
 /** Fields rendered with their own inline message; others are summarized above the submit button. */
-const INLINE_FIELDS = new Set(["protocol_id", "title", "summary", "radius_m", "starts_at", "ends_at", "base_price_cents", "max_price_cents", "target_per_cell", "budget_cents", "sponsor_name", "sponsor_url"]);
+const INLINE_FIELDS = new Set(["protocol_id", "title", "summary", "radius_m", "starts_at", "ends_at", "target_per_cell", "justification"]);
+const PREVIEW_DEBOUNCE_MS = 400;
 
-export default function NewBountyPage() {
+/**
+ * New data request. Researchers say WHAT they need (protocol, area, window, readings per cell, why);
+ * the platform funds it from the sponsor pool and prices every cell with its own engine. The price
+ * preview comes from POST /api/pricing/preview — no pricing logic runs in the browser.
+ */
+export default function NewRequestPage() {
   const router = useRouter();
   const protocols = useApi(() => api.protocols(), "protocols");
 
@@ -27,26 +33,19 @@ export default function NewBountyPage() {
   const [protocolId, setProtocolId] = useState("");
   const [title, setTitle] = useState("Flash flood: street depth");
   const [summary, setSummary] = useState("Street-level flood depth readings to calibrate the city flood model.");
+  const [justification, setJustification] = useState("");
   const [center, setCenter] = useState<{ lat: number; lng: number }>({ lat: DEMO.lat, lng: DEMO.lng });
   const [radius, setRadius] = useState<number>(DEMO.radiusM);
   const [startsAt, setStartsAt] = useState(isoToLocalInput(now));
   const [endsAt, setEndsAt] = useState(isoToLocalInput(new Date(now.getTime() + 24 * 3_600_000)));
   const [hasEvent, setHasEvent] = useState(true);
   const [eventAt, setEventAt] = useState(isoToLocalInput(new Date(now.getTime() - 30 * 60_000)));
-  const [base, setBase] = useState("2.00");
-  const [max, setMax] = useState("10.00");
   const [target, setTarget] = useState(5);
-  const [priority, setPriority] = useState(1);
-  const [budget, setBudget] = useState("500");
-  const [sponsorName, setSponsorName] = useState("");
-  const [sponsorUrl, setSponsorUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   // Prefill from the URL: ?protocol=<id> (Protocol Studio) or a whole Opportunity Radar draft
-  // (lib/client/radar.ts draftPrefillHref). Read on mount, directly from window.location, so the page
-  // needs no Suspense boundary for useSearchParams. The researcher reviews and publishes; nothing
-  // is created from the URL alone.
+  // (lib/client/radar.ts draftPrefillHref). Nothing is created from the URL alone.
   const [prefill, setPrefill] = useState<BountyPrefill | null>(null);
   useEffect(() => {
     const p = parseBountyPrefill(window.location.search);
@@ -63,36 +62,61 @@ export default function NewBountyPage() {
     if (protocolId || !list[0]) return;
     setProtocolId(pickProtocolId(list, { protocolId: prefill?.protocolId ?? null, protocolSlug: prefill?.protocolSlug ?? null }));
   }, [list, protocolId, prefill]);
-  const protocol = list.find((p) => p.id === protocolId)?.definition ?? null;
 
   const cells = useMemo(() => cellsForCircle(center.lat, center.lng, radius), [center, radius]);
-  const baseCents = dollarsToCents(base);
-  const maxCents = dollarsToCents(max);
-  const budgetCents = dollarsToCents(budget);
   const eventIso = hasEvent ? localInputToIso(eventAt) : null;
-  const preview = useMemo(
+  const startsIso = localInputToIso(startsAt);
+  const endsIso = localInputToIso(endsAt);
+
+  // Server-side price preview, debounced; the last good preview stays on screen while the next loads.
+  const [preview, setPreview] = useState<PricingPreviewResponse | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  useEffect(() => {
+    if (!protocolId || !startsIso || !endsIso || Date.parse(endsIso) <= Date.parse(startsIso)) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      setPreviewing(true);
+      api
+        .pricingPreview({
+          protocol_id: protocolId,
+          center_lat: center.lat,
+          center_lng: center.lng,
+          radius_m: radius,
+          target_per_cell: target,
+          starts_at: startsIso,
+          ends_at: endsIso,
+          event_started_at: eventIso,
+        })
+        .then((p) => {
+          if (!alive) return;
+          setPreview(p);
+          setPreviewError(null);
+        })
+        .catch((e: unknown) => alive && setPreviewError(errorMessage(e)))
+        .finally(() => alive && setPreviewing(false));
+    }, PREVIEW_DEBOUNCE_MS);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [protocolId, center, radius, target, startsIso, endsIso, eventIso]);
+
+  // Until the first preview arrives, show the cells unpriced.
+  const mapCells: CellPrice[] = useMemo(
     () =>
-      previewPrices({
-        cells,
-        baseCents: Number.isFinite(baseCents) ? baseCents : 0,
-        maxCents: Number.isFinite(maxCents) ? maxCents : 0,
-        targetPerCell: target,
-        priority,
-        tauHours: protocol ? urgencyTauHours(protocol) : 3,
-        eventStartedAt: eventIso,
-      }),
-    [cells, baseCents, maxCents, target, priority, protocol, eventIso],
+      preview && preview.cells.length === cells.length
+        ? preview.cells
+        : cells.map((cell) => ({ cell, accepted: 0, target, price_cents: 0, surge: 1, paused: false, paused_reason: null })),
+    [preview, cells, target],
   );
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setFields({});
-    const starts = localInputToIso(startsAt);
-    const ends = localInputToIso(endsAt);
     if (!protocolId) return setError("Choose a protocol.");
-    if (!starts || !ends) return setError("Set a valid time window.");
-    if (![baseCents, maxCents, budgetCents].every(Number.isFinite)) return setError("Prices and budget must be numbers.");
+    if (!startsIso || !endsIso) return setError("Set a valid time window.");
     setBusy(true);
     try {
       const r = await api.createBounty({
@@ -102,55 +126,46 @@ export default function NewBountyPage() {
         center_lat: center.lat,
         center_lng: center.lng,
         radius_m: radius,
-        starts_at: starts,
-        ends_at: ends,
+        starts_at: startsIso,
+        ends_at: endsIso,
         event_started_at: eventIso,
-        base_price_cents: baseCents,
-        max_price_cents: maxCents,
         target_per_cell: target,
-        priority,
-        budget_cents: budgetCents,
-        sponsor_name: sponsorName.trim() || null,
-        sponsor_url: sponsorUrl.trim() || null,
-        status: "active",
+        justification: justification.trim(),
         source: prefill?.source ?? "manual",
       });
       router.push(`/bounties/${r.id}`);
     } catch (err) {
-      // Validation failures (client-side zod or a server 400/422) go next to the fields they concern.
       const fe = fieldErrors(err);
       setFields(fe);
       const offForm = Object.fromEntries(Object.entries(fe).filter(([k]) => !INLINE_FIELDS.has(k)));
       setError(
-        Object.keys(fe).length
-          ? ["Some fields need attention.", fieldErrorSummary(offForm)].filter(Boolean).join(" ")
-          : errorMessage(err),
+        Object.keys(fe).length ? ["Some fields need attention.", fieldErrorSummary(offForm)].filter(Boolean).join(" ") : errorMessage(err),
       );
       setBusy(false);
     }
   };
 
-  const overBudget = Number.isFinite(budgetCents) && preview.maxExposureCents > budgetCents;
   const radarSlugMissing =
     prefill?.source === "radar" && !!prefill.protocolSlug && list.length > 0 && !list.some((p) => p.slug === prefill.protocolSlug && p.status === "published");
 
   return (
     <>
       <PageHeader
-        title="New bounty"
-        description="Click the map to set the center; the radius slider previews coverage cells and live prices."
+        eyebrow="Data request"
+        title="New request"
+        description="Say what data you need. GroundTruth funds requests from its sponsor pool and sets every price with its pricing engine."
         actions={
           <Link href="/bounties" className={buttonVariants({ variant: "ghost" })}>
             <ArrowLeft aria-hidden /> Bounties
           </Link>
         }
       />
-      <form onSubmit={(e) => void onSubmit(e)} className="grid flex-1 gap-0 lg:grid-cols-[1fr_400px]">
+      <form onSubmit={(e) => void onSubmit(e)} className="grid flex-1 gap-0 lg:grid-cols-[1fr_420px]">
         <div className="relative min-h-[420px]">
           <HexMap
             center={center}
             zoom={prefill?.radiusM ? Math.min(13.5, zoomForRadiusM(prefill.radiusM)) : 13.5}
-            cells={preview.cells}
+            cells={mapCells}
             circle={{ ...center, radiusM: radius }}
             marker={center}
             onMapClick={(lat, lng) => setCenter({ lat, lng })}
@@ -165,44 +180,63 @@ export default function NewBountyPage() {
 
         <div className="space-y-4 overflow-y-auto border-l bg-card p-5">
           {prefill?.source === "radar" ? (
-            <div role="note" className="space-y-1 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
-              <div className="flex items-center gap-1.5 font-medium">
-                <Radar className="size-4" aria-hidden /> Drafted by Opportunity Radar
-                {prefill.alertEvent ? <Badge tone="warning">{prefill.alertEvent}</Badge> : null}
-              </div>
-              <p className="text-xs text-sky-900/80">
-                Title, summary, area and protocol come from the AI draft. Check every field, set prices and budget, then publish — nothing is
-                created until you do.
-              </p>
-              {radarSlugMissing ? (
-                <p className="text-xs text-amber-800">
-                  The drafted protocol ({prefill.protocolSlug}) isn&apos;t available to you; choose a protocol below.
-                </p>
-              ) : null}
-            </div>
+            <Notice tone="info" title={<span className="flex items-center gap-1.5"><Radar className="size-3.5" aria-hidden /> Drafted by Opportunity Radar</span>}>
+              Title, summary, area and protocol come from the AI draft{prefill.alertEvent ? ` (${prefill.alertEvent})` : ""}. Check every field, then
+              submit — nothing is created until you do.
+              {radarSlugMissing ? ` The drafted protocol (${prefill.protocolSlug}) isn't available to you; choose a protocol below.` : ""}
+            </Notice>
           ) : null}
-          <Card className="bg-muted/30">
-            <CardHeader className="pb-2">
-              <CardTitle>Live price preview</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-3 gap-3">
-              <Stat label="Cells" value={cells.length} sub="H3 res 9" />
-              <Stat
-                label="Per cell now"
-                value={formatCents(preview.priceCents)}
+
+          <Panel>
+            <PanelHeader
+              title="Platform price preview"
+              actions={previewing ? <LoaderCircle className="size-3.5 animate-spin" aria-label="Updating" /> : "live"}
+            />
+            <div className="grid grid-cols-3 gap-4 p-4">
+              <Readout size="sm" label="Cells" value={cells.length} sub="H3 res 9" />
+              <Readout
+                size="sm"
+                label="Per reading"
+                value={preview ? formatCents(preview.price_cents) : "—"}
                 sub={
-                  <Badge tone={isHotSurge(preview.surge) ? "warning" : "muted"}>{formatSurge(preview.surge)} surge</Badge>
+                  preview ? (
+                    <Badge tone={isHotSurge(preview.surge) ? "warning" : "muted"}>{formatSurge(preview.surge)} surge</Badge>
+                  ) : (
+                    "median cell"
+                  )
                 }
               />
-              <Stat label="Max exposure" value={formatCents(preview.maxExposureCents)} sub="cells × target × price" />
-              {overBudget ? (
-                <p className="col-span-3 flex items-center gap-1.5 text-xs text-amber-800">
-                  <TriangleAlert className="size-3.5" aria-hidden /> Budget runs out before every cell reaches target;
-                  sessions stop when it&apos;s spent.
+              <Readout size="sm" label="Est. cost" value={preview ? formatCents(preview.estimated_need_cents) : "—"} sub="to fill every cell" />
+            </div>
+            {preview ? (
+              <div className="space-y-3 border-t px-4 py-3 text-xs text-muted-foreground">
+                <p>
+                  Range {formatCents(preview.min_price_cents)}–{formatCents(preview.max_price_cents)} per reading now (base{" "}
+                  {formatCents(preview.base_cents)}, ceiling {formatCents(preview.ceiling_cents)}). Prices move with coverage, event age,
+                  demand, nearby activity and pacing.
                 </p>
-              ) : null}
-            </CardContent>
-          </Card>
+                {preview.price_reasons.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {preview.price_reasons.map((r) => (
+                      <Badge key={r} tone="muted">
+                        {r}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+                {preview.funding.would_fund ? (
+                  <Notice tone="info" title="Fundable now">
+                    The sponsor pool would allocate {formatCents(preview.funding.allocation_cents)} when you submit.
+                  </Notice>
+                ) : (
+                  <Notice tone="warning" title="Would wait for funding">
+                    {preview.funding.reason ?? "The request would wait for funding."}
+                  </Notice>
+                )}
+              </div>
+            ) : null}
+            <ErrorBox message={previewError} className="m-4 mt-0" />
+          </Panel>
 
           <Field label="Protocol" htmlFor="protocol" error={fields.protocol_id}>
             <Select id="protocol" value={protocolId} onChange={(e) => setProtocolId(e.target.value)} required>
@@ -220,15 +254,24 @@ export default function NewBountyPage() {
           <Field label="Title" htmlFor="title" error={fields.title}>
             <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} minLength={3} maxLength={120} required />
           </Field>
-          <Field label="Summary" htmlFor="summary" error={fields.summary}>
+          <Field label="Summary (shown to contributors)" htmlFor="summary" error={fields.summary}>
             <Textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} maxLength={500} />
+          </Field>
+          <Field label="Why is this data needed?" htmlFor="justification" error={fields.justification} hint="Seen by the admins who approve funding.">
+            <Textarea
+              id="justification"
+              value={justification}
+              onChange={(e) => setJustification(e.target.value)}
+              maxLength={1000}
+              placeholder="e.g. Calibrating the city's flood model for the Oct 1 storm; readings go into the public dataset."
+            />
           </Field>
 
           <Field
             label={`Radius: ${radius >= 1000 ? `${(radius / 1000).toFixed(2)} km` : `${radius} m`}`}
             htmlFor="radius"
             error={fields.radius_m}
-            hint={`Center ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`}
+            hint={`Center ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)} — click the map to move it`}
           >
             <input
               id="radius"
@@ -251,68 +294,26 @@ export default function NewBountyPage() {
             </Field>
           </div>
 
-          <div className="space-y-2 rounded-md border p-3">
+          <Field label="Readings wanted per cell" htmlFor="target" error={fields.target_per_cell}>
+            <Input id="target" type="number" min={1} max={100} value={target} onChange={(e) => setTarget(Math.min(100, Math.max(1, Number(e.target.value) || 1)))} required />
+          </Field>
+
+          <div className="space-y-2 border p-3">
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={hasEvent} onChange={(e) => setHasEvent(e.target.checked)} className="size-4" />
-              Triggering event already started (urgency pricing)
+              A triggering event already started (optional)
             </label>
-            {hasEvent ? (
-              <Input type="datetime-local" value={eventAt} onChange={(e) => setEventAt(e.target.value)} aria-label="Event start" />
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Base price ($)" htmlFor="base" error={fields.base_price_cents}>
-              <Input id="base" inputMode="decimal" value={base} onChange={(e) => setBase(e.target.value)} required />
-            </Field>
-            <Field label="Max price ($)" htmlFor="max" error={fields.max_price_cents}>
-              <Input id="max" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} required />
-            </Field>
-            <Field label="Target per cell" htmlFor="target" error={fields.target_per_cell}>
-              <Input
-                id="target"
-                type="number"
-                min={1}
-                max={100}
-                value={target}
-                onChange={(e) => setTarget(Math.max(1, Number(e.target.value) || 1))}
-                required
-              />
-            </Field>
-            <Field label={`Priority ×${priority.toFixed(1)}`} htmlFor="priority">
-              <input
-                id="priority"
-                type="range"
-                min={0.1}
-                max={5}
-                step={0.1}
-                value={priority}
-                onChange={(e) => setPriority(Number(e.target.value))}
-                className="mt-2 w-full accent-[var(--color-primary)]"
-              />
-            </Field>
-            <Field label="Total budget ($)" htmlFor="budget" className="col-span-2" error={fields.budget_cents}>
-              <Input id="budget" inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} required />
-            </Field>
-          </div>
-
-          <div className="space-y-3 rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">
-              Sponsors fund collection; the resulting dataset is published free for everyone (CC BY 4.0, no images).
-            </p>
-            <Field label="Sponsor (optional)" htmlFor="sponsor" error={fields.sponsor_name}>
-              <Input id="sponsor" value={sponsorName} onChange={(e) => setSponsorName(e.target.value)} maxLength={120} placeholder="e.g. City Stormwater Office" />
-            </Field>
-            <Field label="Sponsor link (optional)" htmlFor="sponsor-url" error={fields.sponsor_url}>
-              <Input id="sponsor-url" type="url" value={sponsorUrl} onChange={(e) => setSponsorUrl(e.target.value)} maxLength={300} placeholder="https://" />
-            </Field>
+            {hasEvent ? <Input type="datetime-local" value={eventAt} onChange={(e) => setEventAt(e.target.value)} aria-label="Event start" /> : null}
           </div>
 
           <ErrorBox message={error} />
           <Button type="submit" size="lg" className="w-full" disabled={busy || !protocolId}>
             {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
-            Publish bounty
+            Submit request
           </Button>
+          <p className="text-xs text-muted-foreground">
+            Money is simulated. Sponsors fund the pool; the resulting dataset is published free for everyone (CC BY 4.0, no images).
+          </p>
         </div>
       </form>
     </>

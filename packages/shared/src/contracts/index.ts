@@ -5,5 +5,6 @@ export * from "./submissions";
 export * from "./misc";
 export * from "./lists";
 export * from "./openData";
+export * from "./funding";
 export * from "./lenient";
 export * from "./account";

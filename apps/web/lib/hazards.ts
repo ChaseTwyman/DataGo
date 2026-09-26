@@ -44,7 +44,11 @@ async function alertsAtPoint(db: Db, lat: number, lng: number, now: number): Pro
 }
 
 /** cell → human-readable pause reason, for every paused cell of the bounty. */
-export async function pausedCells(db: Db, bounty: BountyRow, now = new Date()): Promise<Map<string, string>> {
+export async function pausedCells(
+  db: Db,
+  bounty: Pick<BountyRow, "center_lat" | "center_lng" | "cells">,
+  now = new Date(),
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const atPoint = (await alertsAtPoint(db, bounty.center_lat, bounty.center_lng, now.getTime())).filter((a) => isPausingAlert(a));
   const cached = (await activeGeometryAlerts(db, now.toISOString())).filter((a) => isPausingAlert(a));

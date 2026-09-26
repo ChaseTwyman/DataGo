@@ -2,6 +2,7 @@
 import {
   ChevronRight,
   ClipboardCheck,
+  Coins,
   Database,
   FlaskConical,
   Globe,
@@ -41,7 +42,10 @@ const RESEARCH: NavItem[] = [
   { href: "/studio", label: "Protocol Studio", icon: Sparkles },
   { href: "/radar", label: "Opportunity Radar", icon: Radar },
 ];
-const ADMIN: NavItem[] = [{ href: "/admin/users", label: "Users", icon: Users }];
+const ADMIN: NavItem[] = [
+  { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/funding", label: "Funding", icon: Coins },
+];
 const ALWAYS: NavItem[] = [
   { href: "/account", label: "Account", icon: UserRound },
   { href: "/data", label: "Open data", icon: Globe },

@@ -7,6 +7,7 @@ import { formatCents, formatSurge, isHotSurge } from "@groundtruth/shared";
 import { Tabs } from "@/components/ds/controls";
 import { MapPanel } from "@/components/ds/MapFrame";
 import { PanelHeader, ReadoutGrid } from "@/components/ds/primitives";
+import { FundingPanel } from "@/components/funding/FundingPanel";
 import { HexMap, MapLegend, type MapPoint } from "@/components/map";
 import { Empty, ErrorBox, Loading, PageHeader, Stat } from "@/components/page";
 import { BriefingVideo } from "@/components/BriefingVideo";
@@ -131,9 +132,9 @@ export default function BountyPage() {
               <Button variant="outline" size="sm" onClick={() => void setStatus("paused")}>
                 <Pause aria-hidden /> Pause
               </Button>
-            ) : b.status === "paused" || b.status === "draft" ? (
+            ) : b.status === "paused" && b.budget_cents > b.spent_cents ? (
               <Button size="sm" onClick={() => void setStatus("active")}>
-                <Play aria-hidden /> Activate
+                <Play aria-hidden /> Resume
               </Button>
             ) : null}
           </>
@@ -149,9 +150,10 @@ export default function BountyPage() {
           value={<span className={cn(isHotSurge(summary.maxSurge) && "text-warning")}>{formatSurge(summary.maxSurge || 1)}</span>}
           sub={`base ${formatCents(b.base_price_cents)} · max ${formatCents(b.max_price_cents)}`}
         />
-        <Stat label="Spent" value={formatCents(b.spent_cents)} sub={`of ${formatCents(b.budget_cents)}`} />
+        <Stat label="Paid out" value={formatCents(b.spent_cents)} sub={`of ${formatCents(b.budget_cents)} allocated`} />
         <Stat label="Submissions" value={stream.submissions.length} sub={`${acceptedCount} accepted`} />
       </ReadoutGrid>
+      <FundingPanel bounty={b} onChanged={bounty.refresh} />
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_460px]">
         <div className="relative min-h-[420px] bg-[#0c0c0c]">

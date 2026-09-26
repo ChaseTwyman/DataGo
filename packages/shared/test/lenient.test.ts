@@ -142,3 +142,33 @@ describe("forward-compatible client parsing", () => {
     expect(h.realtime).toBe(false);
   });
 });
+
+describe("sponsor-pool additions (000007) stay forward/backward compatible", async () => {
+  const { LenientBountyDetailSchema: Detail, LenientNearbyResponseSchema: Nearby, streetFloodDepth: proto } = await import("../src");
+  const base = {
+    id: UID, title: "t", summary: "", status: "pending_funding", source: "manual", protocol_id: UID, protocol: proto,
+    area: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
+    center_lat: 0, center_lng: 0, radius_m: 100, cells: [], starts_at: NOW, ends_at: NOW, event_started_at: null,
+    base_price_cents: 200, max_price_cents: 1000, target_per_cell: 3, priority: 1, budget_cents: 0, spent_cents: 0,
+    example_image_url: null, briefing_video_url: null, sponsor_name: null, sponsor_url: null,
+    coverage: [{ cell: "c", accepted: 0, target: 3, price_cents: 600, surge: 3, paused: false, paused_reason: null, price_reasons: ["Few readings here"] }],
+  };
+  it("old payloads (no price_reasons / funding) and new ones both parse; a malformed funding block hides the panel", () => {
+    const old = Detail.parse({ ...base, coverage: [{ ...base.coverage[0], price_reasons: undefined }] });
+    expect(old.funding).toBeUndefined();
+    const withFunding = Detail.parse({ ...base, justification: "why", funding: { allocation_cents: "lots" } });
+    expect(withFunding.funding).toBeNull();
+    expect(withFunding.coverage[0]?.price_reasons).toEqual(["Few readings here"]);
+    expect(withFunding.status).toBe("pending_funding");
+  });
+  it("nearby bounties carry optional price_reasons", () => {
+    const summary = {
+      id: UID, title: "t", summary: "", protocol_slug: "p", protocol_name: "P", safety_level: "elevated", center_lat: 0, center_lng: 0,
+      radius_m: 100, distance_m: 5, price_cents: 600, surge: 3, max_surge: 3, ends_at: NOW, cells_total: 1, cells_needed: 1, paused_cells: 0,
+      match_score: 0.5, match_reason: null, budget_remaining_cents: 100, example_image_url: null,
+    };
+    const n = Nearby.parse({ bounties: [summary, { ...summary, price_reasons: ["Event is recent"] }] });
+    expect(n.bounties[0]?.price_reasons).toBeUndefined();
+    expect(n.bounties[1]?.price_reasons).toEqual(["Event is recent"]);
+  });
+});

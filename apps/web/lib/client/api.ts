@@ -40,6 +40,18 @@ import {
   LenientSubmissionWithMediaSchema,
   PatchBountyRequestSchema,
   SpawnEventResponseSchema,
+  AllocationResultSchema,
+  ContributionSchema,
+  FundingOverviewSchema,
+  PricingPreviewRequestSchema,
+  PricingPreviewResponseSchema,
+  PublicFundingResponseSchema,
+  RunAllocationResponseSchema,
+  SponsorSchema,
+  type CreateContributionRequestSchema,
+  type CreateSponsorRequestSchema,
+  type PatchSponsorRequest,
+  type SetAllocationRequest,
   type AttackType,
   type CreateBountyRequest,
   type PatchBountyRequest,
@@ -202,6 +214,23 @@ export const api = {
       method: "PATCH",
       body: PatchBountyRequestSchema.parse(patch),
     }),
+
+  /** Platform pricing engine preview for a draft data request (server-side only). */
+  pricingPreview: (input: z.input<typeof PricingPreviewRequestSchema>) =>
+    apiFetch("/api/pricing/preview", PricingPreviewResponseSchema, { body: PricingPreviewRequestSchema.parse(input) }),
+
+  // ---- sponsor pool (admin)
+  adminFunding: () => apiFetch("/api/admin/funding", FundingOverviewSchema),
+  adminRunAllocation: () => apiFetch("/api/admin/funding/run", RunAllocationResponseSchema, { body: {} }),
+  adminCreateSponsor: (body: z.input<typeof CreateSponsorRequestSchema>) => apiFetch("/api/admin/sponsors", SponsorSchema, { body }),
+  adminPatchSponsor: (id: string, body: PatchSponsorRequest) => apiFetch(`/api/admin/sponsors/${id}`, SponsorSchema, { method: "PATCH", body }),
+  adminContribute: (body: z.input<typeof CreateContributionRequestSchema>) =>
+    apiFetch("/api/admin/funding/contributions", z.object({ contribution: ContributionSchema }), { body }),
+  adminReverseContribution: (id: string, amount_cents: number, note: string) =>
+    apiFetch(`/api/admin/funding/contributions/${id}/reverse`, z.object({ contribution: ContributionSchema }), { body: { amount_cents, note } }),
+  adminSetAllocation: (bountyId: string, body: SetAllocationRequest) =>
+    apiFetch(`/api/admin/bounties/${bountyId}/allocation`, AllocationResultSchema, { body }),
+  publicFunding: () => apiFetch("/api/public/funding", PublicFundingResponseSchema, { auth: false }),
 
   submissions: (q: { bounty_id?: string; status?: string; limit?: number } = {}) =>
     apiFetch(`/api/submissions${qs(q)}`, LenientSubmissionListResponseSchema),

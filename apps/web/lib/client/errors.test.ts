@@ -49,17 +49,13 @@ describe("fieldErrors", () => {
       radius_m: 100,
       starts_at: "2026-01-02T00:00:00Z",
       ends_at: "2026-01-01T00:00:00Z",
-      base_price_cents: 500,
-      max_price_cents: 100,
-      target_per_cell: 5,
-      budget_cents: 1000,
-      sponsor_url: "not a url",
+      target_per_cell: 0,
     });
     expect(r.success).toBe(false);
     const fe = fieldErrors(r.error);
     expect(fe.title).toBe("Must be at least 3 characters.");
     expect(fe.center_lat).toBe("Must be at most 90.");
-    expect(fe.sponsor_url).toMatch(/full URL/);
+    expect(fe.target_per_cell).toBeTruthy();
     for (const v of Object.values(fe)) expect(v).not.toMatch(RAW);
     expect(fieldErrorSummary({ center_lat: fe.center_lat! })).toBe("Latitude: Must be at most 90.");
   });
@@ -67,11 +63,9 @@ describe("fieldErrors", () => {
   it("maps cross-field refinements to the field they concern", () => {
     const r = CreateBountyRequestSchema.safeParse({
       protocol_id: "00000000-0000-4000-8000-000000000001", title: "abc", center_lat: 1, center_lng: 1, radius_m: 100,
-      starts_at: "2026-01-02T00:00:00Z", ends_at: "2026-01-01T00:00:00Z", base_price_cents: 500, max_price_cents: 100,
-      target_per_cell: 5, budget_cents: 1000,
+      starts_at: "2026-01-02T00:00:00Z", ends_at: "2026-01-01T00:00:00Z", target_per_cell: 5,
     });
     const fe = fieldErrors(r.error);
-    expect(fe.max_price_cents).toBe("Max price must be at least the base price.");
     expect(fe.ends_at).toBe("End must be after the start.");
   });
 

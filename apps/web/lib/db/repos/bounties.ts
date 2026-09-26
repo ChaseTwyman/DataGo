@@ -28,11 +28,16 @@ export interface BountyRow {
   sponsor_name: string | null;
   sponsor_url: string | null;
   created_at: string;
+  /** Sponsor-pool request fields (migration 000007). */
+  justification: string | null;
+  funding_reason: string | null;
+  funded_at: string | null;
 }
 
 const COLS = `id, protocol_id, created_by, title, summary, area, center_lat, center_lng, radius_m, h3_res, cells,
   starts_at, ends_at, event_started_at, base_price_cents, max_price_cents, target_per_cell, priority,
-  budget_cents, spent_cents, status::text as status, source::text as source, briefing_video_path, sponsor_name, sponsor_url, created_at`;
+  budget_cents, spent_cents, status::text as status, source::text as source, briefing_video_path, sponsor_name, sponsor_url, created_at,
+  justification, funding_reason, funded_at`;
 
 type Raw = Record<string, unknown>;
 
@@ -43,6 +48,9 @@ function map(r: Raw): BountyRow {
     ends_at: toIso(r.ends_at),
     event_started_at: toIsoOrNull(r.event_started_at),
     created_at: toIso(r.created_at),
+    justification: (r.justification as string | null) ?? null,
+    funding_reason: (r.funding_reason as string | null) ?? null,
+    funded_at: toIsoOrNull(r.funded_at),
   };
 }
 
@@ -109,20 +117,21 @@ export interface NewBounty {
   source: "manual" | "nws" | "radar" | "demo";
   sponsor_name?: string | null;
   sponsor_url?: string | null;
+  justification?: string | null;
 }
 
 export async function insertBounty(db: Db, b: NewBounty): Promise<string> {
   const rows = await db.query<{ id: string }>(
     `insert into public.bounties (protocol_id, created_by, title, summary, area, center_lat, center_lng, radius_m, h3_res, cells,
        starts_at, ends_at, event_started_at, base_price_cents, max_price_cents, target_per_cell, priority, budget_cents, status, source,
-       sponsor_name, sponsor_url)
+       sponsor_name, sponsor_url, justification)
      values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, 9, $9::text[], $10::timestamptz, $11::timestamptz, $12::timestamptz,
-             $13, $14, $15, $16, $17, $18::public.bounty_status, $19::public.bounty_source, $20, $21)
+             $13, $14, $15, $16, $17, $18::public.bounty_status, $19::public.bounty_source, $20, $21, $22)
      returning id`,
     [
       b.protocol_id, b.created_by, b.title, b.summary, json(b.area), b.center_lat, b.center_lng, b.radius_m, b.cells,
       b.starts_at, b.ends_at, b.event_started_at, b.base_price_cents, b.max_price_cents, b.target_per_cell, b.priority,
-      b.budget_cents, b.status, b.source, b.sponsor_name ?? null, b.sponsor_url ?? null,
+      b.budget_cents, b.status, b.source, b.sponsor_name ?? null, b.sponsor_url ?? null, b.justification ?? null,
     ],
   );
   return rows[0]!.id;

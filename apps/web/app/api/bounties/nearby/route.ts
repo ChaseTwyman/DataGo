@@ -8,7 +8,7 @@ import {
 import { json, originOf, parseQuery, route } from "@/lib/api/http";
 import { mediaUrl } from "@/lib/api/views";
 import { requireUser } from "@/lib/auth";
-import { budgetRemaining, loadCoverage } from "@/lib/coverage";
+import { loadPricing } from "@/lib/coverage";
 import { getDb } from "@/lib/db";
 import { listActiveBounties } from "@/lib/db/repos/bounties";
 import { matchScores } from "@/lib/db/repos/match";
@@ -32,15 +32,16 @@ export const GET = route(async (req) => {
     if (!protocols.has(b.protocol_id)) protocols.set(b.protocol_id, await getProtocol(db, b.protocol_id));
     const p = protocols.get(b.protocol_id);
     if (!p) continue;
-    const coverage = await loadCoverage(db, b, p.definition, now);
+    const pricing = await loadPricing(db, b, p.definition, now);
+    const coverage = pricing.cells;
     const open = coverage.filter((c) => !c.paused);
     const here = coverage.find((c) => c.cell === userCell);
     const best = [...open].sort((a, c) => c.price_cents - a.price_cents)[0];
     const pick = here ?? best ?? coverage[0];
-    const price = pick?.price_cents ?? b.base_price_cents;
+    const price = pick?.price_cents ?? pricing.rate.baseCents;
     const m = matches.get(b.id);
     const proximity = Math.max(0, 1 - Math.max(0, distance - b.radius_m) / (q.radius_km * 1000));
-    const value = b.max_price_cents > 0 ? price / b.max_price_cents : 0;
+    const value = pricing.rate.ceilingCents > 0 ? price / pricing.rate.ceilingCents : 0;
     const match = 0.4 * proximity + 0.3 * (m?.skill_fit ?? 0.5) + 0.2 * value + 0.1 * user.trustScore;
     out.push({
       id: b.id,
@@ -62,10 +63,12 @@ export const GET = route(async (req) => {
       paused_cells: coverage.length - open.length,
       match_score: Math.round(Math.min(1, Math.max(0, match)) * 1000) / 1000,
       match_reason: m?.reason ?? null,
-      budget_remaining_cents: budgetRemaining(b),
+      // Allocation left after locked quotes (worst case): what can still be promised.
+      budget_remaining_cents: pricing.remainingCents,
       example_image_url: await mediaUrl(p.example_image_path, origin, 24 * 3600),
       sponsor_name: b.sponsor_name,
       sponsor_url: b.sponsor_url,
+      price_reasons: pick?.price_reasons ?? [],
     });
   }
   out.sort((a, b) => a.distance_m - b.distance_m);

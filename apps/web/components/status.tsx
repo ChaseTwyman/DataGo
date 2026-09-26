@@ -93,6 +93,7 @@ const BOUNTY_META: Record<BountyStatus, { label: string; tone: Tone; icon: Lucid
   paused: { label: "Paused", tone: "warning", icon: Pause },
   draft: { label: "Draft", tone: "muted", icon: CircleDashed },
   closed: { label: "Closed", tone: "muted", icon: CircleMinus },
+  pending_funding: { label: "Awaiting funding", tone: "warning", icon: CircleDashed },
 };
 
 export function BountyStatusBadge({ status }: { status: BountyStatus | (string & {}) }) {

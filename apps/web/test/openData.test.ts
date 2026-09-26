@@ -166,7 +166,7 @@ describe("sponsor fields", () => {
     expect(d.sponsor_name).toBe(DEMO.sponsorName);
   });
 
-  it("create stores a sponsor; patch changes and clears it", async () => {
+  it("create ignores researcher-set sponsors and prices; an admin patch sets and clears the sponsor", async () => {
     const now = Date.now();
     const r = await createBounty(
       req("POST", "/api/bounties", {
@@ -179,10 +179,11 @@ describe("sponsor fields", () => {
           radius_m: 300,
           starts_at: new Date(now).toISOString(),
           ends_at: new Date(now + 86_400_000).toISOString(),
-          base_price_cents: 200,
-          max_price_cents: 400,
+          base_price_cents: 1,
+          max_price_cents: 99_999,
           target_per_cell: 2,
-          budget_cents: 1000,
+          budget_cents: 99_999_999,
+          status: "active",
           sponsor_name: "  Acme Flood Insurance  ",
           sponsor_url: "https://acme.example/flood",
         },
@@ -192,8 +193,12 @@ describe("sponsor fields", () => {
     expect(r.status).toBe(201);
     const { id } = (await r.json()) as { id: string };
     const d = BountyDetailSchema.parse(await (await bountyGet(req("GET", `/api/bounties/${id}`, { token: researcher }), idCtx(id))).json());
-    expect(d.sponsor_name).toBe("Acme Flood Insurance");
-    expect(d.sponsor_url).toBe("https://acme.example/flood");
+    // a data request: not funded (empty pool here), no self-declared sponsor, platform prices
+    expect(d.status).toBe("pending_funding");
+    expect(d.budget_cents).toBe(0);
+    expect(d.sponsor_name).toBeNull();
+    expect(d.base_price_cents).toBe(200);
+    expect(d.max_price_cents).toBe(1000);
 
     const p = await bountyPatch(req("PATCH", `/api/bounties/${id}`, { token: researcher, body: { sponsor_name: "NOAA (demo)", sponsor_url: null } }), idCtx(id));
     expect(p.status).toBe(200);

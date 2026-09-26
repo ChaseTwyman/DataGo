@@ -28,6 +28,9 @@ import { POST as redteamRun } from "@/app/api/redteam/run/route";
 import { GET as redteamRuns } from "@/app/api/redteam/runs/route";
 import { POST as exampleImage } from "@/app/api/protocols/[id]/example-image/route";
 import { POST as spawn } from "@/app/api/demo/spawn-event/route";
+import { POST as createSponsor } from "@/app/api/admin/sponsors/route";
+import { POST as contribute } from "@/app/api/admin/funding/contributions/route";
+import { POST as setAllocation } from "@/app/api/admin/bounties/[id]/allocation/route";
 import { streetFloodDepth } from "@groundtruth/shared";
 import { setPipelineDepsOverrideForTests } from "@/lib/verification/deps";
 import { idCtx, passGate, randomJpeg, req, setupTestEnv, type TestEnv } from "./helpers";
@@ -45,6 +48,10 @@ beforeAll(async () => {
   setContextFetch(async () => Response.json({ features: [] }));
   const r = await devSession(req("POST", "/api/dev/session", { body: { role: "researcher" } }), noCtx);
   researcher = ((await r.json()) as { access_token: string }).access_token;
+  // Sponsor pool: requests are funded from it (the dev "researcher" is the seeded admin).
+  const sp = await createSponsor(req("POST", "/api/admin/sponsors", { token: researcher, body: { name: "Test pool sponsor" } }), noCtx);
+  const sponsorId = ((await sp.json()) as { id: string }).id;
+  await contribute(req("POST", "/api/admin/funding/contributions", { token: researcher, body: { sponsor_id: sponsorId, amount_cents: 1_000_000 } }), noCtx);
 }, 60_000);
 afterAll(async () => {
   setContextFetch(null);
@@ -245,8 +252,9 @@ describe("demo spawn-event", () => {
     expect(body.seeded_observations).toBeGreaterThanOrEqual(2);
     const cov = CoverageResponseSchema.parse(await (await coverage(req("GET", `/api/bounties/${body.bounty_id}/coverage`, { token: researcher }), idCtx(body.bounty_id))).json());
     expect(cov.cells.filter((c) => c.accepted > 0)).toHaveLength(body.seeded_observations);
-    // empty cells ~20 min into the event surge to the cap: $2 × 3 × ~1.9 → $10 (×5.0)
-    expect(Math.max(...cov.cells.map((c) => c.surge))).toBe(5);
+    // empty cells ~20 min into the event surge (scarcity × urgency), paced to the demo allocation
+    expect(Math.max(...cov.cells.map((c) => c.surge))).toBeGreaterThan(2);
+    expect(cov.cells.find((c) => c.accepted === 0)?.price_reasons).toContain("Event is recent");
 
     vi.stubEnv("DEMO_MODE", "0");
     const off = await spawn(req("POST", "/api/demo/spawn-event", { token: researcher, body: { lat, lng } }), noCtx);
@@ -270,10 +278,7 @@ describe("hazard pause and budget", () => {
           starts_at: new Date(now - 3600_000).toISOString(),
           ends_at: new Date(now + 86_400_000).toISOString(),
           event_started_at: new Date(now - 600_000).toISOString(),
-          base_price_cents: 200,
-          max_price_cents: 1000,
           target_per_cell: 5,
-          budget_cents: 5000,
           ...over,
         },
       }),
@@ -299,7 +304,9 @@ describe("hazard pause and budget", () => {
     const cov = CoverageResponseSchema.parse(await (await coverage(req("GET", `/api/bounties/${id}/coverage`, { token: researcher }), idCtx(id))).json());
     expect(cov.cells.every((c) => c.paused)).toBe(true);
     expect(cov.cells[0]!.paused_reason).toContain("Flash Flood Emergency");
-    expect(cov.cells[0]!.surge).toBe(3); // scarcity ×3, urgency suppressed
+    // urgency suppressed in hazard cells: the phone is told why, never "Event is recent"
+    expect(cov.cells[0]!.price_reasons?.[0]).toBe("Paused for safety");
+    expect(cov.cells[0]!.price_reasons).not.toContain("Event is recent");
     const c = await contributor();
     const s = await capture(c.token, id, {}, 35.0, -90.0);
     expect(s.status).toBe(409);
@@ -316,13 +323,18 @@ describe("hazard pause and budget", () => {
   });
 
   it("no new sessions once the budget cannot cover the quote", async () => {
-    const id = await newBounty({ center_lat: 37.0, budget_cents: 100 });
+    const id = await newBounty({ center_lat: 37.0 });
+    const cut = await setAllocation(req("POST", `/api/admin/bounties/${id}/allocation`, { token: researcher, body: { allocation_cents: 100, reason: "test cut" } }), idCtx(id));
+    expect(cut.status).toBe(200);
     const c = await contributor();
     const s = await capture(c.token, id, {}, 37.0, -90.0);
     expect(s.status).toBe(409);
     expect(s.body).toMatchObject({ error: { code: "BUDGET_EXHAUSTED" } });
+    // budget is no longer patchable; admins set the allocation from the pool
     const p = await patchBounty(req("PATCH", `/api/bounties/${id}`, { token: researcher, body: { budget_cents: 10_000 } }), idCtx(id));
-    expect(p.status).toBe(200);
+    expect(p.status).toBe(403);
+    const up = await setAllocation(req("POST", `/api/admin/bounties/${id}/allocation`, { token: researcher, body: { allocation_cents: 10_000, reason: "top up" } }), idCtx(id));
+    expect(up.status).toBe(200);
     expect((await capture(c.token, id, {}, 37.0, -90.0)).status).toBe(201);
   });
 });

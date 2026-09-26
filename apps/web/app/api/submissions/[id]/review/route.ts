@@ -43,7 +43,7 @@ export const POST = route<IdParams>(async (req, { params }) => {
       const won = await setReviewOutcome(tx, id, { status: "accepted", reason_codes: codes, payout_cents: amount, reviewer: user.id, note: body.note ?? null });
       if (!won) throw conflict("NOT_IN_REVIEW", "Submission was already reviewed");
       if (amount > 0 && !(await spendBudget(tx, bounty.id, amount))) {
-        throw conflict("BUDGET_EXHAUSTED", "Bounty budget cannot cover this payout; raise the budget first");
+        throw conflict("BUDGET_EXHAUSTED", "This request's allocation cannot cover this payout; ask an admin to raise it on the Funding page");
       }
       if (amount > 0) await insertLedger(tx, { user_id: sub.user_id, submission_id: id, amount_cents: amount, kind: "payout" });
       await setTrust(tx, sub.user_id, updateTrust(trust, { kind: "review_approved" }));

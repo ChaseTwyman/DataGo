@@ -15,6 +15,8 @@ export const CellPriceSchema = z.object({
   surge: z.number(),
   paused: z.boolean(),
   paused_reason: z.string().nullable(),
+  /** Why the platform's pricing engine set this price, strongest first ("Few readings here", …). */
+  price_reasons: z.array(z.string()).optional(),
 });
 export type CellPrice = z.infer<typeof CellPriceSchema>;
 
@@ -52,8 +54,31 @@ export const BountySummarySchema = z.object({
   /** Who funds the bounty. Data is free for everyone; sponsors pay to direct collection. */
   sponsor_name: z.string().nullable().default(null),
   sponsor_url: z.string().nullable().default(null),
+  /** Reasons behind `price_cents` (the picked cell's price), strongest first. */
+  price_reasons: z.array(z.string()).optional(),
 });
 export type BountySummary = z.infer<typeof BountySummarySchema>;
+
+/** Funding of a request (owner/admin view only; contributors get null). All money in cents. */
+export const BountyFundingSchema = z.object({
+  /** = budget_cents: the pool money set aside for this request. */
+  allocation_cents: z.number().int(),
+  spent_cents: z.number().int(),
+  /** Worst-case value of locked quotes that may still be paid. */
+  committed_cents: z.number().int(),
+  remaining_cents: z.number().int(),
+  funded_at: IsoDate.nullable(),
+  /** Why the request is still pending_funding (or was paused by the engine). */
+  funding_reason: z.string().nullable(),
+  /** The engine's estimate of what filling every cell to target costs. */
+  estimated_need_cents: z.number().int(),
+  sources: z.array(z.object({ sponsor_name: z.string(), earmark: z.string(), amount_cents: z.number().int() })),
+  /** "ahead" (spending faster than the clock), "on_track", "behind" (under-spending), "unfunded". */
+  pace: z.string(),
+  base_cents: z.number().int(),
+  ceiling_cents: z.number().int(),
+});
+export type BountyFunding = z.infer<typeof BountyFundingSchema>;
 
 export const NearbyResponseSchema = z.object({ bounties: z.array(BountySummarySchema) });
 export type NearbyResponse = z.infer<typeof NearbyResponseSchema>;
@@ -87,10 +112,16 @@ export const BountyDetailSchema = z.object({
   sponsor_name: z.string().nullable().default(null),
   sponsor_url: z.string().nullable().default(null),
   coverage: z.array(CellPriceSchema),
+  /** The researcher's reason for the request (sponsor-pool model). */
+  justification: z.string().nullable().optional(),
+  /** Owner/admin only; null for everyone else. */
+  funding: BountyFundingSchema.nullable().optional(),
 });
 export type BountyDetail = z.infer<typeof BountyDetailSchema>;
 
-// POST /api/bounties
+// POST /api/bounties — a DATA REQUEST. Researchers no longer set prices, budgets, priority, status or
+// sponsors: the platform funds requests from the sponsor pool and prices every cell. Old clients that
+// still send those fields are accepted; the fields are ignored (zod strips unknown keys).
 export const CreateBountyRequestSchema = z
   .object({
     protocol_id: Uuid,
@@ -103,23 +134,27 @@ export const CreateBountyRequestSchema = z
     starts_at: IsoDate,
     ends_at: IsoDate,
     event_started_at: IsoDate.nullable().default(null),
-    base_price_cents: z.number().int().min(1),
-    max_price_cents: z.number().int().min(1),
     target_per_cell: z.number().int().min(1).max(100),
-    priority: z.number().min(0.1).max(5).default(1),
-    budget_cents: z.number().int().min(0),
-    sponsor_name: z.string().max(120).nullable().default(null),
-    sponsor_url: z.string().url().max(300).nullable().default(null),
-    status: BountyStatusSchema.default("active"),
+    /** Why this data is needed (shown to admins deciding on funding). */
+    justification: z.string().trim().max(1000).default(""),
     source: BountySourceSchema.default("manual"),
   })
-  .refine((b) => b.max_price_cents >= b.base_price_cents, { message: "max_price_cents < base" })
-  .refine((b) => new Date(b.ends_at) > new Date(b.starts_at), { message: "ends_at <= starts_at" });
+  .refine((b) => new Date(b.ends_at) > new Date(b.starts_at), { message: "ends_at <= starts_at", path: ["ends_at"] });
 export type CreateBountyRequest = z.infer<typeof CreateBountyRequestSchema>;
 
-export const CreateBountyResponseSchema = z.object({ id: Uuid, cells: z.array(z.string()) });
+export const CreateBountyResponseSchema = z.object({
+  id: Uuid,
+  cells: z.array(z.string()),
+  /** "active" when the allocation engine funded it right away, else "pending_funding". */
+  status: z.string().optional(),
+  allocation_cents: z.number().int().optional(),
+  funding_reason: z.string().nullable().optional(),
+});
 
 // PATCH /api/bounties/:id
+// Researchers (owners): title, summary, ends_at, status (pause/resume/close; activating needs an
+// allocation). Admins also: target_per_cell and sponsor display fields. Prices, priority and budget
+// are platform-owned: sending them is refused (allocations change via /api/admin/bounties/:id/allocation).
 export const PatchBountyRequestSchema = z.object({
   title: z.string().min(3).max(120).optional(),
   summary: z.string().max(500).optional(),

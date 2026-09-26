@@ -11,7 +11,8 @@ import {
 import { loadVisibleBounty } from "@/lib/api/bountyAccess";
 import { conflict, HttpError, json, originOf, parseBody, route } from "@/lib/api/http";
 import { requireUser } from "@/lib/auth";
-import { budgetRemaining, loadCoverage } from "@/lib/coverage";
+import { loadPricing } from "@/lib/coverage";
+import { worstCaseCents } from "@/lib/pricing/engine";
 import { getDb } from "@/lib/db";
 import { insertSession } from "@/lib/db/repos/sessions";
 import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
@@ -22,7 +23,8 @@ const SESSION_TTL_MIN = 15;
 /**
  * Opens a capture session: nonce, random challenge from the protocol pool, price quote locked for
  * 15 minutes, and one signed upload URL per burst frame. Refused when the bounty is not live, the
- * caller is outside the area, the cell is hazard-paused, or the budget cannot cover the quote.
+ * caller is outside the area, the cell is hazard-paused, or the allocation (minus quotes already
+ * locked on the request) cannot cover the quote at the best quality multiplier.
  */
 export const POST = route(async (req) => {
   const user = await requireUser(req);
@@ -38,11 +40,14 @@ export const POST = route(async (req) => {
     throw new HttpError(422, "OUTSIDE_AREA", "You are outside the bounty area");
   }
   const cell = cellForPoint(body.lat, body.lng);
-  const coverage = await loadCoverage(db, bounty, protocol.definition, now);
+  const pricing = await loadPricing(db, bounty, protocol.definition, now);
+  const coverage = pricing.cells;
   const here = coverage.find((c) => c.cell === cell) ?? [...coverage].sort((a, b) => b.price_cents - a.price_cents)[0];
   if (!here) throw conflict("BOUNTY_NOT_ACTIVE", "Bounty has no cells");
   if (here.paused) throw conflict("HAZARD_PAUSED", here.paused_reason ?? "Captures are paused here because of an active hazard warning");
-  if (budgetRemaining(bounty) < here.price_cents) throw conflict("BUDGET_EXHAUSTED", "This bounty has run out of budget");
+  // The allocation must cover this quote at the best quality multiplier on top of every quote already
+  // locked on this request (open sessions, submissions still being verified or reviewed).
+  if (pricing.remainingCents < worstCaseCents(here.price_cents)) throw conflict("BUDGET_EXHAUSTED", "This bounty has run out of budget");
 
   const id = randomUUID();
   const quote = lockQuote(here.price_cents, now);

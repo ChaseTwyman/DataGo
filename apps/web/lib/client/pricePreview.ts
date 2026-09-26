@@ -1,56 +1,7 @@
-/** Live price preview for the create-bounty form: every cell is empty at creation time. */
-import { computePrice, hoursBetween, type CellPrice } from "@groundtruth/shared";
-
-export interface PreviewInput {
-  cells: string[];
-  baseCents: number;
-  maxCents: number;
-  targetPerCell: number;
-  priority: number;
-  tauHours: number;
-  /** ISO string or null when the bounty has no triggering event. */
-  eventStartedAt: string | null;
-  now?: Date;
-}
-
-export interface PricePreview {
-  cells: CellPrice[];
-  priceCents: number;
-  surge: number;
-  /** Cost if every cell reached target at today's (max) price — an upper bound on exposure. */
-  maxExposureCents: number;
-}
-
-export function previewPrices(input: PreviewInput): PricePreview {
-  const now = input.now ?? new Date();
-  const hours = input.eventStartedAt ? Math.max(0, hoursBetween(input.eventStartedAt, now)) : null;
-  const base = Math.max(1, Math.round(input.baseCents || 0));
-  const target = Math.max(1, Math.round(input.targetPerCell || 1));
-  const p = computePrice({
-    baseCents: base,
-    maxCents: Math.round(input.maxCents || 0),
-    acceptedInCell: 0,
-    targetPerCell: target,
-    hoursSinceEventStart: hours,
-    tauHours: input.tauHours,
-    priority: input.priority,
-  });
-  const cells: CellPrice[] = input.cells.map((cell) => ({
-    cell,
-    accepted: 0,
-    target,
-    price_cents: p.priceCents,
-    surge: p.surge,
-    paused: false,
-    paused_reason: null,
-  }));
-  return {
-    cells,
-    priceCents: p.priceCents,
-    surge: p.surge,
-    maxExposureCents: input.cells.length * target * p.priceCents,
-  };
-}
+/**
+ * Form helpers for the data-request form. Prices are NOT computed here: the platform's pricing
+ * engine runs only on the server (POST /api/pricing/preview), so its weights never ship to browsers.
+ */
 
 /** Parse a dollars text field ("2", "2.50", "$4") into integer cents; NaN when invalid. */
 export function dollarsToCents(text: string): number {

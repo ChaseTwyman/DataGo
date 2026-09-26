@@ -22,6 +22,9 @@ export const LIMITS = {
   submission: { name: "submission", max: 20, windowSeconds: HOUR, what: "submissions" },
   protocolDraft: { name: "protocol_draft", max: 10, windowSeconds: HOUR, what: "protocol drafts" },
   redteam: { name: "redteam", max: 20, windowSeconds: HOUR, what: "red-team runs" },
+  // Each request can trigger an automatic pool allocation; damp request spam (sponsor pool, 000007).
+  dataRequest: { name: "data_request", max: 20, windowSeconds: HOUR, what: "data requests" },
+  pricingPreview: { name: "pricing_preview", max: 600, windowSeconds: HOUR, what: "price previews" },
   // Not in the brief; stops online guessing of the current password through this route.
   passwordChange: { name: "password_change", max: 10, windowSeconds: HOUR, what: "password attempts" },
   // Forgot password. Per email (normalized) caps mail sent to one inbox and code guesses against

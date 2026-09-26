@@ -19,6 +19,7 @@ import {
 } from "@groundtruth/shared";
 import type { Db } from "./db";
 import { insertBounty } from "./db/repos/bounties";
+import { recordExternalFunding } from "./db/repos/funding";
 import { ensureDevUser } from "./db/repos/profiles";
 import { getProtocol, getProtocolBySlug } from "./db/repos/protocols";
 import { finalizeSubmission, insertSubmission } from "./db/repos/submissions";
@@ -69,6 +70,10 @@ export async function spawnDemoEvent(
     sponsor_name: DEMO.sponsorName,
     sponsor_url: DEMO.sponsorUrl,
   });
+
+  // Demo money is simulated like all money, but it still goes through the pool ledger so the
+  // Funding page and public totals account for it.
+  await recordExternalFunding(db, bountyId, DEMO.sponsorName, DEMO.sponsorUrl, "Demo event budget (simulated)");
 
   await ensureDevUser(db, DEMO_SEED_USER_ID, "contributor");
   const center = cellForPoint(args.lat, args.lng);

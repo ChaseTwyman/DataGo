@@ -1,8 +1,12 @@
 /** Builders for response payloads shared by several routes. */
-import type { BountyDetail, SubmissionWithMedia } from "@groundtruth/shared";
-import { loadCoverage } from "../coverage";
+import type { BountyDetail, BountyFunding, SubmissionWithMedia } from "@groundtruth/shared";
 import type { Db } from "../db";
 import type { BountyRow } from "../db/repos/bounties";
+import { fundingSources } from "../db/repos/funding";
+import { estimateNeedCents } from "../funding/allocation";
+import { earmarkLabel, paceLabel } from "../funding/labels";
+import { publicCell } from "../pricing/engine";
+import { loadPricing, type Pricing } from "../pricing/market";
 import type { ProtocolRow } from "../db/repos/protocols";
 import { toSubmissionRow, type SubmissionRecord } from "../db/repos/submissions";
 import { getStorage } from "../storage";
@@ -17,8 +21,38 @@ export async function mediaUrl(path: string | null, origin: string, ttl = 3600):
   }
 }
 
-export async function bountyDetail(db: Db, b: BountyRow, p: ProtocolRow, origin: string, now = new Date()): Promise<BountyDetail> {
-  const coverage = await loadCoverage(db, b, p.definition, now);
+/** Owner/admin funding panel. */
+export async function bountyFunding(db: Db, b: BountyRow, p: ProtocolRow, pricing: Pricing, now = new Date()): Promise<BountyFunding> {
+  const sources = await fundingSources(db, b.id);
+  return {
+    allocation_cents: b.budget_cents,
+    spent_cents: b.spent_cents,
+    committed_cents: pricing.committedCents,
+    remaining_cents: pricing.remainingCents,
+    funded_at: b.funded_at,
+    funding_reason: b.funding_reason,
+    estimated_need_cents: estimateNeedCents({ cells: b.cells.length, targetPerCell: b.target_per_cell, protocol: p.definition }),
+    sources: sources.map((s) => ({
+      sponsor_name: s.sponsor_name ?? "GroundTruth sponsor pool",
+      earmark: earmarkLabel(s.contribution),
+      amount_cents: s.cents,
+    })),
+    pace: paceLabel(b.budget_cents, b.spent_cents + pricing.committedCents, b.starts_at, b.ends_at, now),
+    base_cents: pricing.rate.baseCents,
+    ceiling_cents: pricing.rate.ceilingCents,
+  };
+}
+
+export async function bountyDetail(
+  db: Db,
+  b: BountyRow,
+  p: ProtocolRow,
+  origin: string,
+  opts: { manage: boolean },
+  now = new Date(),
+): Promise<BountyDetail> {
+  const pricing = await loadPricing(db, b, p.definition, now);
+  const coverage = pricing.cells.map(publicCell);
   return {
     id: b.id,
     title: b.title,
@@ -35,8 +69,9 @@ export async function bountyDetail(db: Db, b: BountyRow, p: ProtocolRow, origin:
     starts_at: b.starts_at,
     ends_at: b.ends_at,
     event_started_at: b.event_started_at,
-    base_price_cents: b.base_price_cents,
-    max_price_cents: b.max_price_cents,
+    // Platform prices: the protocol's current base rate and ceiling, not stored researcher values.
+    base_price_cents: pricing.rate.baseCents,
+    max_price_cents: pricing.rate.ceilingCents,
     target_per_cell: b.target_per_cell,
     priority: b.priority,
     budget_cents: b.budget_cents,
@@ -46,6 +81,8 @@ export async function bountyDetail(db: Db, b: BountyRow, p: ProtocolRow, origin:
     sponsor_name: b.sponsor_name,
     sponsor_url: b.sponsor_url,
     coverage,
+    justification: b.justification,
+    funding: opts.manage ? await bountyFunding(db, b, p, pricing, now) : null,
   };
 }
 

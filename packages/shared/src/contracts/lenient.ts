@@ -136,6 +136,9 @@ export const LenientBountyDetailSchema = BountyDetailSchema.extend({
   source: openString<"manual" | "nws" | "radar" | "demo">(),
   protocol: LenientProtocolSchema,
   coverage: lenientArray(BountyDetailSchema.shape.coverage.element),
+  justification: z.string().nullable().optional().catch(null),
+  // Owner/admin funding panel: a newer server shape hides the panel instead of failing the page.
+  funding: BountyDetailSchema.shape.funding.catch(null),
 });
 export type LenientBountyDetail = z.infer<typeof LenientBountyDetailSchema>;
 

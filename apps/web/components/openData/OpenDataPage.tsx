@@ -73,6 +73,7 @@ export function OpenDataPage() {
           <nav className={`${HEAD} flex items-center gap-5 text-[11px] text-white/60 sm:gap-8`}>
             <a href="#datasets" className="hover:text-white">Datasets</a>
             <a href="#method" className="hidden hover:text-white sm:inline">Method</a>
+            <Link href="/funding" className="hover:text-white">Funding</Link>
             <Link href="/login" className="hover:text-white">Researchers</Link>
           </nav>
         </div>

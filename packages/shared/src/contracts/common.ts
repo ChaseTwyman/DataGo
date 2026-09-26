@@ -8,7 +8,8 @@ export const Lng = z.number().min(-180).max(180);
 export const RoleSchema = z.enum(["contributor", "researcher", "admin"]);
 export type Role = z.infer<typeof RoleSchema>;
 
-export const BountyStatusSchema = z.enum(["draft", "active", "paused", "closed"]);
+/** pending_funding: a researcher request waiting for the allocation engine / an admin (migration 000007). */
+export const BountyStatusSchema = z.enum(["draft", "active", "paused", "closed", "pending_funding"]);
 export type BountyStatus = z.infer<typeof BountyStatusSchema>;
 
 export const BountySourceSchema = z.enum(["manual", "nws", "radar", "demo"]);
