@@ -28,10 +28,10 @@ _Last updated: hosted Supabase + real Grok verified from the API. Next: first de
 ## Real vs mocked / unverified
 - **Hosted Supabase end to end** (auth, Storage signed uploads, DB, pipeline, wallet, export, red team): e2e **19/19** with MOCK_GROK=1 after fixing a postgres.js jsonb double-encoding bug that PGlite hid (d9c27f4).
 - **Real Grok, verified once each** (Supabase mode):
-  - voice token: 129 ms;  returns ; phone gets a wss URL.
+  - voice token: 129 ms; `client_secrets` returns `{ value, expires_at }`; phone gets a wss URL.
   - frame check (grok-4.20): 1.3 s; a blank grey frame correctly returned no elements visible, not green.
   - Imagine image: 13.6 s. Verification (grok-4.7): **31.6 s** (6.4k in / 2.2k out tokens) — over the PRD's 25 s target.
-- **Finding — AI-fake detection:** the real grok-4.7 did **not** flag the Imagine fake as AI-generated ("no signs of … generation", authenticity 0.3). The red-team run was caught only by  (three identical frames → no parallax). The capture-time defenses (no library import, burst parallax, screen detection at the gate) carry the load; model-only AI detection is weak. Don't claim otherwise in the demo.
+- **Finding — AI-fake detection:** the real grok-4.7 did **not** flag the Imagine fake as AI-generated ("no signs of … generation", authenticity 0.3). The red-team run was caught only by `CHALLENGE_FAILED` (three identical frames → no parallax). The capture-time defenses (no library import, burst parallax, screen detection at the gate) carry the load; model-only AI detection is weak. Don't claim otherwise in the demo.
 - **Still unverified:** realtime from the apps; everything device-only (audio echo/latency, camera, DeviceMotion, upload from the phone, pod install on macOS).
 
 ## Running it
