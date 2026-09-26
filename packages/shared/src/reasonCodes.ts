@@ -92,12 +92,18 @@ const KIND: Record<FixedReasonCode, ReasonKind> = {
   GATE_DEGRADED: "info",
 };
 
-export function reasonKind(code: ReasonCode): ReasonKind {
+export const isKnownReasonCode = (code: string): code is ReasonCode => ReasonCodeSchema.safeParse(code).success;
+
+/**
+ * Category of a reason code. Codes this build doesn't know (sent by a newer server) are "review":
+ * neutral, never an integrity accusation, never a retry hint.
+ */
+export function reasonKind(code: ReasonCode | (string & {})): ReasonKind {
   if (code.startsWith("MISSING_ELEMENT:")) return "protocol";
-  return KIND[code as FixedReasonCode];
+  return KIND[code as FixedReasonCode] ?? "review";
 }
 
-export const isIntegrityCode = (code: ReasonCode): boolean => reasonKind(code) === "integrity";
+export const isIntegrityCode = (code: ReasonCode | (string & {})): boolean => reasonKind(code) === "integrity";
 
 /**
  * Contributor-facing text. Integrity failures get one neutral message with no hints (PRD §7.5):
@@ -124,6 +130,8 @@ const CONTRIBUTOR_TEXT: Partial<Record<FixedReasonCode, string>> = {
   GATE_NOT_PASSED: "A reviewer will take a look.",
   EXTRACTION_IMPLAUSIBLE: "A reviewer will take a look.",
   EXTRACTION_LOW_CONFIDENCE: "A reviewer will take a look.",
+  REVIEWER_REJECTED: "A reviewer couldn't accept this capture.",
+  GATE_DEGRADED: "The live scene check ran in limited mode.",
 };
 
 /** Subset of a protocol needed to tell a contributor what the bounty expected. */
@@ -132,7 +140,9 @@ export interface ProtocolSubject {
   capture: { required_elements: { label: string }[] };
 }
 
-export function contributorMessage(code: ReasonCode, elementLabel?: string, protocol?: ProtocolSubject): string {
+export function contributorMessage(code: ReasonCode | (string & {}), elementLabel?: string, protocol?: ProtocolSubject): string {
+  // A code this build doesn't know (newer server): neutral wording, no guess at the cause.
+  if (!isKnownReasonCode(code)) return NEUTRAL_INTEGRITY_MESSAGE;
   if (isIntegrityCode(code)) return NEUTRAL_INTEGRITY_MESSAGE;
   if (code === "OFF_TOPIC" && protocol) {
     // An honest contributor may simply have mis-aimed: say what was expected (not which check fired).
@@ -142,5 +152,5 @@ export function contributorMessage(code: ReasonCode, elementLabel?: string, prot
   if (code.startsWith("MISSING_ELEMENT:")) {
     return `Missing from the shot: ${elementLabel ?? code.slice("MISSING_ELEMENT:".length)}.`;
   }
-  return CONTRIBUTOR_TEXT[code as FixedReasonCode] ?? "See details.";
+  return CONTRIBUTOR_TEXT[code as FixedReasonCode] ?? NEUTRAL_INTEGRITY_MESSAGE;
 }

@@ -67,6 +67,16 @@ export function pendingChecks(): StageResult[] {
   }));
 }
 
-export function stageLabel(id: StageId): string {
-  return STAGES.find((s) => s.id === id)?.label ?? id;
+/**
+ * Display label for a stage. Accepts ids this build doesn't know (a newer server): then the
+ * payload's own label is used, else the id humanized ("new_stage" → "New stage").
+ */
+export function stageLabel(id: StageId | (string & {}), payloadLabel?: string): string {
+  const known = STAGES.find((s) => s.id === id)?.label;
+  if (known) return known;
+  if (payloadLabel && payloadLabel.trim()) return payloadLabel;
+  const words = id.replace(/[_-]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Check";
 }
+
+export const isKnownStageId = (id: string): id is StageId => STAGES.some((s) => s.id === id);
