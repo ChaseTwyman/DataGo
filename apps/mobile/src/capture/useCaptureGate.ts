@@ -2,6 +2,8 @@
  * Live capture gate: device checks + a frame-check loop (~1.2 s, one in flight, only when the
  * device checks pass): PreviewView.takeSnapshot → 640 px JPEG q 0.6 → base64 →
  * POST /api/capture/frame-check. Shutter button and voice "capture" both call `trigger()`.
+ * The shutter unlocks only on the server's `gate_passed`; failures back off (gateMachine) and
+ * never unlock.
  */
 import type { BountyDetail, CreateSessionResponse, Protocol } from "@groundtruth/shared";
 import * as Haptics from "expo-haptics";
@@ -11,7 +13,9 @@ import type { CameraRef } from "react-native-vision-camera";
 import { api } from "../api";
 import {
   cameraStatus,
+  classifyFrameError,
   gateReducer,
+  isPreCapture,
   initialGate,
   lockReason,
   notesRemaining,
@@ -52,7 +56,7 @@ export function useCaptureGate(opts: {
   const [state, dispatch] = useReducer(reducer, session.frame_check_limit, initialGate);
   const stateRef = useRef<GateState>(state);
   stateRef.current = state;
-  const preCapture = state.phase === "locating" || state.phase === "framing" || state.phase === "ready";
+  const preCapture = isPreCapture(state.phase);
   const device = useDeviceChecks(protocol, bounty, preCapture || state.phase === "challenge" || state.phase === "capturing");
 
   const send = useCallback((e: GateEvent) => {
@@ -80,9 +84,17 @@ export function useCaptureGate(opts: {
         try {
           const image_base64 = await snapshotBase64(cam);
           const r = await api.frameCheck({ session_id: session.session_id, image_base64 });
-          if (alive) send({ type: "FRAME_RESULT", result: r.result, now: Date.now(), checksRemaining: r.checks_remaining });
+          if (alive)
+            send({
+              type: "FRAME_RESULT",
+              result: r.result,
+              now: Date.now(),
+              gatePassed: r.gate_passed === true,
+              serverStreak: r.green_streak,
+              checksRemaining: r.checks_remaining,
+            });
         } catch (e) {
-          if (alive) send({ type: "FRAME_ERROR", now: Date.now(), message: e instanceof Error ? e.message : String(e) });
+          if (alive) send({ type: "FRAME_ERROR", now: Date.now(), message: e instanceof Error ? e.message : String(e), kind: classifyFrameError(e) });
         }
       })();
     }, 300);
@@ -102,6 +114,7 @@ export function useCaptureGate(opts: {
     prevEls.current = state.elements;
     if (state.phase === "ready" && prevPhase.current !== "ready") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     if (state.screenSuspected) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    if (state.phase === "cant_verify" && prevPhase.current !== "cant_verify") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     prevPhase.current = state.phase;
   }, [state.elements, state.phase, state.screenSuspected]);
 

@@ -1,13 +1,14 @@
 /**
- * Bottom-sheet checklist: device rows + one row per required element (icon + color + text).
- * Sized for a glance outdoors: 36 pt rows, 17 pt semibold labels, solid ticks.
+ * Bottom-sheet checklist: device rows + one row per required element + the server's "scene
+ * verified" row (icon + color + text). Sized for a glance outdoors: 36 pt rows, 17 pt semibold
+ * labels, solid ticks. When the scene cannot be verified a banner explains why and shows the retry.
  */
 import type { Protocol } from "@groundtruth/shared";
 import { useEffect, useRef } from "react";
-import { Animated, Text, View } from "react-native";
+import { ActivityIndicator, Animated, StyleSheet, Text, View } from "react-native";
 import { Icon } from "../ui/components";
-import { C, F, S, TRACK } from "../ui/theme";
-import { checklistRows, type ChecklistRow, type GateState } from "./gateMachine";
+import { C, F, R, S, TRACK } from "../ui/theme";
+import { checklistRows, verifyCause, verifyMessage, verifyStatus, type ChecklistRow, type GateState } from "./gateMachine";
 
 export function ChecklistOverlay({ protocol, state }: { protocol: Protocol; state: GateState }) {
   const rows = checklistRows(protocol, state);
@@ -20,12 +21,36 @@ export function ChecklistOverlay({ protocol, state }: { protocol: Protocol; stat
       {rows.map((r) => (
         <Row key={r.id} r={r} />
       ))}
-      {state.degraded ? (
-        <View style={{ flexDirection: "row", gap: S.sm, alignItems: "flex-start", marginTop: S.xs }}>
-          <Icon name="alert-triangle" size={15} color={C.amber} style={{ marginTop: 2 }} />
-          <Text style={{ color: C.amber, fontFamily: F.body, fontSize: 15, flex: 1 }}>Live AI check unavailable. Using device checks only (flagged for review).</Text>
-        </View>
-      ) : null}
+      <VerifyBanner state={state} />
+    </View>
+  );
+}
+
+/**
+ * CAN'T VERIFY SCENE: amber with a live retry indicator while we keep trying; red and static when
+ * the server refused us or the session's check budget is spent (nothing left to retry).
+ */
+function VerifyBanner({ state }: { state: GateState }) {
+  const v = verifyStatus(state);
+  if (v !== "cant_verify" && v !== "failed" && v !== "exhausted") return null;
+  const terminal = v !== "cant_verify";
+  const color = terminal ? C.red : C.amber;
+  const title = v === "exhausted" ? "CHECK LIMIT REACHED" : "CAN'T VERIFY SCENE";
+  const detail = v === "cant_verify" ? `${verifyCause(state)} Shutter stays locked until the scene is verified.` : verifyMessage(state);
+  return (
+    <View style={[styles.banner, { borderColor: color }]} accessibilityLiveRegion="polite" accessibilityLabel={`${title}. ${detail ?? ""}`}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: S.sm }}>
+        <Icon name={terminal ? "x-octagon" : "wifi-off"} size={16} color={color} />
+        <Text style={[styles.bannerTitle, { color }]}>{title}</Text>
+        {terminal ? null : (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+            <ActivityIndicator size="small" color={color} />
+            <Text style={[styles.bannerMeta, { color }]}>{`RETRYING · ${state.attempts}/${state.frameLimit}`}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={styles.bannerBody}>{detail}</Text>
+      {v === "failed" && state.fatal ? <Text style={styles.bannerMetaMuted}>{state.fatal}</Text> : null}
     </View>
   );
 }
@@ -65,3 +90,11 @@ function Row({ r }: { r: ChecklistRow }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  banner: { marginTop: S.sm, borderWidth: 1, borderRadius: R.sm, padding: S.md, gap: S.xs, backgroundColor: C.bg },
+  bannerTitle: { fontFamily: F.display, fontSize: 16, letterSpacing: TRACK.label },
+  bannerMeta: { fontFamily: F.numeralRegular, fontSize: 13, letterSpacing: TRACK.label, fontVariant: ["tabular-nums"] },
+  bannerMetaMuted: { color: C.muted, fontFamily: F.body, fontSize: 15 },
+  bannerBody: { color: C.text, fontFamily: F.body, fontSize: 15, lineHeight: 20 },
+});

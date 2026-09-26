@@ -1,4 +1,4 @@
-import { DEMO, pendingChecks, streetFloodDepth, type HealthResponse, type SubmissionRow } from "@groundtruth/shared";
+import { DEMO, pendingChecks, STAGES, streetFloodDepth, type HealthResponse, type SubmissionRow } from "@groundtruth/shared";
 import { describe, expect, it } from "vitest";
 import { bootstrapAuth, type AuthDeps } from "../src/api/authFlow";
 import { endpoints } from "../src/api/endpoints";
@@ -190,8 +190,10 @@ describe("resultView (PRD §7.5)", () => {
     expect(resultView(base("verifying", []), streetFloodDepth).kind).toBe("verifying");
   });
 
-  it("shared fixtures still line up (pending checks list has 7 stages)", () => {
-    expect(pendingChecks()).toHaveLength(7);
+  it("shared fixtures still line up (one pending row per pipeline stage)", () => {
+    // not a hard-coded 7: the server pipeline gains stages (e.g. relevance) independently of the app
+    expect(pendingChecks()).toHaveLength(STAGES.length);
+    expect(STAGES.length).toBeGreaterThanOrEqual(7);
     expect(DEMO.bountyId).toMatch(/^0000/);
   });
 });

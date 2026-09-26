@@ -50,5 +50,16 @@ export const FrameCheckResponseSchema = z.object({
   checks_used: z.number().int(),
   checks_remaining: z.number().int(),
   ms: z.number().int(),
+  /**
+   * Server-side gate state (authoritative; the phone's own gate.* claims are not trusted):
+   * consecutive all-green real-model checks in this session, and whether the gate is passed
+   * (GATE_REQUIRED_GREEN in a row, no screen/print suspicion). Submissions from sessions where the
+   * server never recorded a pass are rejected/reviewed server-side.
+   */
+  green_streak: z.number().int().min(0).default(0),
+  gate_passed: z.boolean().default(false),
 });
 export type FrameCheckResponse = z.infer<typeof FrameCheckResponseSchema>;
+
+/** Consecutive all-green real-model frame checks required before the shutter unlocks. */
+export const GATE_REQUIRED_GREEN = 2;

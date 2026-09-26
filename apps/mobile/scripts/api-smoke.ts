@@ -70,16 +70,16 @@ async function main() {
     const now = Date.now();
     gate = reduce(gate, { type: "FRAME_REQUESTED", now });
     const r = await api.frameCheck({ session_id: session.session_id, image_base64: jpegs[0]!.toString("base64") });
-    gate = reduce(gate, { type: "FRAME_RESULT", result: r.result, now: Date.now(), checksRemaining: r.checks_remaining });
+    gate = reduce(gate, { type: "FRAME_RESULT", result: r.result, now: Date.now(), gatePassed: r.gate_passed === true, serverStreak: r.green_streak, checksRemaining: r.checks_remaining });
     return r.result;
   };
 
   await check("screen_recapture");
   ok(gate.screenSuspected && gate.phase !== "ready", `screen_recapture variant is flagged, shutter locked: "${lockReason(session.protocol, gate)}"`);
   await check("default");
-  ok(gate.phase === "framing" && gate.greenStreak === 1, "one green frame after a red one does not unlock");
+  ok(gate.phase === "framing" && gate.greenStreak === 1 && !gate.serverGatePassed, "one green frame after a red one does not unlock (server gate_passed false)");
   await check("default");
-  ok((gate as GateState).phase === "ready", "second consecutive green frame unlocks the shutter");
+  ok((gate as GateState).phase === "ready", "second consecutive green frame → server gate_passed → shutter unlocks");
   variant = "default";
 
   gate = reduce(gate, { type: "TRIGGER" });
@@ -108,7 +108,7 @@ async function main() {
     device: { model: "api-smoke", os: "node", os_version: process.version, app_version: "0.1.0" },
     sensors: { tilt_deg: 2, rotation_rate: 3, heading_deg: null, steady: true },
     field_notes: gate.notes,
-    gate: { degraded: gate.degraded, frame_checks: gate.frameChecks, consecutive_green: gate.greenStreak, last_hint: gate.lastHint },
+    gate: { degraded: false, server_gate_passed: gate.serverGatePassed, frame_checks: gate.frameChecks, consecutive_green: gate.greenStreak, last_hint: gate.lastHint },
   });
   ok(!!sub.submission_id, `submission ${sub.submission_id} (${sub.status})`);
 

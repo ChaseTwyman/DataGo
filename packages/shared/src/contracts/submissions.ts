@@ -33,6 +33,8 @@ export const GateInfoSchema = z.object({
   frame_checks: z.number().int().min(0),
   consecutive_green: z.number().int().min(0),
   last_hint: z.string().nullable(),
+  /** Phone's view of the server's gate_passed at capture time. Advisory only; optional/additive. */
+  server_gate_passed: z.boolean().optional(),
 });
 export type GateInfo = z.infer<typeof GateInfoSchema>;
 

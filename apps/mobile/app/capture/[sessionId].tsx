@@ -14,6 +14,7 @@ import { api, ApiError } from "../../src/api";
 import { CHALLENGE_LEAD_MS, runBurst, sensorSnapshot, toMediaItems, type CapturedFrame } from "../../src/capture/burst";
 import { ChecklistOverlay } from "../../src/capture/ChecklistOverlay";
 import { deviceInfo, photoCapturer, uploadJpeg } from "../../src/capture/nativeCapture";
+import { isPreCapture } from "../../src/capture/gateMachine";
 import { useCaptureGate } from "../../src/capture/useCaptureGate";
 import { useCaptureStore, type ActiveCapture } from "../../src/state/captureStore";
 import { Body, Button, Heading, Icon, IconButton, Label, StatusPill } from "../../src/ui/components";
@@ -101,7 +102,9 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
         sensors: sensorSnapshot(raw.tiltDeg, raw.rotationRate, raw.steady, raw.headingDeg),
         field_notes: gate.stateRef.current.notes,
         gate: {
-          degraded: s.degraded,
+          // No degraded unlock any more: the shutter only opens on the server's gate_passed.
+          degraded: false,
+          server_gate_passed: s.serverGatePassed,
           frame_checks: s.frameChecks,
           consecutive_green: s.greenStreak,
           last_hint: s.lastHint,
@@ -140,7 +143,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
         const phase = gate.stateRef.current.phase;
         if (phase === "notes") void submit();
         // Never end mid-burst or mid-upload; the burst finishes and the agent can ask again.
-        else if (phase === "locating" || phase === "framing" || phase === "ready") send({ type: "END", reason });
+        else if (isPreCapture(phase)) send({ type: "END", reason });
       },
     }),
     [gate, protocol, send, submit],
@@ -158,7 +161,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
 
   const csJson = JSON.stringify(gate.cameraStatus);
   useEffect(() => {
-    if (state.phase === "locating" || state.phase === "framing" || state.phase === "ready") setCameraStatus(JSON.parse(csJson));
+    if (isPreCapture(state.phase)) setCameraStatus(JSON.parse(csJson));
   }, [csJson, setCameraStatus, state.phase]);
 
   // ---------------- challenge → burst
@@ -290,7 +293,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
         ) : (
           <View style={{ gap: S.md }}>
             <ChecklistOverlay protocol={protocol} state={state} />
-            {state.lastHint && state.phase !== "ready" && !state.degraded ? (
+            {state.lastHint && state.phase !== "ready" && state.phase !== "cant_verify" ? (
               <View style={{ flexDirection: "row", gap: S.sm, alignItems: "flex-start" }}>
                 <Icon name="corner-down-right" size={16} color={C.accent} style={{ marginTop: 3 }} />
                 <Text style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: 17, lineHeight: 23, flex: 1 }}>{state.lastHint}</Text>
@@ -298,7 +301,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
             ) : null}
             <Shutter locked={state.phase !== "ready"} reason={gate.lock} busy={showChallenge} onPress={onShutter} />
             <Label style={{ textAlign: "center" }}>
-              {`Say “capture” or tap · checks ${state.frameChecks}/${state.frameLimit}${state.error && !state.degraded ? ` · ${state.error}` : ""}`}
+              {`Say “capture” or tap · checks ${state.attempts}/${state.frameLimit}${state.error && state.phase !== "cant_verify" ? ` · ${state.error}` : ""}`}
             </Label>
           </View>
         )}

@@ -53,6 +53,7 @@ export function buildInstructions(protocol: Protocol, ctx: InstructionContext = 
     "- You cannot see the camera. You receive [camera_status] messages; coach only from the latest one.",
     "- One short sentence at a time, under 12 words.",
     '- When ready is true, say "Hold still" and wait. When the user says "capture" or similar, call trigger_capture.',
+    "- If the hint says the scene can't be verified, tell the user you can't verify the scene right now and are checking again. Never suggest capturing anyway.",
     "- trigger_capture returns a movement instruction. Read it to the user word for word, then stay quiet while the burst is taken.",
     "- After capture, ask each field question once and call save_field_note with the answer.",
     "- Then say the observation is being verified and call end_session.",
