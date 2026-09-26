@@ -1,35 +1,52 @@
 @import "tailwindcss";
 
-/* shadcn/ui token set (zinc base), light dashboard. */
+/*
+ * GroundTruth design system — mission-control look shared with the phone app and /data.
+ * Colour values mirror components/ds/tokens.ts; test/designTokens.test.ts fails if they drift and
+ * checks every text pair for WCAG AA contrast. Dark only: the product has one theme.
+ */
 :root {
-  --radius: 0.6rem;
-  --background: oklch(0.985 0.002 247);
-  --foreground: oklch(0.21 0.006 286);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.006 286);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.006 286);
-  --primary: oklch(0.45 0.13 250);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286);
-  --secondary-foreground: oklch(0.21 0.006 286);
-  --muted: oklch(0.967 0.001 286);
-  --muted-foreground: oklch(0.52 0.016 286);
-  --accent: oklch(0.955 0.01 250);
-  --accent-foreground: oklch(0.21 0.006 286);
-  --destructive: oklch(0.577 0.245 27);
-  --border: oklch(0.915 0.004 286);
-  --input: oklch(0.9 0.004 286);
-  --ring: oklch(0.55 0.13 250);
-  --rail: oklch(0.2 0.02 255);
-  --rail-foreground: oklch(0.92 0.01 255);
+  color-scheme: dark;
+  --radius: 2px;
+
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #0b0c0e;
+  --card-foreground: #ffffff;
+  --popover: #15171a;
+  --popover-foreground: #ffffff;
+  --primary: #d6e4ff;
+  --primary-foreground: #000000;
+  --secondary: #1e2126;
+  --secondary-foreground: #ffffff;
+  --muted: #15171a;
+  --muted-foreground: #8a8f98;
+  --accent: #1e2126;
+  --accent-foreground: #ffffff;
+  --destructive: #ff5a52;
+  --success: #3ddc84;
+  --warning: #ffb020;
+  --info: #8ab4ff;
+  --status-foreground: #000000;
+  --border: #2a2d33;
+  --input: #3a3f47;
+  --ring: #d6e4ff;
+  --rail: #000000;
+  --rail-foreground: #ffffff;
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 12px 40px rgb(0 0 0 / 0.7);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -45,18 +62,42 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-status-foreground: var(--status-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-rail: var(--rail);
   --color-rail-foreground: var(--rail-foreground);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* next/font sets --font-barlow / --font-barlow-condensed on <html> (app/layout.tsx). */
+  --font-sans: var(--font-barlow), ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: var(--font-barlow-condensed), "Arial Narrow", "Roboto Condensed", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Uppercase, letter-spaced condensed label: headings, table heads, readout labels, nav. */
+@utility caps {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+/* Large telemetry numeral. */
+@utility numeral {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
+    scrollbar-color: #2a2d33 transparent;
   }
   html,
   body {
@@ -67,16 +108,29 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background: rgb(214 228 255 / 0.3);
   }
   :focus-visible {
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;
   }
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"] {
+    accent-color: var(--color-primary);
+  }
+  table {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
+/* A new row or card arriving over realtime: a brief accent wash. */
 @keyframes gt-arrive {
   from {
-    background-color: oklch(0.93 0.08 90);
+    background-color: rgb(214 228 255 / 0.14);
   }
   to {
     background-color: transparent;
@@ -86,8 +140,84 @@
   animation: gt-arrive 2.5s ease-out;
 }
 
+/* Skeleton: slow, low-contrast pulse. */
+@keyframes gt-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.gt-skeleton {
+  background: var(--color-muted);
+  animation: gt-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gt-arrive,
+  .gt-skeleton,
+  .animate-spin,
+  .animate-pulse {
+    animation: none !important;
+  }
+}
+
+/* MapLibre chrome on the dark basemap. */
+.maplibregl-map {
+  font-family: var(--font-sans);
+  background: #0c0c0c;
+}
 .maplibregl-popup-content {
   border-radius: var(--radius);
   padding: 8px 10px;
   font-size: 12px;
+  background: var(--color-popover);
+  color: var(--color-foreground);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.6);
+}
+.maplibregl-popup-close-button {
+  color: var(--color-muted-foreground);
+  padding: 0 6px;
+}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--color-popover);
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--color-popover);
+}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--color-popover);
+}
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--color-popover);
+}
+.maplibregl-ctrl-group {
+  background: var(--color-popover) !important;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius) !important;
+  box-shadow: none !important;
+}
+.maplibregl-ctrl-group button + button {
+  border-top-color: var(--color-border) !important;
+}
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  background: rgb(0 0 0 / 0.7) !important;
+  color: var(--color-muted-foreground);
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--color-muted-foreground) !important;
+}
+.maplibregl-ctrl-attrib-button {
+  filter: invert(1);
 }

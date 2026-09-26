@@ -17,7 +17,8 @@ import { MAPLIBRE_WORKER_PATH } from "@/lib/client/maplibreWorker";
 import { coverageFeatures } from "@/lib/client/coverage";
 import { cn } from "@/lib/client/cn";
 
-export const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+/** Dark basemap (same glyphs and sprite as positron), matching the mission-control UI. */
+export const MAP_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
 // maplibre-gl v6 starts an ES-module worker that imports `./maplibre-gl-shared.mjs` relative to
 // itself. Turbopack's hashed chunks break that lookup ("Worker failed to load"), so both files are
@@ -52,11 +53,11 @@ export interface HexMapProps {
 }
 
 const POINT_COLORS: Record<string, string> = {
-  accepted: "#047857",
-  needs_review: "#b45309",
-  rejected: "#b91c1c",
-  verifying: "#4338ca",
-  pending: "#6b7280",
+  accepted: "#3DDC84",
+  needs_review: "#FFB020",
+  rejected: "#FF5A52",
+  verifying: "#D6E4FF",
+  pending: "#8A8F98",
 };
 
 const fillLayer: LayerProps = {
@@ -64,7 +65,7 @@ const fillLayer: LayerProps = {
   type: "fill",
   paint: {
     "fill-color": ["get", "color"],
-    "fill-opacity": ["case", ["get", "paused"], 0.35, 0.45],
+    "fill-opacity": ["case", ["get", "paused"], 0.3, 0.38],
   },
 };
 const hatchLayer: LayerProps = {
@@ -76,13 +77,13 @@ const hatchLayer: LayerProps = {
 const lineLayer: LayerProps = {
   id: "cells-line",
   type: "line",
-  paint: { "line-color": "#ffffff", "line-width": 1.2, "line-opacity": 0.9 },
+  paint: { "line-color": "#ffffff", "line-width": 1, "line-opacity": 0.35 },
 };
 const pausedLineLayer: LayerProps = {
   id: "cells-paused-line",
   type: "line",
   filter: ["==", ["get", "paused"], true],
-  paint: { "line-color": "#374151", "line-width": 1.5, "line-dasharray": [2, 2] },
+  paint: { "line-color": "#8A8F98", "line-width": 1.5, "line-dasharray": [2, 2] },
 };
 const labelLayer: LayerProps = {
   id: "cells-label",
@@ -94,22 +95,22 @@ const labelLayer: LayerProps = {
     "text-size": 11,
     "text-allow-overlap": false,
   },
-  paint: { "text-color": "#111827", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
+  paint: { "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1.4 },
 };
 const pointLayer: LayerProps = {
   id: "points",
   type: "circle",
   paint: {
     "circle-radius": 6,
-    "circle-color": ["coalesce", ["get", "color"], "#6b7280"],
-    "circle-stroke-color": "#ffffff",
+    "circle-color": ["coalesce", ["get", "color"], "#8A8F98"],
+    "circle-stroke-color": "#000000",
     "circle-stroke-width": 2,
   },
 };
 const circleLayer: LayerProps = {
   id: "area-outline",
   type: "line",
-  paint: { "line-color": "#1d4ed8", "line-width": 2, "line-dasharray": [3, 2] },
+  paint: { "line-color": "#D6E4FF", "line-width": 1.5, "line-dasharray": [3, 2] },
 };
 
 /** 16×16 diagonal hatch as raw RGBA for map.addImage. */
@@ -120,9 +121,9 @@ function hatchImage(): { width: number; height: number; data: Uint8Array } {
     for (let x = 0; x < size; x++) {
       const on = (x + y) % 8 < 2;
       const i = (y * size + x) * 4;
-      data[i] = 55;
-      data[i + 1] = 65;
-      data[i + 2] = 81;
+      data[i] = 138;
+      data[i + 1] = 143;
+      data[i + 2] = 152;
       data[i + 3] = on ? 170 : 0;
     }
   }
@@ -177,7 +178,7 @@ export default function HexMap({
         type: "Feature" as const,
         id: p.id,
         geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
-        properties: { id: p.id, status: p.status, color: POINT_COLORS[p.status] ?? "#6b7280" },
+        properties: { id: p.id, status: p.status, color: POINT_COLORS[p.status] ?? "#8A8F98" },
       })),
     }),
     [points],
@@ -260,7 +261,7 @@ export default function HexMap({
             </Source>
           </>
         ) : null}
-        {marker ? <Marker latitude={marker.lat} longitude={marker.lng} color="#1d4ed8" /> : null}
+        {marker ? <Marker latitude={marker.lat} longitude={marker.lng} color="#D6E4FF" /> : null}
         {popup ? (
           <Popup longitude={popup.lng} latitude={popup.lat} onClose={() => setPopup(null)} closeOnClick={false}>
             <CellPopupBody cell={popup.cell} />
@@ -274,13 +275,13 @@ export default function HexMap({
 /** Static fallback when the basemap can't load. The page's lists and stats don't depend on it. */
 export function MapUnavailable({ onRetry }: { onRetry?: () => void }) {
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/80 p-6 backdrop-blur-sm" role="status">
-      <div className="max-w-xs rounded-lg border bg-card p-4 text-center text-sm shadow-sm">
-        <div className="font-medium">Map unavailable</div>
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm" role="status">
+      <div className="max-w-xs border-l-2 border-warning py-1 pl-4 text-sm">
+        <div className="caps text-xs font-semibold">Map unavailable</div>
         <p className="mt-1 text-muted-foreground">The map tiles couldn&apos;t load. Everything else on this page still works.</p>
         {onRetry ? (
-          <button type="button" onClick={onRetry} className="mt-3 cursor-pointer text-sm font-medium text-primary underline-offset-4 hover:underline">
-            Try again
+          <button type="button" onClick={onRetry} className="caps mt-3 cursor-pointer text-[11px] font-semibold text-primary hover:text-foreground">
+            Try again →
           </button>
         ) : null}
       </div>
@@ -290,16 +291,16 @@ export function MapUnavailable({ onRetry }: { onRetry?: () => void }) {
 
 function CellPopupBody({ cell }: { cell: CellPrice }) {
   return (
-    <div className="min-w-40 space-y-0.5">
-      <div className="font-mono text-[10px] text-gray-500">{cell.cell}</div>
+    <div className="min-w-40 space-y-1">
+      <div className="font-mono text-[10px] text-muted-foreground">{cell.cell}</div>
       {cell.paused ? (
-        <div className="font-semibold text-gray-800">Paused — {cell.paused_reason ?? "hazard warning"}</div>
+        <div className="font-semibold text-warning">Paused — {cell.paused_reason ?? "hazard warning"}</div>
       ) : (
-        <div className="font-semibold">
-          {formatCents(cell.price_cents)} <span className="font-normal text-gray-500">{formatSurge(cell.surge)}</span>
+        <div className="numeral text-xl text-primary">
+          {formatCents(cell.price_cents)} <span className="text-sm text-muted-foreground">{formatSurge(cell.surge)}</span>
         </div>
       )}
-      <div>
+      <div className="tabular-nums text-muted-foreground">
         {cell.accepted} / {cell.target} accepted
       </div>
     </div>

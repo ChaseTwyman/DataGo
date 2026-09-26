@@ -45,14 +45,18 @@ export function Toaster() {
           key={t.id}
           role={t.tone === "error" ? "alert" : "status"}
           className={cn(
-            "pointer-events-auto flex items-start gap-2 rounded-md border bg-card px-3 py-2.5 text-sm shadow-lg",
-            t.tone === "error" ? "border-red-200 text-red-800" : "border-emerald-200 text-emerald-800",
+            "pointer-events-auto flex items-start gap-3 rounded-sm border border-l-2 bg-popover px-4 py-3 text-sm shadow-lg",
+            t.tone === "error" ? "border-l-destructive" : "border-l-success",
           )}
         >
-          {t.tone === "error" ? <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden /> : <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />}
+          {t.tone === "error" ? (
+            <CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" strokeWidth={1.75} aria-hidden />
+          ) : (
+            <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" strokeWidth={1.75} aria-hidden />
+          )}
           <span className="flex-1">{t.message}</span>
           <button type="button" onClick={() => dismissToast(t.id)} className="cursor-pointer text-muted-foreground hover:text-foreground" aria-label="Dismiss">
-            <X className="size-4" aria-hidden />
+            <X className="size-4" strokeWidth={1.75} aria-hidden />
           </button>
         </div>
       ))}

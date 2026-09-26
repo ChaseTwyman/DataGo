@@ -2,20 +2,21 @@ import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/client/cn";
 import type { Tone } from "@/lib/client/checkFormat";
 
+/** Status pill tones: coloured text + a tinted hairline on the dark panel (all ≥ 4.5:1, see tokens). */
 export const TONE_CLASSES: Record<Tone, string> = {
-  success: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  warning: "bg-amber-50 text-amber-800 border-amber-200",
-  danger: "bg-red-50 text-red-800 border-red-200",
-  info: "bg-sky-50 text-sky-800 border-sky-200",
-  progress: "bg-indigo-50 text-indigo-800 border-indigo-200",
-  muted: "bg-zinc-50 text-zinc-600 border-zinc-200",
+  success: "text-success border-success/40 bg-success/[0.07]",
+  warning: "text-warning border-warning/45 bg-warning/[0.07]",
+  danger: "text-destructive border-destructive/45 bg-destructive/[0.07]",
+  info: "text-info border-info/40 bg-info/[0.07]",
+  progress: "text-primary border-primary/40 bg-primary/[0.07]",
+  muted: "text-muted-foreground border-border bg-transparent",
 };
 
 export function Badge({ tone = "muted", className, ...p }: HTMLAttributes<HTMLSpanElement> & { tone?: Tone }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap [&_svg]:size-3",
+        "caps inline-flex h-5 items-center gap-1 rounded-[2px] border px-1.5 text-[10px] font-semibold tracking-[0.1em] whitespace-nowrap [&_svg]:size-3 [&_svg]:stroke-[2]",
         TONE_CLASSES[tone],
         className,
       )}

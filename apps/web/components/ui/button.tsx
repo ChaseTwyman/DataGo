@@ -2,23 +2,28 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/client/cn";
 
+/**
+ * Buttons: condensed caps labels, square corners. `default` is the one accent action per view;
+ * `outline`/`ghost` for everything else; `destructive` for irreversible actions (pair with a
+ * ConfirmDialog). `success` is kept for "approve & pay".
+ */
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 cursor-pointer",
+  "caps inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm font-semibold whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:stroke-[1.75]",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
-        destructive: "bg-destructive text-white shadow-sm hover:bg-destructive/90",
-        success: "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700",
-        outline: "border bg-card shadow-xs hover:bg-accent",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent",
+        default: "bg-primary text-primary-foreground hover:bg-white",
+        destructive: "bg-destructive text-status-foreground hover:bg-[#ff7a73]",
+        success: "bg-success text-status-foreground hover:bg-[#6ae6a3]",
+        outline: "border border-input bg-transparent text-foreground hover:border-muted-foreground hover:bg-accent",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-[#2a2d33]",
+        ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-11 rounded-md px-6",
+        default: "h-9 px-4 text-[13px] tracking-[0.12em]",
+        sm: "h-8 px-3 text-xs tracking-[0.12em]",
+        lg: "h-11 px-6 text-sm tracking-[0.14em]",
         icon: "size-9",
       },
     },

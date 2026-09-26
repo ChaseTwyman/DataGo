@@ -2,8 +2,10 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { BecomeResearcher } from "@/components/account/BecomeResearcher";
+import { AppShell } from "@/components/ds/AppShell";
+import { ConfirmProvider } from "@/components/ds/Dialog";
+import { Mark } from "@/components/ds/Mark";
 import { ErrorBox, Loading } from "@/components/page";
-import { Sidebar } from "@/components/Sidebar";
 import { Toaster } from "@/components/Toaster";
 import { Button } from "@/components/ui/button";
 import { errorMessage, setUnauthorizedHandler } from "@/lib/client/api";
@@ -32,7 +34,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     // Only on mount: route changes inside the dashboard keep the same session.
   }, []);
 
-  if (!session) return <Loading label="Checking session…" className="h-screen justify-center" />;
+  if (!session)
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background" role="status">
+        <Mark className="size-8 text-foreground" />
+        <span className="caps text-[11px] text-muted-foreground">Checking session…</span>
+      </div>
+    );
 
   const onSignOut = () => {
     void signOut().then(() => router.replace("/login"));
@@ -41,13 +49,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <HealthProvider>
       <MeProvider>
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar session={session} onSignOut={onSignOut} />
-          <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <ConfirmProvider>
+          <AppShell session={session} onSignOut={onSignOut}>
             <AccountGate onSignOut={onSignOut}>{children}</AccountGate>
-          </main>
-        </div>
-        <Toaster />
+          </AppShell>
+          <Toaster />
+        </ConfirmProvider>
       </MeProvider>
     </HealthProvider>
   );
@@ -62,7 +69,7 @@ function AccountGate({ children, onSignOut }: { children: ReactNode; onSignOut: 
   if (errorCode === "ACCOUNT_SUSPENDED") {
     return (
       <div className="flex flex-1 items-start justify-center p-6 sm:pt-16">
-        <div className="max-w-md space-y-3">
+        <div className="w-full max-w-md space-y-4">
           <ErrorBox message={errorMessage(error)} />
           <Button variant="outline" onClick={onSignOut}>
             Sign out

@@ -19,18 +19,18 @@ export function SyntheticImage({
   className?: string;
 }) {
   return (
-    <figure className={cn("relative overflow-hidden rounded-lg border bg-muted", className)}>
+    <figure className={cn("relative overflow-hidden rounded-sm border bg-muted", className)}>
       {src ? (
         <img src={src} alt={alt} className="block h-full w-full object-cover" />
       ) : (
         <div className="flex aspect-[4/3] items-center justify-center text-muted-foreground">
-          <ImageOff className="size-6" aria-hidden />
+          <ImageOff className="size-6" strokeWidth={1.5} aria-hidden />
         </div>
       )}
       <figcaption
         className={cn(
-          "absolute top-2 left-2 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-bold tracking-wide text-white uppercase shadow",
-          tone === "redteam" ? "bg-red-600" : "bg-violet-600",
+          "caps absolute top-2 left-2 inline-flex items-center gap-1 rounded-[2px] px-2 py-1 text-[10px] font-semibold tracking-[0.14em] text-black",
+          tone === "redteam" ? "bg-destructive" : "bg-white",
         )}
       >
         <Sparkles className="size-3" aria-hidden />
