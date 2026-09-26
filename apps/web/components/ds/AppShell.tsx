@@ -8,6 +8,7 @@ import {
   Globe,
   LogOut,
   Map as MapIcon,
+  MessageSquareText,
   Radar,
   Radio,
   Sparkles,
@@ -41,6 +42,7 @@ const RESEARCH: NavItem[] = [
   { href: "/protocols", label: "Protocols", icon: FlaskConical },
   { href: "/studio", label: "Protocol Studio", icon: Sparkles },
   { href: "/radar", label: "Opportunity Radar", icon: Radar },
+  { href: "/ask", label: "Ask the data", icon: MessageSquareText },
 ];
 const ADMIN: NavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users },

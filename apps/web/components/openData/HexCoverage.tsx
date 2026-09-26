@@ -32,7 +32,8 @@ export function HexCoverage({ cells, accent, className }: { cells: { h3_cell: st
     const scale = (size * 0.86) / Math.max(w, h);
     const offX = (size - w * scale) / 2;
     const offY = (size - h * scale) / 2;
-    const max = Math.max(...cells.map((c) => c.rows));
+    // ≥ 1 so an all-zero set (Ask the data: cells under target) shades faintly instead of NaN.
+    const max = Math.max(1, ...cells.map((c) => c.rows));
     return polys.map((p) => ({
       cell: p.h3_cell,
       rows: p.rows,

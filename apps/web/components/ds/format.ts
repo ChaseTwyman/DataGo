@@ -21,6 +21,7 @@ const SEGMENT_LABEL: Record<string, string> = {
   protocols: "Protocols",
   studio: "Protocol Studio",
   radar: "Opportunity Radar",
+  ask: "Ask the data",
   admin: "Admin",
   users: "Users",
   funding: "Funding",

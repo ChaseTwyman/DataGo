@@ -11,6 +11,7 @@ import {
 } from "@groundtruth/shared";
 import { Mark } from "../ds/Mark";
 import { COLORS } from "../ds/tokens";
+import { AskPanel } from "./AskPanel";
 import { HexCoverage } from "./HexCoverage";
 
 /**
@@ -72,6 +73,7 @@ export function OpenDataPage() {
           </Link>
           <nav className={`${HEAD} flex items-center gap-5 text-[11px] text-white/60 sm:gap-8`}>
             <a href="#datasets" className="hover:text-white">Datasets</a>
+            <a href="#ask" className="hover:text-white">Ask</a>
             <a href="#method" className="hidden hover:text-white sm:inline">Method</a>
             <Link href="/funding" className="hover:text-white">Funding</Link>
             <Link href="/login" className="hover:text-white">Researchers</Link>
@@ -117,6 +119,16 @@ export function OpenDataPage() {
             {list?.datasets.map((d) => <DatasetSection key={d.slug} d={d} />)}
           </div>
         </section>
+
+        {list && list.datasets.length > 0 ? (
+          <section id="ask" className="scroll-mt-16 border-t border-white/10">
+            <div className="mx-auto max-w-6xl px-4 py-16 sm:px-8 sm:py-24">
+              <p className={`${HEAD} text-[11px] text-white/55`}>Ask the data</p>
+              <h2 className={`${HEAD} mt-3 mb-8 text-3xl font-semibold tracking-[0.08em]! sm:text-5xl`}>Ask a question</h2>
+              <AskPanel mode="public" />
+            </div>
+          </section>
+        ) : null}
 
         <Method />
       </main>
