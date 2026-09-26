@@ -116,7 +116,9 @@ function scalar(v: unknown): string | number | boolean | null {
 export function toCsv(columns: string[], rows: ExportRow[]): string {
   const cell = (v: string | number | boolean | null | undefined) => {
     if (v === null || v === undefined) return "";
-    const s = String(v);
+    let s = String(v);
+    // Neutralise spreadsheet formulas from contributor-controlled text (device model, field notes).
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [columns.join(","), ...rows.map((r) => columns.map((c) => cell(r[c])).join(","))].join("\r\n") + "\r\n";

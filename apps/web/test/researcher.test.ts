@@ -124,6 +124,21 @@ describe("review queue", () => {
   });
 });
 
+describe("review races", () => {
+  it("two concurrent reviews: exactly one wins, one payout", async () => {
+    const c = await contributor();
+    const r = await capture(c.token, DEMO.bountyId, { "x-mock-variant": "error" });
+    const call = (decision: string) =>
+      review(req("POST", `/api/submissions/${r.submission_id}/review`, { token: researcher, body: { decision } }), idCtx(r.submission_id!));
+    const res = await Promise.all([call("approve"), call("reject"), call("approve")]);
+    const codes = res.map((x) => x.status).sort();
+    expect(codes.filter((x) => x === 200)).toHaveLength(1);
+    expect(codes.filter((x) => x === 409)).toHaveLength(2);
+    const n = await env.db.query<{ n: number }>("select count(*)::int as n from public.ledger_entries where submission_id = $1", [r.submission_id!]);
+    expect(n[0]!.n).toBeLessThanOrEqual(1);
+  });
+});
+
 describe("export", () => {
   it("CSV flattens extraction fields and field notes per the protocol; GeoJSON has points; dictionary lists columns", async () => {
     const c = await contributor();
@@ -188,6 +203,15 @@ describe("red team", () => {
 });
 
 describe("example image", () => {
+  it("researchers cannot regenerate another owner's protocol image", async () => {
+    const other = await env.db.query<{ id: string }>("select gen_random_uuid()::text as id");
+    const oid = other[0]!.id;
+    await env.db.query("insert into auth.users (id) values ($1)", [oid]);
+    await env.db.query("update public.profiles set role = 'researcher' where id = $1", [oid]);
+    const r = await exampleImage(req("POST", `/api/protocols/${DEMO.protocolId}/example-image`, { token: `dev.${oid}` }), idCtx(DEMO.protocolId));
+    expect(r.status).toBe(403);
+  });
+
   it("stores the image in the synthetic bucket and links it to the protocol", async () => {
     const r = await exampleImage(req("POST", `/api/protocols/${DEMO.protocolId}/example-image`, { token: researcher }), idCtx(DEMO.protocolId));
     const body = (await r.json()) as { path: string; url: string };

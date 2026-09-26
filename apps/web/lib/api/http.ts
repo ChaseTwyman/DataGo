@@ -77,7 +77,7 @@ export function errorResponse(err: unknown): Response {
   if (err instanceof HttpError) return jsonError(err.status, err.code, err.message, err.details);
   if (err instanceof ZodError) return jsonError(400, "VALIDATION_FAILED", "Request failed validation", err.issues);
   console.error("[api] unhandled error", err);
-  return jsonError(500, "INTERNAL", err instanceof Error ? err.message : "Internal error");
+  return jsonError(500, "INTERNAL", "Internal error");
 }
 
 export type IdParams = { params: Promise<{ id: string }> };

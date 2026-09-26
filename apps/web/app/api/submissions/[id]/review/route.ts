@@ -40,16 +40,19 @@ export const POST = route<IdParams>(async (req, { params }) => {
     const codes = sub.reason_codes.filter((c) => c !== "LOW_TRUST_REVIEW" && c !== "BUDGET_EXHAUSTED");
     if (body.decision === "approve") {
       const amount = session ? payoutCents(session.price_quote_cents, payoutMultiplier(sub.protocol_score ?? 0.5)) : 0;
+      const won = await setReviewOutcome(tx, id, { status: "accepted", reason_codes: codes, payout_cents: amount, reviewer: user.id, note: body.note ?? null });
+      if (!won) throw conflict("NOT_IN_REVIEW", "Submission was already reviewed");
       if (amount > 0 && !(await spendBudget(tx, bounty.id, amount))) {
         throw conflict("BUDGET_EXHAUSTED", "Bounty budget cannot cover this payout; raise the budget first");
       }
-      await setReviewOutcome(tx, id, { status: "accepted", reason_codes: codes, payout_cents: amount, reviewer: user.id, note: body.note ?? null });
       if (amount > 0) await insertLedger(tx, { user_id: sub.user_id, submission_id: id, amount_cents: amount, kind: "payout" });
       await setTrust(tx, sub.user_id, updateTrust(trust, { kind: "review_approved" }));
       return { submission_id: id, status: "accepted" as const, payout_cents: amount };
     }
     const rejectCodes: ReasonCode[] = [...new Set<ReasonCode>([...codes, "REVIEWER_REJECTED"])];
-    await setReviewOutcome(tx, id, { status: "rejected", reason_codes: rejectCodes, payout_cents: 0, reviewer: user.id, note: body.note ?? null });
+    if (!(await setReviewOutcome(tx, id, { status: "rejected", reason_codes: rejectCodes, payout_cents: 0, reviewer: user.id, note: body.note ?? null }))) {
+      throw conflict("NOT_IN_REVIEW", "Submission was already reviewed");
+    }
     await setTrust(tx, sub.user_id, updateTrust(trust, { kind: "review_rejected", integrity: body.integrity }));
     return { submission_id: id, status: "rejected" as const, payout_cents: 0 };
   });

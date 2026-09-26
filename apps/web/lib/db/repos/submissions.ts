@@ -176,12 +176,15 @@ export async function setReviewOutcome(
   db: Db,
   id: string,
   o: { status: SubmissionStatus; reason_codes: ReasonCode[]; payout_cents: number; reviewer: string; note: string | null },
-): Promise<void> {
-  await db.query(
+): Promise<boolean> {
+  // Conditional on needs_review so concurrent reviews cannot both apply (same pattern as markSubmittedIfOpen).
+  const rows = await db.query<{ id: string }>(
     `update public.submissions set status = $2::public.submission_status, reason_codes = $3::text[], payout_cents = $4,
-       reviewed_by = $5, reviewed_at = now(), review_note = $6, retryable = false where id = $1`,
+       reviewed_by = $5, reviewed_at = now(), review_note = $6, retryable = false
+     where id = $1 and status = 'needs_review' returning id`,
     [id, o.status, o.reason_codes, o.payout_cents, o.reviewer, o.note],
   );
+  return rows.length === 1;
 }
 
 // ---------- pipeline lookups ----------

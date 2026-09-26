@@ -1,4 +1,5 @@
 /** Server env flags. Read lazily so tests can stub them per case. */
+import { randomBytes } from "node:crypto";
 import { isDemoMode, isMockGrok } from "./grok/config";
 
 export { isDemoMode, isMockGrok };
@@ -24,9 +25,14 @@ export function nwsUserAgent(): string {
   return process.env.NWS_USER_AGENT || "GroundTruth hackathon (groundtruth@example.com)";
 }
 
-/** Secret for HMAC-signing local storage URLs. Only meaningful in LOCAL_BACKEND mode. */
+const g = globalThis as typeof globalThis & { __gtSigningSecret?: string };
+
+/**
+ * Secret for HMAC-signing local storage URLs (LOCAL_BACKEND only). Never a committed constant: when
+ * LOCAL_SIGNING_SECRET is unset, a random per-process secret is used, so URLs die with the server.
+ */
 export function localSigningSecret(): string {
-  return process.env.LOCAL_SIGNING_SECRET || "groundtruth-local-dev-secret";
+  return process.env.LOCAL_SIGNING_SECRET || (g.__gtSigningSecret ??= randomBytes(32).toString("hex"));
 }
 
 /** Disable outbound context/hazard HTTP calls (offline dev). Pipeline marks those subchecks skipped. */
