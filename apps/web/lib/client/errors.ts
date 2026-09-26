@@ -45,6 +45,16 @@ const BY_CODE: Record<string, string> = {
   BOUNTY_NOT_ACTIVE: "This bounty isn't accepting captures right now.",
   HAZARD_PAUSED: "Captures are paused here because of an active hazard warning.",
   FRAME_CHECK_LIMIT: "The scene-check limit for this session was reached.",
+  // accounts (contracts/account.ts)
+  EMAIL_TAKEN: "An account with this email already exists. Sign in instead.",
+  INVALID_CREDENTIALS: "That password isn't right. Try again.",
+  ACCOUNT_REQUIRED: "Create an account to continue.",
+  ACCOUNT_SUSPENDED: "This account is suspended. Contact the GroundTruth team if you think this is a mistake.",
+  RESEARCHER_REQUIRED: "Turn on researcher access in Account settings to use this.",
+  ADMIN_REQUIRED: "Only administrators can do this.",
+  RATE_LIMITED: "You've done that a lot in the last hour. Please wait a while and try again.",
+  RESEARCHER_REVOKED: "An administrator turned off researcher access for this account. Contact the GroundTruth team.",
+  CANNOT_CHANGE_SELF: "You can't remove your own admin access or suspend yourself. Ask another admin.",
 };
 
 function byStatus(status: number): string {
@@ -83,6 +93,15 @@ const FIELD_LABEL: Record<string, string> = {
   budget_cents: "Budget",
   sponsor_name: "Sponsor name",
   sponsor_url: "Sponsor URL",
+  email: "Email",
+  password: "Password",
+  new_password: "New password",
+  current_password: "Current password",
+  display_name: "Name",
+  organization: "Organization",
+  purpose: "Purpose",
+  is_adult: "Age",
+  accept_terms: "Terms",
 };
 
 type Issue = { path?: readonly PropertyKey[]; code?: string; message?: string; minimum?: unknown; maximum?: unknown; origin?: string; format?: string };
@@ -106,6 +125,7 @@ function issueText(i: Issue): string {
       return cents ? `Must be at most $${(max / 100).toFixed(2)}.` : `Must be at most ${max}.`;
     }
     case "invalid_format":
+      if (i.format === "email") return "Enter a valid email address.";
       return i.format === "url" ? "Enter a full URL, like https://example.org." : "Invalid format.";
     case "invalid_type":
       return "Enter a valid value.";

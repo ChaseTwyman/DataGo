@@ -1,5 +1,5 @@
 "use client";
-import { RoleSchema } from "@groundtruth/shared";
+import { RoleSchema, type SignupRequest } from "@groundtruth/shared";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 import { FriendlyError } from "./errors";
 import { api } from "./api";
@@ -11,6 +11,25 @@ export async function signInLocalResearcher(): Promise<StoredSession> {
   const s: StoredSession = { mode: "local", access_token: r.access_token, user_id: r.user_id, role: RoleSchema.catch("researcher").parse(r.role), email: null };
   writeSession(s);
   return s;
+}
+
+/** Local backend: email + password against the PGlite auth table (POST /api/dev/login). */
+export async function signInLocalPassword(email: string, password: string): Promise<StoredSession> {
+  const r = await api.devLogin(email, password);
+  const s: StoredSession = { mode: "local", access_token: r.access_token, user_id: r.user_id, role: RoleSchema.catch("contributor").parse(r.role), email };
+  writeSession(s);
+  return s;
+}
+
+/** Email + password on whichever backend is running. */
+export function signIn(email: string, password: string, local: boolean): Promise<StoredSession> {
+  return local ? signInLocalPassword(email, password) : signInWithPassword(email, password);
+}
+
+/** Creates the account on our server (confirmed immediately; no email is sent), then signs in. */
+export async function signUp(input: SignupRequest, local: boolean): Promise<StoredSession> {
+  await api.signup(input);
+  return signIn(input.email, input.password, local);
 }
 
 export async function signInWithPassword(email: string, password: string): Promise<StoredSession> {
@@ -27,12 +46,12 @@ export async function signInWithPassword(email: string, password: string): Promi
     const bad = error && (error.status === 400 || /invalid login credentials/i.test(error.message));
     throw new FriendlyError(bad ? "That email and password don't match. Try again." : "Sign-in didn't work just now. Try again in a moment.");
   }
-  // Role is enforced server-side per route; the dashboard is researcher-only, so assume it here.
+  // Role is enforced server-side per route; the dashboard reads the real flags from GET /api/me.
   const s: StoredSession = {
     mode: "supabase",
     access_token: data.session.access_token,
     user_id: data.session.user.id,
-    role: "researcher",
+    role: "contributor",
     email: data.session.user.email ?? email,
   };
   writeSession(s);

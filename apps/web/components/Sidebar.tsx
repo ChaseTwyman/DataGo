@@ -8,13 +8,17 @@ import {
   LogOut,
   Map as MapIcon,
   Radio,
+  Sparkles,
   Swords,
+  UserRound,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useHealth } from "@/lib/client/health";
+import { useMe } from "@/lib/client/me";
 import type { StoredSession } from "@/lib/client/session";
 import { chooseStreamMode } from "@/lib/client/stream";
 import { supabaseConfigured } from "@/lib/supabase/browser";
@@ -27,8 +31,13 @@ const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/red-team", label: "Red team", icon: Swords },
 ];
-const SECONDARY = [
+const RESEARCH = [
   { href: "/protocols", label: "Protocols", icon: FlaskConical },
+  { href: "/studio", label: "Protocol Studio", icon: Sparkles },
+];
+const ADMIN = [{ href: "/admin/users", label: "Users", icon: Users }];
+const ALWAYS = [
+  { href: "/account", label: "Account", icon: UserRound },
   { href: "/data", label: "Open data", icon: Globe },
 ];
 
@@ -36,6 +45,9 @@ export function Sidebar({ session, onSignOut }: { session: StoredSession; onSign
   const pathname = usePathname();
   const { state, data } = useHealth();
   const mode = chooseStreamMode(state, supabaseConfigured());
+  const { me } = useMe();
+  const researcher = me?.is_researcher ?? false;
+  const roleLabel = me ? [me.is_admin ? "Admin" : null, me.is_researcher ? "Researcher" : null, "Contributor"].filter(Boolean).join(" · ") : "";
 
   const item = (n: { href: string; label: string; icon: LucideIcon }) => {
     const active = pathname === n.href || pathname.startsWith(`${n.href}/`);
@@ -68,9 +80,12 @@ export function Sidebar({ session, onSignOut }: { session: StoredSession; onSign
         </span>
       </Link>
       <nav className="flex flex-col gap-0.5 px-3" aria-label="Main">
-        {NAV.map(item)}
-        <div className="my-3 border-t border-white/10" />
-        {SECONDARY.map(item)}
+        {researcher ? NAV.map(item) : null}
+        {researcher ? <div className="my-3 border-t border-white/10" /> : null}
+        {researcher ? RESEARCH.map(item) : null}
+        {me?.is_admin ? ADMIN.map(item) : null}
+        {researcher || me?.is_admin ? <div className="my-3 border-t border-white/10" /> : null}
+        {ALWAYS.map(item)}
       </nav>
       <div className="mt-auto space-y-3 p-4 text-[11px]">
         <div className="flex flex-wrap gap-1">
@@ -87,8 +102,8 @@ export function Sidebar({ session, onSignOut }: { session: StoredSession; onSign
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-white/10 pt-3">
           <div className="min-w-0">
-            <div className="truncate text-rail-foreground">{session.email ?? "Demo researcher"}</div>
-            <div className="text-rail-foreground/50 capitalize">{session.role}</div>
+            <div className="truncate text-rail-foreground">{me?.display_name ?? me?.email ?? session.email ?? "Signed in"}</div>
+            <div className="truncate text-rail-foreground/50">{roleLabel}</div>
           </div>
           <button
             type="button"

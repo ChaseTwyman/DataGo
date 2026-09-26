@@ -99,7 +99,11 @@ export function SubmissionDetail({ s }: { s: SubmissionWithMedia }) {
     <div className="space-y-4 border-t p-3">
       <section>
         <h4 className="mb-1.5 text-xs font-semibold">Frames ({s.media_urls.length || s.media.length})</h4>
-        {s.media_urls.length ? (
+        {s.media_purged_at ? (
+          <p className="text-xs text-muted-foreground">
+            Photos deleted per retention policy ({new Date(s.media_purged_at).toLocaleDateString()}). The verification record below is kept.
+          </p>
+        ) : s.media_urls.some(Boolean) ? (
           <div className="grid grid-cols-3 gap-2">
             {s.media_urls.map((u, i) => (
               <a key={i} href={u} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border">

@@ -7,7 +7,18 @@
  */
 import { z } from "zod";
 import {
+  AdminResetPasswordResponseSchema,
+  AdminUserListResponseSchema,
+  AdminUserSchema,
   ApiErrorSchema,
+  DraftProtocolResponseSchema,
+  MeSchema,
+  SignupResponseSchema,
+  type AdminUserPatchSchema,
+  type BecomeResearcherRequestSchema,
+  type ChangePasswordRequestSchema,
+  type Protocol,
+  type SignupRequest,
   CoverageResponseSchema,
   CreateBountyRequestSchema,
   CreateBountyResponseSchema,
@@ -42,7 +53,7 @@ export function setUnauthorizedHandler(fn: Unauthorized | null): void {
 }
 
 interface FetchOpts {
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   auth?: boolean;
   headers?: Record<string, string>;
@@ -112,6 +123,29 @@ const qs = (params: Record<string, string | number | undefined>) => {
   return s ? `?${s}` : "";
 };
 
+/** Saves a fetched response as a file (exports need the bearer header, so no plain link). */
+async function saveResponse(res: Response, fallbackName: string): Promise<void> {
+  let blob: Blob;
+  try {
+    blob = await res.blob();
+  } catch {
+    throw new ApiClientError("download body interrupted", 0, "network");
+  }
+  const cd = res.headers.get("content-disposition") ?? "";
+  const m = /filename="?([^";]+)"?/i.exec(cd);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = m?.[1] ?? fallbackName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const OkSchema = z.object({ ok: z.literal(true) });
+const DevLoginResponseSchema = LenientDevSessionResponseSchema;
+
 export type ExportFormat = "csv" | "geojson" | "dictionary";
 
 export const api = {
@@ -119,7 +153,30 @@ export const api = {
   devSession: (role: Role = "researcher") =>
     apiFetch("/api/dev/session", LenientDevSessionResponseSchema, { body: { role }, auth: false }),
 
+  // ---- accounts
+  signup: (body: SignupRequest) => apiFetch("/api/auth/signup", SignupResponseSchema, { body, auth: false }),
+  devLogin: (email: string, password: string) =>
+    apiFetch("/api/dev/login", DevLoginResponseSchema, { body: { email, password }, auth: false }),
+  me: () => apiFetch("/api/me", MeSchema),
+  becomeResearcher: (body: z.input<typeof BecomeResearcherRequestSchema>) => apiFetch("/api/me/researcher", MeSchema, { body }),
+  stopResearcher: () => apiFetch("/api/me/researcher", MeSchema, { method: "DELETE" }),
+  changePassword: (body: z.input<typeof ChangePasswordRequestSchema>) => apiFetch("/api/me/password", OkSchema, { body }),
+  async downloadMyData(): Promise<void> {
+    await saveResponse(await rawFetch("/api/me/export"), "groundtruth-my-data.json");
+  },
+  async deleteAccount(): Promise<void> {
+    await rawFetch("/api/me", { method: "DELETE", body: { confirm: "DELETE" } });
+  },
+  adminUsers: (q: { q?: string; limit?: number } = {}) => apiFetch(`/api/admin/users${qs(q)}`, AdminUserListResponseSchema),
+  adminPatchUser: (id: string, patch: z.input<typeof AdminUserPatchSchema>) =>
+    apiFetch(`/api/admin/users/${id}`, AdminUserSchema, { method: "PATCH", body: patch }),
+  adminResetPassword: (id: string) => apiFetch(`/api/admin/users/${id}/reset-password`, AdminResetPasswordResponseSchema, { body: {} }),
+
+  // ---- protocols
   protocols: () => apiFetch("/api/protocols", LenientProtocolListResponseSchema),
+  draftProtocol: (need: string) => apiFetch("/api/protocols/draft", DraftProtocolResponseSchema, { body: { need } }),
+  publishProtocol: (id: string, definition: Protocol) =>
+    apiFetch(`/api/protocols/${id}/publish`, z.object({ id: z.string(), status: z.string() }), { body: { definition } }),
   exampleImage: (protocolId: string) =>
     apiFetch(`/api/protocols/${protocolId}/example-image`, ExampleImageResponseSchema, { body: {} }),
 

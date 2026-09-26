@@ -47,7 +47,11 @@ export default function NewBountyPage() {
 
   const list = protocols.data?.protocols ?? [];
   useEffect(() => {
-    if (!protocolId && list[0]) setProtocolId(list[0].id);
+    if (protocolId || !list[0]) return;
+    // ?protocol=<id> from Protocol Studio's "Create bounty with this protocol" (read directly so the
+    // page needs no Suspense boundary for useSearchParams).
+    const wanted = new URLSearchParams(window.location.search).get("protocol");
+    setProtocolId(list.find((p) => p.id === wanted && p.status === "published")?.id ?? list[0].id);
   }, [list, protocolId]);
   const protocol = list.find((p) => p.id === protocolId)?.definition ?? null;
 
