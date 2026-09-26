@@ -62,6 +62,12 @@ export function endpoints(http: Http) {
 
     // Accounts (contracts/account.ts)
     signup: (body: SignupRequest) => http.request("POST", "/api/auth/signup", { schema: SignupResponseSchema, body, auth: false }),
+    /** Always 202 with the same body, whether or not the email has an account. */
+    requestPasswordReset: (email: string) =>
+      http.request("POST", "/api/auth/password-reset/request", { schema: z.unknown(), body: { email }, auth: false }),
+    /** Wrong/expired code → ApiError RESET_CODE_INVALID. Signs the account out everywhere on success. */
+    confirmPasswordReset: (body: { email: string; code: string; new_password: string }) =>
+      http.request("POST", "/api/auth/password-reset/confirm", { schema: z.object({ ok: z.boolean() }).loose(), body, auth: false }),
     me: () => http.request("GET", "/api/me", { schema: MeSchema }),
     changePassword: (body: ChangePasswordRequest) =>
       http.request("POST", "/api/me/password", { schema: z.object({ ok: z.boolean() }).loose(), body }),

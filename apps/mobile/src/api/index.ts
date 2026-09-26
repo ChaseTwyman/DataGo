@@ -137,6 +137,20 @@ export async function signUp(body: Parameters<typeof api.signup>[0]): Promise<vo
   await signIn(body.email, body.password);
 }
 
+/** Forgot password step 1. Resolves the same way whether or not the email has an account. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await api.requestPasswordReset(email);
+}
+
+/**
+ * Forgot password step 2: redeem the emailed code and set the new password (the server signs the
+ * account out everywhere). The caller then signs in with it, so a sign-in failure can be shown
+ * separately from "the password was changed".
+ */
+export async function confirmPasswordReset(email: string, code: string, newPassword: string): Promise<void> {
+  await api.confirmPasswordReset({ email, code, new_password: newPassword });
+}
+
 /** Sign out on this phone and show Welcome. Clears every cached server response. */
 export async function endSession(notice: AuthNotice | null): Promise<void> {
   const s = useApp.getState();

@@ -6,7 +6,14 @@
  *   a legacy anonymous session → signed out of it locally, Welcome explains accounts are required.
  * - Local backend (LOCAL_BACKEND=1, development only): POST /api/dev/session as before.
  */
-import { SignupRequestSchema, type LenientHealthResponse as HealthResponse, type SignupRequest } from "@groundtruth/shared";
+import {
+  EmailSchema,
+  PasswordSchema,
+  ResetCodeSchema,
+  SignupRequestSchema,
+  type LenientHealthResponse as HealthResponse,
+  type SignupRequest,
+} from "@groundtruth/shared";
 import { ApiError } from "./http";
 
 /** Why the Welcome screen is showing (drives its explanatory line). null = plain first launch. */
@@ -153,6 +160,61 @@ export function validateSignup(f: SignupForm): { ok: true; data: SignupRequest }
     errors[field] = field === "password" && f.password.length > 72 ? "Use at most 72 characters." : FIELD_COPY[field];
   }
   return { ok: false, errors };
+}
+
+// ---------------------------------------------------------------- forgot password
+
+/**
+ * Forgot password: email → code + new password → signed in. The code comes from Supabase's
+ * recovery email and is redeemed by our server (POST /api/auth/password-reset/confirm), so no
+ * deep link is needed. The request step never says whether the email has an account.
+ */
+export type ResetStep = "email" | "code" | "done";
+export interface ResetState {
+  step: ResetStep;
+  /** The normalized address the code was sent to (the confirm call must use the same one). */
+  sentTo: string | null;
+  /** ms epoch of the last send, for the resend cooldown. */
+  sentAt: number | null;
+}
+export type ResetEvent = { type: "sent"; email: string; at: number } | { type: "change_email" } | { type: "done" };
+
+export const RESET_INITIAL: ResetState = { step: "email", sentTo: null, sentAt: null };
+
+export function resetReducer(s: ResetState, e: ResetEvent): ResetState {
+  switch (e.type) {
+    case "sent":
+      return { step: "code", sentTo: e.email, sentAt: e.at };
+    case "change_email":
+      return { ...s, step: "email" };
+    case "done":
+      return s.step === "code" ? { ...s, step: "done" } : s;
+  }
+}
+
+/** Supabase refuses a second recovery email to the same user within 60 s. */
+export const RESEND_COOLDOWN_MS = 60_000;
+export const resendWaitSeconds = (s: ResetState, now: number): number =>
+  s.sentAt === null ? 0 : Math.max(0, Math.ceil((s.sentAt + RESEND_COOLDOWN_MS - now) / 1000));
+
+export type ResetField = "email" | "code" | "new_password" | "confirm_password";
+
+export function validateResetEmail(email: string): { ok: true; email: string } | { ok: false; errors: Partial<Record<ResetField, string>> } {
+  const r = EmailSchema.safeParse(email);
+  return r.success ? { ok: true, email: r.data } : { ok: false, errors: { email: "Enter a valid email address." } };
+}
+
+export function validateResetForm(f: { code: string; password: string; confirm: string }):
+  | { ok: true; code: string; password: string }
+  | { ok: false; errors: Partial<Record<ResetField, string>> } {
+  const errors: Partial<Record<ResetField, string>> = {};
+  const c = ResetCodeSchema.safeParse(f.code);
+  if (!c.success) errors.code = "Enter the 6-digit code from the email.";
+  const p = PasswordSchema.safeParse(f.password);
+  if (!p.success) errors.new_password = f.password.length > 72 ? "Use at most 72 characters." : "Use at least 8 characters.";
+  else if (f.confirm !== f.password) errors.confirm_password = "The passwords don't match.";
+  if (!c.success || Object.keys(errors).length > 0) return { ok: false, errors };
+  return { ok: true, code: c.data, password: f.password };
 }
 
 /** Delete-account gate: the user must type DELETE exactly (surrounding spaces from the keyboard ok). */

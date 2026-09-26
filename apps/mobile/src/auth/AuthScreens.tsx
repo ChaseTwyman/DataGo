@@ -2,30 +2,43 @@
  * Signed-out experience: Welcome → Create account | Sign in. Rendered by the root gate INSTEAD of
  * the router Stack, so no app screen (or deep link) is reachable without an account.
  *
- * No email is ever sent: sign-up goes through POST /api/auth/signup (confirmed immediately), then
- * we sign in with the password. There is no reset email; an admin issues a temporary password.
+ * Sign-up sends no email: it goes through POST /api/auth/signup (confirmed immediately), then we
+ * sign in with the password. Forgot password: Sign in → "Forgot password?" → email → emailed
+ * 6-digit code + new password → signed in. An admin-issued temporary password still works too.
  */
-import { useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { devContinue, signIn, signUp } from "../api";
-import { NOTICE_COPY, validateSignup, type SignupField, type SignupForm } from "../api/authFlow";
-import { toUserMessage, type UserMessage } from "../api/errors";
+import { confirmPasswordReset, devContinue, requestPasswordReset, signIn, signUp } from "../api";
+import {
+  NOTICE_COPY,
+  RESET_INITIAL,
+  resendWaitSeconds,
+  resetReducer,
+  validateResetEmail,
+  validateResetForm,
+  validateSignup,
+  type ResetField,
+  type SignupField,
+  type SignupForm,
+} from "../api/authFlow";
+import { toResetMessage, toUserMessage, type UserMessage } from "../api/errors";
 import { log } from "../lib/log";
 import { supabaseConfigured } from "../lib/supabase";
 import { useApp } from "../state/appStore";
-import { Body, Button, Divider, Heading, IconButton, Label, Muted, Section, StatusPill } from "../ui/components";
+import { Body, Button, Divider, Heading, IconButton, Muted, Section, StatusPill } from "../ui/components";
 import { Check, PasswordField, TextField } from "../ui/forms";
 import { C, S, T } from "../ui/theme";
 
 const MARK = require("../../assets/splash-icon.png") as number;
 
-type View_ = "welcome" | "signin" | "signup";
+type View_ = "welcome" | "signin" | "signup" | "forgot";
 
 export function AuthFlow() {
   const [view, setView] = useState<View_>("welcome");
   const [email, setEmail] = useState("");
-  if (view === "signin") return <SignIn email={email} setEmail={setEmail} onBack={() => setView("welcome")} onCreate={() => setView("signup")} />;
+  if (view === "forgot") return <ForgotPassword email={email} setEmail={setEmail} onBack={() => setView("signin")} />;
+  if (view === "signin") return <SignIn email={email} setEmail={setEmail} onBack={() => setView("welcome")} onCreate={() => setView("signup")} onForgot={() => setView("forgot")} />;
   if (view === "signup") return <SignUp email={email} setEmail={setEmail} onBack={() => setView("welcome")} onSignIn={() => setView("signin")} />;
   return <Welcome onCreate={() => setView("signup")} onSignIn={() => setView("signin")} />;
 }
@@ -99,7 +112,19 @@ function ErrorLine({ err, onSignIn }: { err: UserMessage; onSignIn?: () => void 
   );
 }
 
-function SignIn({ email, setEmail, onBack, onCreate }: { email: string; setEmail: (s: string) => void; onBack: () => void; onCreate: () => void }) {
+function SignIn({
+  email,
+  setEmail,
+  onBack,
+  onCreate,
+  onForgot,
+}: {
+  email: string;
+  setEmail: (s: string) => void;
+  onBack: () => void;
+  onCreate: () => void;
+  onForgot: () => void;
+}) {
   const notice = useApp((s) => s.authNotice);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -137,12 +162,157 @@ function SignIn({ email, setEmail, onBack, onCreate }: { email: string; setEmail
       <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="current-password" textContentType="password" returnKeyType="go" onSubmitEditing={() => void submit()} />
       {err ? <ErrorLine err={err} /> : null}
       <Button title="Sign in" icon="log-in" onPress={() => void submit()} disabled={!canSubmit} loading={busy} />
+      <Button title="Forgot password?" kind="secondary" icon="key" onPress={onForgot} />
       <Divider />
-      <View style={{ gap: S.xs }}>
-        <Label>Forgot password?</Label>
-        <Muted>Ask an admin to issue a temporary password. Then sign in with it and change it in Account.</Muted>
-      </View>
       <Button title="Create an account instead" kind="secondary" icon="user-plus" onPress={onCreate} />
+    </Frame>
+  );
+}
+
+/** Forgot password: email → 6-digit code + new password → signed in (the gate then shows the app). */
+function ForgotPassword({ email, setEmail, onBack }: { email: string; setEmail: (s: string) => void; onBack: () => void }) {
+  const [state, dispatch] = useReducer(resetReducer, RESET_INITIAL);
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [errors, setErrors] = useState<Partial<Record<ResetField, string>>>({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<UserMessage | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const wait = resendWaitSeconds(state, now);
+
+  // Tick the resend countdown only while it runs.
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [wait]);
+
+  const clear = (f: ResetField) => setErrors((e) => (e[f] ? { ...e, [f]: undefined } : e));
+
+  const send = async () => {
+    if (busy) return;
+    setErr(null);
+    const v = validateResetEmail(state.step === "code" && state.sentTo ? state.sentTo : email);
+    if (!v.ok) return setErrors(v.errors);
+    setErrors({});
+    setBusy(true);
+    try {
+      await requestPasswordReset(v.email);
+      const at = Date.now();
+      setNow(at);
+      setCode("");
+      dispatch({ type: "sent", email: v.email, at });
+    } catch (e) {
+      log.handled("reset-request", e);
+      setErr(toResetMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async () => {
+    if (busy || !state.sentTo) return;
+    setErr(null);
+    const v = validateResetForm({ code, password, confirm });
+    if (!v.ok) return setErrors(v.errors);
+    setErrors({});
+    setBusy(true);
+    try {
+      await confirmPasswordReset(state.sentTo, v.code, v.password);
+    } catch (e) {
+      log.handled("reset-confirm", e);
+      setErr(toResetMessage(e));
+      setBusy(false);
+      return;
+    }
+    dispatch({ type: "done" });
+    try {
+      await signIn(state.sentTo, v.password); // success unmounts this screen via the account gate
+    } catch (e) {
+      log.handled("reset-sign-in", e);
+      setErr(toUserMessage(e));
+      setBusy(false);
+    }
+  };
+
+  if (state.step === "done") {
+    return (
+      <Frame onBack={onBack}>
+        <View style={{ gap: S.sm }} accessibilityLiveRegion="polite">
+          <StatusPill tone="ok" icon="check" text="Password changed" />
+          <Heading>You're all set</Heading>
+          <Body color={C.muted}>Your new password works now, and you've been signed out on every other device.</Body>
+        </View>
+        {busy ? <Muted>Signing you in…</Muted> : null}
+        {err ? <ErrorLine err={err} /> : null}
+        {!busy ? <Button title="Sign in" icon="log-in" onPress={onBack} /> : null}
+      </Frame>
+    );
+  }
+
+  if (state.step === "email") {
+    return (
+      <Frame onBack={onBack}>
+        <Heading>Reset password</Heading>
+        <Body color={C.muted}>Enter the email you signed up with. We'll send you a 6-digit code.</Body>
+        <TextField
+          label="Email"
+          value={email}
+          onChange={(s) => (setEmail(s), clear("email"))}
+          placeholder="you@example.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          textContentType="username"
+          returnKeyType="send"
+          onSubmitEditing={() => void send()}
+          error={errors.email}
+        />
+        {err ? <ErrorLine err={err} /> : null}
+        <Button title="Send code" icon="mail" onPress={() => void send()} loading={busy} disabled={email.trim().length === 0} />
+        <Muted>No email, or no access to it? Ask a GroundTruth admin for a temporary password.</Muted>
+      </Frame>
+    );
+  }
+
+  return (
+    <Frame onBack={() => dispatch({ type: "change_email" })}>
+      <Heading>Check your email</Heading>
+      <Body color={C.muted}>If {state.sentTo} has a GroundTruth account, we've sent it a 6-digit code. It can take a minute; check spam too.</Body>
+      <TextField
+        label="6-digit code"
+        value={code}
+        onChange={(s) => (setCode(s), clear("code"))}
+        placeholder="123456"
+        keyboardType="number-pad"
+        autoComplete="one-time-code"
+        textContentType="oneTimeCode"
+        error={errors.code}
+      />
+      <PasswordField
+        label="New password"
+        value={password}
+        onChange={(s) => (setPassword(s), clear("new_password"))}
+        autoComplete="new-password"
+        textContentType="newPassword"
+        error={errors.new_password}
+        hint="At least 8 characters."
+      />
+      <PasswordField
+        label="Confirm new password"
+        value={confirm}
+        onChange={(s) => (setConfirm(s), clear("confirm_password"))}
+        autoComplete="new-password"
+        textContentType="newPassword"
+        returnKeyType="go"
+        onSubmitEditing={() => void submit()}
+        error={errors.confirm_password}
+      />
+      {err ? <ErrorLine err={err} /> : null}
+      <Button title="Set new password" icon="lock" onPress={() => void submit()} loading={busy} />
+      <Button title={wait > 0 ? `Send a new code (${wait}s)` : "Send a new code"} kind="secondary" icon="refresh-cw" onPress={() => void send()} disabled={busy || wait > 0} />
+      <Button title="Use a different email" kind="secondary" icon="at-sign" onPress={() => dispatch({ type: "change_email" })} disabled={busy} />
     </Frame>
   );
 }

@@ -50,6 +50,7 @@ const BY_CODE: Record<string, UserMessage> = {
   INVALID_CREDENTIALS: m("INVALID_CREDENTIALS", "Couldn't sign in", "That email and password don't match. Check them and try again.", false),
   ACCOUNT_REQUIRED: m("ACCOUNT_REQUIRED", "Account needed", "Accounts are now required. Create an account or sign in to keep contributing.", false),
   ACCOUNT_SUSPENDED: m("ACCOUNT_SUSPENDED", "Account suspended", "This account is suspended. Contact a GroundTruth admin for help.", false),
+  RESET_CODE_INVALID: m("RESET_CODE_INVALID", "Code didn't work", "That code is wrong or has expired. Check the latest email, or send a new code."),
   AUTH_FAILED: m("AUTH_FAILED", "Couldn't sign in", "Something went wrong signing in. Try again in a moment."),
   GROK_UNAVAILABLE: m("GROK_UNAVAILABLE", "AI service busy", "Our AI service is busy right now. Try again in a minute."),
   VALIDATION_FAILED: m("VALIDATION_FAILED", "Couldn't send that", "Something in the request wasn't accepted. Try again, or restart the capture."),
@@ -91,6 +92,16 @@ export function toUserMessage(err: unknown): UserMessage {
   if (err instanceof Error && /network request failed|network error|offline|internet connection/i.test(err.message)) return BY_CODE.NETWORK!;
   if (err instanceof Error && /timed? ?out|timeout/i.test(err.message)) return BY_CODE.TIMEOUT!;
   return BY_CODE.UNKNOWN!;
+}
+
+/**
+ * Forgot-password screens: the reset limits are hourly, so "wait a few seconds" would be wrong.
+ * Everything else maps as usual.
+ */
+export function toResetMessage(err: unknown): UserMessage {
+  const msg = toUserMessage(err);
+  if (msg.code === "RATE_LIMITED") return m("RATE_LIMITED", "Too many attempts", "Too many reset attempts for now. Wait a while (up to an hour) and try again.");
+  return msg;
 }
 
 /** Just the sentence, for inline pills. */
