@@ -22,8 +22,8 @@ export async function purgeRejectedMedia(db: Db, storage: ObjectStorage, opts: {
   const now = opts.now ?? new Date();
   const days = opts.days ?? retentionDays();
   const cutoff = new Date(now.getTime() - days * 86_400_000).toISOString();
-  const rows = await db.query<{ id: string; media: unknown }>(
-    `select id, media from public.submissions
+  const rows = await db.query<{ id: string; user_id: string; media: unknown }>(
+    `select id, user_id, media from public.submissions
       where status = 'rejected' and media_purged_at is null and coalesce(reviewed_at, received_at) < $1::timestamptz
       order by received_at limit $2`,
     [cutoff, opts.batch ?? 500],
@@ -32,7 +32,8 @@ export async function purgeRejectedMedia(db: Db, storage: ObjectStorage, opts: {
   const paths = rows.flatMap((r) =>
     (Array.isArray(r.media) ? (r.media as { path?: unknown }[]) : [])
       .map((m) => m.path)
-      .filter((p): p is string => typeof p === "string" && p.startsWith("observations/")),
+      // Only the submitter's own folder: a rejected row may reference someone else's photo paths.
+      .filter((p): p is string => typeof p === "string" && p.startsWith(`observations/${r.user_id}/`) && !p.includes("..")),
   );
   if (paths.length > 0) await storage.remove(paths);
   await db.query("update public.submissions set media_purged_at = $2::timestamptz where id = any($1::uuid[])", [rows.map((r) => r.id), now.toISOString()]);

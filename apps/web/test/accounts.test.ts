@@ -445,6 +445,20 @@ describe("DELETE /api/me", () => {
     expect((await getMe(req("GET", "/api/me", { token: a.token }), noCtx)).status).toBe(401);
   });
 
+  it("never deletes another user's photos through foreign paths in the deleter's rows (account deletion + retention)", async () => {
+    const victim = await account();
+    const attacker = await account();
+    const v1 = await photo(victim.id);
+    const v2 = await photo(victim.id);
+    // Rows referencing someone else's paths get rejected by the pipeline, but the rows exist.
+    await insertSub(attacker.id, { status: "rejected", media: [v1] });
+    await insertSub(attacker.id, { status: "rejected", daysAgo: 40, media: [v2] });
+    await purgeRejectedMedia(env.db, env.storage, { days: 30 });
+    expect(await env.storage.exists(v2)).toBe(true);
+    expect((await deleteMe(req("DELETE", "/api/me", { token: attacker.token, body: { confirm: "DELETE" } }), noCtx)).status).toBe(204);
+    expect(await env.storage.exists(v1)).toBe(true);
+  });
+
   it("if deleting the auth user fails, a retry finishes the job", async () => {
     const a = await account();
     await insertSub(a.id, { status: "rejected" });

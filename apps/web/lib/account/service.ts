@@ -250,7 +250,10 @@ export async function deleteAccount(db: Db, storage: ObjectStorage, auth: Accoun
      select distinct unnest(upload_paths) from public.capture_sessions where user_id = $1`,
     [userId],
   );
-  const photos = media.map((r) => r.path).filter((p): p is string => typeof p === "string" && p.startsWith("observations/"));
+  // Only the caller's own folder: a submission row can carry foreign paths (the pipeline rejects
+  // them, but the row exists), and deleting through them would destroy someone else's photos.
+  const own = `observations/${userId}/`;
+  const photos = media.map((r) => r.path).filter((p): p is string => typeof p === "string" && p.startsWith(own) && !p.includes(".."));
   if (photos.length > 0) await storage.remove(photos);
 
   const { kept, deleted } = await db.tx(async (tx) => {
