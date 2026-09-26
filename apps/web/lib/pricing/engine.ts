@@ -11,6 +11,9 @@
  *        hazard-paused cells (never reward rushing toward danger).
  *  D     Demand — other funded requests / sponsor earmarks wanting the same cell and protocol.
  *  Y     Supply — few contributors active nearby recently → small boost; many → small discount.
+ *  R     Revisit — an open revisit mission on the cell (lib/missions) the caller may fill: small
+ *        boost, and the mission counts as a reading still needed in the allocation fit, so missions
+ *        are paid from the same allocation and never bypass it.
  *  P     Pacing — allocation left vs time left: slows spend when burning too fast, boosts when
  *        under-spending.
  *  fit   If Σ (readings still needed × price × best quality multiplier) exceeds the remaining
@@ -106,6 +109,11 @@ export interface CellMarket {
   pausedReason: string | null;
   otherWants: number;
   activeContributors: number;
+  /**
+   * Revisit missions open on the cell now: `due` = how many (each is one more reading needed, for the
+   * fit), `boost` = the caller may fill one (original contributor during first dibs, anyone after).
+   */
+  revisit?: { due: number; boost: boolean };
 }
 
 export interface CellFactors {
@@ -115,6 +123,8 @@ export interface CellFactors {
   supply: number;
   /** Pacing including the allocation fit. */
   pacing: number;
+  /** Revisit boost (1 = none). */
+  revisit?: number;
 }
 
 export interface PricedCell extends CellPrice {
@@ -143,6 +153,7 @@ export interface PriceCellsResult {
 export function priceReasons(f: CellFactors, s: { paused: boolean; atCeiling: boolean; atFloor: boolean; covered: boolean }): string[] {
   const out: { w: number; text: string }[] = [];
   if (s.paused) out.push({ w: 10, text: "Paused for safety" });
+  if (!s.paused && (f.revisit ?? 1) > 1) out.push({ w: 9, text: "Revisit due here" });
   if (s.covered) out.push({ w: 0.5, text: "Enough readings here already" });
   else if (f.scarcity >= 2) out.push({ w: f.scarcity, text: "Few readings here" });
   else if (f.scarcity > 1.2) out.push({ w: f.scarcity, text: "More readings needed here" });
@@ -168,13 +179,14 @@ export function priceCells(input: PriceCellsInput, cfg: PricingConfig = PRICING)
       urgency: urgencyFactor(input.hoursSinceEvent, input.tauHours, inHazard, cfg),
       demand: demandFactor(c.otherWants, cfg),
       supply: supplyFactor(c.activeContributors, cfg),
+      revisit: !inHazard && c.revisit?.boost && c.revisit.due > 0 ? cfg.revisit.boost : 1,
     };
-    const raw = rate.baseCents * f.scarcity * f.urgency * f.demand * f.supply * pace;
+    const raw = rate.baseCents * f.scarcity * f.urgency * f.demand * f.supply * f.revisit * pace;
     return { c, f, raw, price: Math.round(clamp(raw, rate.floorCents, rate.ceilingCents)) };
   });
 
   const remainingCents = remainingAllocation(input.pacing);
-  const need = (c: CellMarket) => Math.max(0, c.target - c.accepted);
+  const need = (c: CellMarket) => Math.max(0, c.target - c.accepted, c.revisit?.due ?? 0);
   const expected = (prices: number[]) =>
     pre.reduce((sum, p, i) => (p.c.pausedReason === null ? sum + need(p.c) * (prices[i] ?? 0) * cfg.maxQualityMultiplier : sum), 0);
   let prices = pre.map((p) => p.price);
@@ -212,7 +224,7 @@ export function priceCells(input: PriceCellsInput, cfg: PricingConfig = PRICING)
         paused,
         atCeiling: price >= rate.ceilingCents && p.raw > rate.ceilingCents,
         atFloor: price <= rate.floorCents,
-        covered: p.c.accepted >= p.c.target,
+        covered: p.c.accepted >= p.c.target && (p.c.revisit?.due ?? 0) === 0,
       }),
     };
   });

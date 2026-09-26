@@ -1,6 +1,7 @@
 import {
   cellForPoint,
   CreateSubmissionRequestSchema,
+  judgeLateUpload,
   pendingChecks,
   SubmissionListQuerySchema,
   type CreateSubmissionResponse,
@@ -13,6 +14,7 @@ import { getDb } from "@/lib/db";
 import { getBounty, listBountiesFor } from "@/lib/db/repos/bounties";
 import { getSession, markSubmittedIfOpen } from "@/lib/db/repos/sessions";
 import { insertSubmission, listSubmissions } from "@/lib/db/repos/submissions";
+import { onSubmissionAccepted } from "@/lib/missions/service";
 import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
 import { getStorage } from "@/lib/storage";
 import { liveDeps } from "@/lib/verification/deps";
@@ -23,6 +25,11 @@ import { nonObservationPaths } from "@/lib/verification/syntheticGuard";
  * Creates a submission for an open capture session and starts the verification pipeline in
  * `after()`. Responds immediately with status `pending`; clients watch the row (realtime) or poll
  * GET /api/submissions/:id.
+ *
+ * Queued uploads (phone lost signal after a gate-passed burst) may arrive after the 15-minute session
+ * window, within LATE_UPLOAD_GRACE_MIN, only for sessions whose server gate passed (judgeLateUpload);
+ * a session that never passed the gate gets no grace. An accepted reading then fills or roots revisit
+ * missions (lib/missions).
  */
 export const POST = route(async (req) => {
   const user = await requireUser(req);
@@ -35,7 +42,10 @@ export const POST = route(async (req) => {
   await enforceRateLimit(db, LIMITS.submission, user.id);
   const session = await getSession(db, body.session_id);
   if (!session || session.user_id !== user.id) throw notFound("Session not found");
+  if (session.status === "abandoned") throw conflict("SESSION_ABANDONED", "A newer capture session on this bounty replaced this one");
   if (session.status !== "open") throw conflict("SESSION_ALREADY_SUBMITTED", "This session has already been submitted");
+  const late = judgeLateUpload(session, body.captured_at, new Date());
+  if (!late.ok) throw new HttpError(late.code === "UPLOAD_GRACE_EXPIRED" ? 410 : 409, late.code, late.message);
   const bounty = await getBounty(db, session.bounty_id);
   if (!bounty) throw notFound("Bounty not found");
 
@@ -63,11 +73,12 @@ export const POST = route(async (req) => {
 
   const variant = mockVariantOf(req);
   runInBackground(async () => {
-    await processSubmission(await getDb(), id, {
+    const status = await processSubmission(await getDb(), id, {
       deps: liveDeps(await getDb()),
       storage: getStorage(),
       ...(variant ? { mockVariant: variant } : {}),
     });
+    if (status === "accepted") await onSubmissionAccepted(await getDb(), id);
   });
   const res: CreateSubmissionResponse = { submission_id: id, status: "pending" };
   return json(res, { status: 202 });

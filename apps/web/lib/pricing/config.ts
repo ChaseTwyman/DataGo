@@ -59,6 +59,11 @@ export const PRICING = {
    * best quality multiplier stays within the remaining allocation.
    */
   pacing: { kappa: 0.5, min: 0.7, max: 1.25 },
+  /**
+   * Revisit missions (lib/missions): an open mission the caller may fill multiplies the cell price by
+   * `boost` ("Revisit due here"). The allocation fit still caps it.
+   */
+  revisit: { boost: 1.25 },
   /** Highest payout multiplier (packages/shared payoutMultiplier): the worst case per quote. */
   maxQualityMultiplier: 1.2,
 } as const;

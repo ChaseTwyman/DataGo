@@ -7,7 +7,7 @@
  * frame-check route). A session that never passed gets GATE_NOT_PASSED, and the phone's own
  * gate.degraded claim gets GATE_DEGRADED; both cap the decision at needs_review (no auto-pay).
  */
-import { GATE_REQUIRED_GREEN, type ReasonCode, type Subcheck } from "@groundtruth/shared";
+import { GATE_REQUIRED_GREEN, judgeLateUpload, type ReasonCode, type Subcheck } from "@groundtruth/shared";
 import { nonObservationPaths } from "../syntheticGuard";
 import type { Stage, StageOutcome } from "../types";
 
@@ -56,9 +56,12 @@ export const sessionIntegrity: Stage = {
     const received = Date.parse(input.received_at);
     const start = Date.parse(s.started_at);
     const end = Date.parse(s.expires_at);
-    if (captured < start - GRACE_MS || captured > end + GRACE_MS || received > end + GRACE_MS) {
+    // A queued upload (phone lost signal after the burst) may be received late, within the bounded
+    // grace, only when the server gate passed (shared judgeLateUpload; missions track, migration 000010).
+    const late = received > end + GRACE_MS ? judgeLateUpload(s, input.captured_at, new Date(received)) : null;
+    if (captured < start - GRACE_MS || captured > end + GRACE_MS || (late !== null && !late.ok)) {
       fail("window", "Captured within session", "SESSION_EXPIRED", "Capture time is outside the 15-minute session window");
-    } else ok("window", "Captured within session");
+    } else ok("window", "Captured within session", late?.ok ? "Uploaded late from the phone queue (gate passed; within grace)" : undefined);
 
     const allowed = new Set(s.upload_paths);
     const foreign = paths.filter((p) => !allowed.has(p));

@@ -52,6 +52,13 @@ const BASE: ColumnDef[] = [
       "human_verified: a reviewer approved it. model_high: the automated pipeline accepted it with confidence ≥ 0.75. Empty: not publishable (never in the public dataset).",
     source: "verification",
   },
+  {
+    name: "revisit_of",
+    type: "uuid, nullable",
+    description:
+      "Set when this reading answered a revisit mission: the observation_id of the first reading at the same cell. Group by it (plus that first reading) to get a time series at one spot, e.g. how fast a flood recedes.",
+    source: "provenance",
+  },
 ];
 
 function typeOf(schema: Record<string, unknown>): string {
@@ -86,7 +93,8 @@ export type ExportRow = Record<string, string | number | boolean | null>;
 
 export async function exportRows(db: Db, bountyId: string, protocol: Protocol): Promise<ExportRow[]> {
   const rows = await db.query<Record<string, unknown>>(
-    `select * from public.observations_export where bounty_id = $1 order by captured_at`,
+    `select e.*, s.revisit_of from public.observations_export e join public.submissions s on s.id = e.observation_id
+      where e.bounty_id = $1 order by e.captured_at`,
     [bountyId],
   );
   return rows.filter((r) => !isUnpublishable(r.verifier)).map((r) => flattenExportRow(r, protocol));
@@ -124,6 +132,7 @@ export function flattenExportRow(r: Record<string, unknown>, protocol: Protocol)
     frame_count: Number(r.frame_count),
     verifier: (r.verifier as string | null) ?? null,
     quality_tier: (r.quality_tier as string | null) ?? null,
+    revisit_of: r.revisit_of ? String(r.revisit_of) : null,
   };
   for (const f of extractionFields) out[extractionColumnName(f)] = scalar(extracted[f]);
   for (const q of protocol.capture.field_questions) out[`note_${q.id}`] = scalar(notes[q.id]);

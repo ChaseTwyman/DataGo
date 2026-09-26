@@ -165,6 +165,35 @@ describe("priceCells", () => {
       "Few readings here",
     );
   });
+
+  it("revisit missions: boost + 'Revisit due here' only for an eligible caller; a covered cell counts the mission as needed in the fit", () => {
+    const covered = { accepted: 5, target: 5 };
+    const price = (revisit?: CellMarket["revisit"]) =>
+      priceCells({ rate: flood, tauHours: 3, hoursSinceEvent: null, cells: [cell({ ...covered, ...(revisit ? { revisit } : {}) })], pacing: pacing() });
+    const none = price();
+    const boosted = price({ due: 1, boost: true });
+    const reserved = price({ due: 1, boost: false });
+    expect(none.cells[0]!.price_reasons).toContain("Enough readings here already");
+    expect(boosted.cells[0]!.price_reasons[0]).toBe("Revisit due here");
+    expect(boosted.cells[0]!.price_cents).toBeGreaterThan(none.cells[0]!.price_cents);
+    expect(reserved.cells[0]!.price_reasons).not.toContain("Revisit due here");
+    expect(reserved.cells[0]!.price_cents).toBe(none.cells[0]!.price_cents);
+    // the mission is a reading still needed → it counts against the allocation (never bypasses it)
+    expect(none.expectedPayoutCents).toBe(0);
+    expect(reserved.expectedPayoutCents).toBeGreaterThan(0);
+    // and the fit still caps it
+    const tight = priceCells({
+      rate: flood,
+      tauHours: 3,
+      hoursSinceEvent: null,
+      cells: [cell({ ...covered, revisit: { due: 3, boost: true } })],
+      pacing: pacing({ allocationCents: 1_000, spentCents: 0 }),
+    });
+    expect(tight.expectedPayoutCents).toBeLessThanOrEqual(1_000);
+    // never a revisit boost in a hazard-paused cell
+    const hazard = priceCells({ rate: flood, tauHours: 3, hoursSinceEvent: null, cells: [cell({ ...covered, pausedReason: "Flash flood warning", revisit: { due: 1, boost: true } })], pacing: pacing() });
+    expect(hazard.cells[0]!.price_reasons).not.toContain("Revisit due here");
+  });
 });
 
 /**

@@ -16,6 +16,7 @@ import { insertLedger } from "@/lib/db/repos/ledger";
 import { getProfile, setTrust } from "@/lib/db/repos/profiles";
 import { getSession } from "@/lib/db/repos/sessions";
 import { getSubmission, setReviewOutcome } from "@/lib/db/repos/submissions";
+import { onSubmissionAccepted } from "@/lib/missions/service";
 
 /**
  * Approve/reject a needs_review submission. Approve pays the locked quote × quality multiplier
@@ -56,6 +57,8 @@ export const POST = route<IdParams>(async (req, { params }) => {
     await setTrust(tx, sub.user_id, updateTrust(trust, { kind: "review_rejected", integrity: body.integrity }));
     return { submission_id: id, status: "rejected" as const, payout_cents: 0 };
   });
+  // An approved reading fills or roots revisit missions (best-effort; never fails the review).
+  if (res.status === "accepted") await onSubmissionAccepted(db, id);
   const out: z.infer<typeof ReviewResponseSchema> = res;
   return json(out);
 });

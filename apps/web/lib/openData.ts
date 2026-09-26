@@ -38,6 +38,10 @@ const OVERRIDES: Record<string, Pick<ColumnDef, "type" | "description">> = {
   lat: { type: "number", description: "Latitude (WGS84) of the centre of the H3 res-9 cell containing the capture point (coarsened)." },
   lng: { type: "number", description: "Longitude (WGS84) of the centre of the H3 res-9 cell containing the capture point (coarsened)." },
   captured_at: { type: "datetime", description: `Capture time (ISO 8601, UTC), rounded down to the start of its ${TIME_BIN_MINUTES}-minute window.` },
+  revisit_of: {
+    type: "string, nullable",
+    description: "Pseudonymous observation_id of the first reading at the same cell when this reading answered a revisit mission (a time series at one spot, e.g. flood recession).",
+  },
   contributor_id: {
     type: "string",
     description: "Per-dataset contributor pseudonym (16 hex chars): the same person has the same id within this dataset, a different id in other datasets, and it cannot be mapped back to an app account.",
@@ -116,6 +120,7 @@ export function coarsen(row: ExportRow, salt: string, slug: string, columns: Col
     lng: round6(center.lng),
     captured_at: floorToBin(String(row.captured_at)),
     contributor_id: contributorPseudonym(salt, slug, String(row.contributor_id)),
+    revisit_of: row.revisit_of ? observationPseudonym(salt, slug, String(row.revisit_of)) : null,
     gps_accuracy_bucket: accuracyBucket(typeof row.accuracy_m === "number" ? row.accuracy_m : null),
     is_demo_seed: (DEMO_DEVICE_MODELS as readonly string[]).includes(String(row.device_model)),
   };
@@ -158,7 +163,8 @@ export async function publicRows(db: Db, protocol: ProtocolRow, opts: { bountyId
     `select observation_id, bounty_id, protocol_slug, protocol_version, lat, lng, accuracy_m, h3_cell, captured_at,
             received_at, confidence, protocol_score, authenticity_score, extracted, field_notes, reason_codes,
             contributor_id, contributor_trust, device_model, device_os, frame_count, gate_degraded, human_reviewed,
-            verifier, quality_tier
+            verifier, quality_tier,
+            (select s.revisit_of from public.submissions s where s.id = observation_id) as revisit_of
        from public.observations_export
       where ${where} and quality_tier is not null and verifier not in ('mock', 'none')`,
     params,

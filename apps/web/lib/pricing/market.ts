@@ -9,6 +9,7 @@ import type { Db } from "../db";
 import { acceptedByCell, type BountyRow } from "../db/repos/bounties";
 import { committedQuoteCents, liveFundedForProtocol, openEarmarks, recentContributorsByCell, type ContributionRow } from "../db/repos/funding";
 import { pausedCells } from "../hazards";
+import { activeMissionsByCell } from "../missions/repo";
 import { PRICING } from "./config";
 import { priceCells, protocolRate, publicCell, worstCaseCents, type CellMarket, type PriceCellsResult, type ProtocolRate } from "./engine";
 
@@ -47,18 +48,27 @@ export interface Pricing extends PriceCellsResult {
   committedCents: number;
 }
 
+export interface PricingViewer {
+  /**
+   * Who the price is for. Revisit missions boost the price only for someone who may fill them (the
+   * original contributor during first dibs, anyone after). Omitted: an operator view (boost shown).
+   */
+  viewerId?: string | null;
+}
+
 /** Prices every cell of a request (existing, or a draft when `id` is null). */
-export async function loadPricing(db: Db, req: MarketRequest, protocol: Protocol, now = new Date()): Promise<Pricing> {
+export async function loadPricing(db: Db, req: MarketRequest, protocol: Protocol, now = new Date(), viewer: PricingViewer = {}): Promise<Pricing> {
   const since = new Date(now.getTime() - PRICING.supply.windowHours * 3_600_000);
   const disk = new Map(req.cells.map((c) => [c, safeDisk(c)]));
   const allNear = [...new Set([...disk.values()].flat())];
-  const [accepted, paused, others, earmarks, recent, committedQuotes] = await Promise.all([
+  const [accepted, paused, others, earmarks, recent, committedQuotes, missions] = await Promise.all([
     req.id ? acceptedByCell(db, req.id) : Promise.resolve(new Map<string, number>()),
     pausedCells(db, req, now),
     liveFundedForProtocol(db, req.protocol_id, now),
     openEarmarks(db),
     recentContributorsByCell(db, allNear, since),
     req.id ? committedQuoteCents(db, req.id, now) : Promise.resolve(0),
+    req.id ? activeMissionsByCell(db, req.id, now) : Promise.resolve(new Map<string, { original_user_id: string | null; dibs_until: string }[]>()),
   ]);
 
   // Demand: other researchers' funded requests (a researcher's own overlapping requests never count)
@@ -86,6 +96,7 @@ export async function loadPricing(db: Db, req: MarketRequest, protocol: Protocol
       pausedReason: paused.get(cell) ?? null,
       otherWants: wants,
       activeContributors: users.size,
+      ...revisitFor(missions.get(cell), viewer, now),
     };
   });
 
@@ -106,6 +117,17 @@ export async function loadPricing(db: Db, req: MarketRequest, protocol: Protocol
     },
   });
   return { ...res, rate, committedCents };
+}
+
+function revisitFor(
+  ms: { original_user_id: string | null; dibs_until: string }[] | undefined,
+  viewer: PricingViewer,
+  now: Date,
+): Pick<CellMarket, "revisit"> {
+  if (!ms || ms.length === 0) return {};
+  const boost =
+    viewer.viewerId === undefined || ms.some((m) => (viewer.viewerId && m.original_user_id === viewer.viewerId) || now.getTime() >= Date.parse(m.dibs_until));
+  return { revisit: { due: ms.length, boost } };
 }
 
 function safeDisk(cell: string): string[] {

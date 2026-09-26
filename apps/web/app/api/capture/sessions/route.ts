@@ -56,7 +56,7 @@ export const POST = route(async (req) => {
     await tx.query("select pg_advisory_xact_lock(7340002, hashtext($1))", [bounty.id]);
     // one open session per contributor per request (their earlier held quote is released first)
     await abandonOpenSessions(tx, user.id, bounty.id);
-    const pricing = await loadPricing(tx, bounty, protocol.definition, now);
+    const pricing = await loadPricing(tx, bounty, protocol.definition, now, { viewerId: user.id });
     const coverage = pricing.cells;
     const here = coverage.find((c) => c.cell === cell) ?? [...coverage].sort((a, b) => b.price_cents - a.price_cents)[0];
     if (!here) throw conflict("BOUNTY_NOT_ACTIVE", "Bounty has no cells");

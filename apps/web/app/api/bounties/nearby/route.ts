@@ -34,7 +34,7 @@ export const GET = route(async (req) => {
     if (!protocols.has(b.protocol_id)) protocols.set(b.protocol_id, await getProtocol(db, b.protocol_id));
     const p = protocols.get(b.protocol_id);
     if (!p) continue;
-    const pricing = await loadPricing(db, b, p.definition, now);
+    const pricing = await loadPricing(db, b, p.definition, now, { viewerId: user.id });
     const coverage = pricing.cells;
     const open = coverage.filter((c) => !c.paused);
     const here = coverage.find((c) => c.cell === userCell);
