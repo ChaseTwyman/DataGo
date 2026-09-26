@@ -4,6 +4,9 @@ export interface GrokUsage {
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
+  /** Responses API: reasoning tokens are part of output_tokens (they dominate grok-4.7 latency). */
+  output_tokens_details?: { reasoning_tokens?: number } | null;
+  input_tokens_details?: { cached_tokens?: number } | null;
 }
 
 export interface GrokCallLog {
@@ -20,7 +23,10 @@ export interface GrokCallLog {
 type Sink = (entry: GrokCallLog) => void;
 
 let sink: Sink = (e) => {
-  const usage = e.usage ? ` in=${e.usage.input_tokens ?? "?"} out=${e.usage.output_tokens ?? "?"}` : "";
+  const reasoning = e.usage?.output_tokens_details?.reasoning_tokens;
+  const usage = e.usage
+    ? ` in=${e.usage.input_tokens ?? "?"} out=${e.usage.output_tokens ?? "?"}${reasoning !== undefined ? ` reasoning=${reasoning}` : ""}`
+    : "";
   const line = `[grok] ${e.op} model=${e.model} ${e.ms}ms ok=${e.ok}${e.mock ? " (mock)" : ""}${usage}${e.error ? ` error=${e.error}` : ""}`;
   if (e.ok) console.info(line);
   else console.warn(line);

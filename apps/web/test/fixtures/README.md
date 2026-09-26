@@ -56,6 +56,21 @@ The older layout still loads: any directory with `meta.json` `{"expected": "genu
 (genuine = must be accepted, fake = must not be). `generated/…` is written by
 `scripts/generate-examples.ts --negatives N` and is gitignored.
 
+## Current cases
+
+- `negative/vitamin-water-bottle` — the incident capture; relevance rejects it `OFF_TOPIC` (~2 s),
+  so it never exercises grok-4.7.
+- `negative/imagine-pseudo-burst-{1,2}` — written by `scripts/make-imagine-negatives.ts`: one Grok
+  Imagine street-flood image cut into three shifted crops (the red team's fake-parallax attack),
+  re-encoded so the C2PA label is gone and upscaled to the phone's 2048 px upload size. Only the
+  grok-4.7 call can catch these, so they are the cases that show whether a latency setting weakens
+  detection. Measured 2026-09-26 (local, real Grok): shipped prompt at `medium` → 1 rejected
+  (`CHALLENGE_FAILED`), 1 needs_review only because the call timed out at 150 s; `low` → both
+  ACCEPTED; `medium` + a "be terse" prompt and evidence length caps → 1 rejected, 1 accepted (so
+  that trim was dropped). Detection of this attack is stochastic even at medium; see STATUS.md.
+
+There are still **no real positive captures**, so the accept rate cannot be measured yet.
+
 ## Pulling a real submission into a fixture
 
 ```

@@ -81,6 +81,59 @@ describe("runPipeline", () => {
     expect((verify.mock.calls[0] as unknown as [{ framesBase64: string[] }])[0].framesBase64).toHaveLength(3);
   });
 
+  it("the reasoning call starts concurrently with relevance (not after it)", async () => {
+    let verifyStarted!: () => void;
+    const started = new Promise<void>((r) => (verifyStarted = r));
+    const verify = vi.fn(async () => {
+      verifyStarted();
+      return mockVerification(streetFloodDepth);
+    });
+    // Relevance only answers once verify has been called: a sequential pipeline would time out here.
+    const relevance = vi.fn(async () => {
+      await Promise.race([started, new Promise((_, rej) => setTimeout(() => rej(new Error("verify not started")), 2000))]);
+      return mockRelevance(streetFloodDepth);
+    });
+    const r = await runPipeline(await baseInput(), deps({ verify, relevance }), memorySink());
+    expect(stage(r, "relevance").status).toBe("pass");
+    expect(r.decision.status).toBe("accepted");
+  });
+
+  it("off-topic aborts the in-flight reasoning call and never uses its result", async () => {
+    let signal: AbortSignal | undefined;
+    const verify = vi.fn(
+      (a: { signal?: AbortSignal }) =>
+        new Promise<VerificationOutput>((resolve) => {
+          signal = a.signal;
+          // Would "accept" if its answer were used after the abort.
+          setTimeout(() => resolve(mockVerification(streetFloodDepth)), 50);
+        }),
+    );
+    const r = await runPipeline(await baseInput(), deps({ verify, relevance: async () => mockRelevance(streetFloodDepth, "off_topic") }), memorySink());
+    expect(signal?.aborted).toBe(true);
+    expect(r.decision.status).toBe("rejected");
+    expect(r.decision.reasonCodes).toContain("OFF_TOPIC");
+    expect(r.model).toBeNull();
+    expect(["challenge", "protocol", "authenticity"].map((id) => stage(r, id).status)).toEqual(["skipped", "skipped", "skipped"]);
+  });
+
+  it("sink writes stay ordered while later stages run concurrently", async () => {
+    const seen: number[] = [];
+    let slowed = false;
+    const sink = {
+      async write(checks: { status: string }[]) {
+        const done = checks.filter((c) => c.status !== "pending" && c.status !== "running").length;
+        // Make the concurrent phase's first write slow: unserialised, later snapshots would land first.
+        const slow = done === 2 && checks.some((c) => c.status === "running") && !slowed;
+        if (slow) slowed = true;
+        await new Promise((r) => setTimeout(r, slow ? 50 : 0));
+        seen.push(done);
+      },
+    };
+    await runPipeline(await baseInput(), deps(), sink);
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+    expect(seen.at(-1)).toBe(8);
+  });
+
   it("identical burst frames → CHALLENGE_FAILED even when the model is fooled", async () => {
     const one = await randomJpeg(320, 240);
     const input = await baseInput({ frames: [0, 1, 2].map((i) => ({ path: `x/${i}.jpg`, bytes: one })) });

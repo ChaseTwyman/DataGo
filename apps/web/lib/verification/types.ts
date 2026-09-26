@@ -69,6 +69,8 @@ export interface PipelineDeps {
     framesBase64: string[];
     intervalMs: number;
     variant?: MockVariant;
+    /** Aborted when relevance rejects the capture as off-topic while this call is in flight. */
+    signal?: AbortSignal;
   }): Promise<VerificationOutput>;
   /** Fast one-frame "right subject?" screen (fast vision model), independent of verify(). */
   relevance(args: { protocol: Protocol; frameBase64: string; variant?: MockVariant }): Promise<RelevanceResult>;

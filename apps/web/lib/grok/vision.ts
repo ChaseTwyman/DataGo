@@ -106,7 +106,15 @@ export function verificationSystemPrompt(protocol: Protocol, challenge: Challeng
     "Look for signs of AI generation, editing, or compositing, and for internal inconsistencies (for example dry pavement beside supposed floodwater, mismatched shadows or reflections).",
     "Score conservatively: when unsure, lower the score rather than guess.",
     "For extraction, estimate values from the reference object and state the height you assumed (typical: curb ≈ 15 cm, car tire ≈ 65 cm tall, fire hydrant ≈ 75 cm; for a measuring stick, read the markings).",
+    // Tried and rejected (2026-09-26 eval): a "be terse" instruction + maxLength caps on evidence
+    // strings. Output tokens fell, but a pseudo-parallax Imagine fake that medium effort had rejected
+    // was then accepted; reasoning length is what catches it. Don't trim the audit for latency.
   ].join(" ");
+}
+
+/** Image detail per burst frame: "mixed" keeps the first and last frame (the parallax pair) at high. */
+export function verificationFrameDetails(n: number, mode: "high" | "mixed" | "low"): ("high" | "low")[] {
+  return Array.from({ length: n }, (_, i) => (mode === "high" ? "high" : mode === "low" ? "low" : i === 0 || i === n - 1 ? "high" : "low"));
 }
 
 export async function verifyCapture(args: {
@@ -116,24 +124,27 @@ export async function verifyCapture(args: {
   intervalMs: number;
   variant?: MockVariant;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<VerificationOutput> {
   const n = args.framesBase64.length;
+  const details = verificationFrameDetails(n, grokEnv.verificationImageDetail);
   return grokJSON({
     op: "verification",
     model: grokEnv.reasoningModel,
     system: verificationSystemPrompt(args.protocol, args.challenge, n, args.intervalMs),
     content: [
       { type: "input_text", text: `Frames 1..${n} follow in capture order.` },
-      ...args.framesBase64.map((b) => imagePart(b, "high")),
+      ...args.framesBase64.map((b, i) => imagePart(b, details[i]!)),
     ],
     schema: buildVerificationJsonSchema(args.protocol),
     name: "verification",
     parse: (raw) => parseVerification(args.protocol, raw),
     // One attempt with a generous budget: from Vercel this call exceeded 60 s, and the SDK's hidden
     // retry then doubled it. Must stay under the route/after() limit (300 s on Vercel Hobby).
-    timeoutMs: args.timeoutMs ?? 150_000,
+    timeoutMs: args.timeoutMs ?? grokEnv.verificationTimeoutMs,
     maxRetries: 0,
     reasoningEffort: grokEnv.verificationEffort,
+    ...(args.signal ? { signal: args.signal } : {}),
     mock: () => mockVerification(args.protocol, args.variant),
   });
 }

@@ -31,6 +31,7 @@ import {
   type ReasonCode,
 } from "@groundtruth/shared";
 import { isMockGrok } from "../lib/env";
+import { grokEnv } from "../lib/grok/config";
 import { setGrokLogSink, type GrokCallLog } from "../lib/grok/log";
 import { isolatedDeps } from "../lib/verification/deps";
 import { memorySink, runPipeline } from "../lib/verification/pipeline";
@@ -178,7 +179,11 @@ async function main(): Promise<void> {
   }
   if (smoke) cases = [...cases, ...(await smokeCases())];
   const mock = isMockGrok();
-  console.log(`Evaluating ${cases.length} case(s) with ${mock ? "MOCK (fixtures, free)" : "REAL"} Grok\n`);
+  console.log(`Evaluating ${cases.length} case(s) with ${mock ? "MOCK (fixtures, free)" : "REAL"} Grok`);
+  console.log(
+    `verification: ${grokEnv.reasoningModel} effort=${grokEnv.verificationEffort} frames≤${grokEnv.verificationFrameMaxEdge}px ` +
+      `detail=${grokEnv.verificationImageDetail} timeout=${grokEnv.verificationTimeoutMs}ms\n`,
+  );
 
   // Token usage per model, from the grok call log (every call is logged with usage).
   const calls: GrokCallLog[] = [];
@@ -253,6 +258,16 @@ async function main(): Promise<void> {
         (missingCodes.length ? ` missing codes: ${missingCodes.join(",")}` : "") +
         (c.notes ? `\n    ${c.notes}` : ""),
     );
+    if (r.model) {
+      const a = r.model.authenticity;
+      console.log(
+        `    model: protocol ${r.model.protocol_score.toFixed(2)} auth ${r.model.authenticity_score.toFixed(2)} ` +
+          `challenge ${r.model.challenge.performed ? "yes" : "no"}(${r.model.challenge.confidence.toFixed(2)}) ` +
+          `3d ${r.model.real_3d_scene.value ? "yes" : "no"}(${r.model.real_3d_scene.confidence.toFixed(2)}) ` +
+          `ai ${a.ai_generated.suspected ? "yes" : "no"}(${a.ai_generated.confidence.toFixed(2)}) ` +
+          `screen ${a.screen_recapture.suspected ? "yes" : "no"} print ${a.printed_photo.suspected ? "yes" : "no"} edit ${a.edited_or_composited.suspected ? "yes" : "no"}`,
+      );
+    }
     const relevance = r.checks.find((s) => s.stage === "relevance");
     if (relevance && relevance.status !== "pass") console.log(`    relevance ${relevance.status}: ${relevance.evidence.join(" | ")}`);
   }
@@ -283,14 +298,15 @@ async function main(): Promise<void> {
   }
   console.log(`  ${"total".padEnd(18)} ${pad(med(totalMs), 7)} / ${pad(totalMs.length ? Math.max(...totalMs) : 0, 7)}`);
 
-  const usage = new Map<string, { calls: number; ok: number; in: number; out: number; ms: number }>();
+  const usage = new Map<string, { calls: number; ok: number; in: number; out: number; reasoning: number; ms: number }>();
   for (const e of calls) {
     const k = `${e.op} ${e.model}${e.mock ? " (mock)" : ""}`;
-    const u = usage.get(k) ?? { calls: 0, ok: 0, in: 0, out: 0, ms: 0 };
+    const u = usage.get(k) ?? { calls: 0, ok: 0, in: 0, out: 0, reasoning: 0, ms: 0 };
     u.calls++;
     if (e.ok) u.ok++;
     u.in += e.usage?.input_tokens ?? 0;
     u.out += e.usage?.output_tokens ?? 0;
+    u.reasoning += e.usage?.output_tokens_details?.reasoning_tokens ?? 0;
     u.ms += e.ms;
     usage.set(k, u);
   }
@@ -304,7 +320,7 @@ async function main(): Promise<void> {
     const usd = price ? (u.in * price.in + u.out * price.out) / 1e6 : null;
     if (usd === null && !k.endsWith("(mock)")) priced = false;
     cost += usd ?? 0;
-    console.log(`  ${k.padEnd(48)} ${u.ok}/${u.calls} ok  in ${pad(u.in, 8)}  out ${pad(u.out, 7)}  avg ${Math.round(u.ms / u.calls)} ms${usd !== null ? `  $${usd.toFixed(4)}` : ""}`);
+    console.log(`  ${k.padEnd(48)} ${u.ok}/${u.calls} ok  in ${pad(u.in, 8)}  out ${pad(u.out, 7)} (reasoning ${pad(u.reasoning, 7)})  avg ${Math.round(u.ms / u.calls)} ms${usd !== null ? `  $${usd.toFixed(4)}` : ""}`);
   }
   if (mock) console.log("  (mock run: no tokens, no cost)");
   else if (priced) console.log(`  estimated cost: $${cost.toFixed(4)} total, $${(cost / Math.max(1, cases.length)).toFixed(4)} per case`);

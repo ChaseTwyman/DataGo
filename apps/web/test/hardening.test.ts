@@ -242,8 +242,17 @@ describe("server-side capture gate", () => {
 });
 
 describe("relevance stage (OFF_TOPIC)", () => {
-  it("off-topic → rejected (retryable), contributor told what was expected, model never called", async () => {
-    const verify = vi.fn(async () => mockVerification(streetFloodDepth));
+  it("off-topic → rejected (retryable), contributor told what was expected, in-flight model call aborted", async () => {
+    // The reasoning call starts concurrently with relevance (latency); an off-topic verdict must
+    // cancel it, and its result must never be used.
+    const signals: AbortSignal[] = [];
+    const verify = vi.fn(
+      (a: { signal?: AbortSignal }) =>
+        new Promise<ReturnType<typeof mockVerification>>((_, reject) => {
+          signals.push(a.signal!);
+          a.signal!.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    );
     setPipelineDepsOverrideForTests({ verify });
     const c = await contributor();
     const s = await openSession(c.token);
@@ -257,7 +266,9 @@ describe("relevance stage (OFF_TOPIC)", () => {
     expect(rel.evidence.join(" ")).toMatch(/Expected: a street flood depth scene/);
     expect(rel.evidence.join(" ")).toMatch(/vitamin water/);
     expect(sub.checks.filter((x) => x.status === "skipped").map((x) => x.stage)).toEqual(["challenge", "protocol", "authenticity"]);
-    expect(verify).not.toHaveBeenCalled();
+    expect(verify.mock.calls.length).toBeLessThanOrEqual(1);
+    expect(signals.every((s) => s.aborted)).toBe(true);
+    expect(sub.protocol_score).toBeNull();
   });
 
   it("a relevance error is a stage error → needs_review, never a pass", async () => {

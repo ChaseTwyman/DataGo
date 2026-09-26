@@ -35,7 +35,7 @@ export function fakePrompt(bounty: Pick<BountyRow, "title" | "summary">, protoco
 }
 
 /** Three overlapping crops that shift left→right: fakes the parallax a real step-left burst has. */
-async function pseudoBurst(bytes: Buffer): Promise<Buffer[]> {
+export async function pseudoBurst(bytes: Buffer): Promise<Buffer[]> {
   const meta = await sharp(bytes).metadata();
   const w = meta.width ?? 640;
   const h = meta.height ?? 480;
