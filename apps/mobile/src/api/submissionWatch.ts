@@ -106,7 +106,14 @@ export function resultView(
       if (codes.some(isIntegrityCode) || codes.length === 0) {
         return { kind: "integrity_reject", title: "Not verified", messages: [NEUTRAL_INTEGRITY_MESSAGE], retryable: false };
       }
-      const msgs = [...new Set(codes.filter((c) => reasonKind(c) !== "info").map((c) => contributorMessage(c, label(c))))];
+      // Pass the protocol so OFF_TOPIC says what to aim at ("Point the camera at: water surface, …").
+      const msgs = [
+        ...new Set(
+          codes
+            .filter((c) => reasonKind(c) !== "info")
+            .map((c) => contributorMessage(c, label(c), protocol ?? undefined)),
+        ),
+      ];
       return {
         kind: "protocol_reject",
         title: "Let's fix the shot",

@@ -182,6 +182,14 @@ describe("resultView (PRD §7.5)", () => {
     expect(resultView(base("rejected", ["BLURRY"]), streetFloodDepth, { sessionOpen: false }).retryable).toBe(false);
   });
 
+  it("OFF_TOPIC (e.g. a bottle on a flood bounty) says what to aim at", () => {
+    const v = resultView(base("rejected", ["OFF_TOPIC"]), streetFloodDepth, { sessionOpen: true });
+    expect(v.kind).toBe("protocol_reject");
+    expect(v.messages).toEqual([
+      "This doesn't look like a street flood depth scene. Point the camera at: water surface, reference object, waterline visible.",
+    ]);
+  });
+
   it("accepted shows the demo waiver when present; needs_review uses the PRD copy", () => {
     expect(resultView(base("accepted", ["DEMO_WAIVER"]), streetFloodDepth).messages).toContain("Weather check waived (demo).");
     expect(resultView(base("needs_review", ["LOW_TRUST_REVIEW"]), streetFloodDepth).messages).toEqual([
