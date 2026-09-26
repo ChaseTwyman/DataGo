@@ -31,7 +31,7 @@ _Last updated: hosted Supabase + real Grok verified from the API. Next: first de
   - voice token: 129 ms; `client_secrets` returns `{ value, expires_at }`; phone gets a wss URL.
   - frame check (grok-4.20): 1.3 s; a blank grey frame correctly returned no elements visible, not green.
   - Imagine image: 13.6 s. Verification (grok-4.7): **31.6 s** (6.4k in / 2.2k out tokens) — over the PRD's 25 s target.
-- **Finding — AI-fake detection:** the real grok-4.7 did **not** flag the Imagine fake as AI-generated ("no signs of … generation", authenticity 0.3). The red-team run was caught only by `CHALLENGE_FAILED` (three identical frames → no parallax). The capture-time defenses (no library import, burst parallax, screen detection at the gate) carry the load; model-only AI detection is weak. Don't claim otherwise in the demo.
+- **AI-fake detection:** the real grok-4.7 did **not** flag a Grok Imagine fake as AI-generated. Fix (ea9ae70): Grok Imagine embeds a C2PA manifest (`softwareAgent: Grok Imagine`, `trainedAlgorithmicMedia`); the authenticity stage now reads C2PA/IPTC labels and hard-fails with `C2PA_AI_GENERATED`, independent of the model. Live red-team run now: `CHALLENGE_FAILED` + `C2PA_AI_GENERATED` (28 s). Labels vanish on re-encode or when a fake is photographed off a screen, so for that attack the capture gate (screen/print flag) and burst parallax remain the defense; model-only AI detection stays weak — don't claim it in the demo.
 - **Still unverified:** realtime from the apps; everything device-only (audio echo/latency, camera, DeviceMotion, upload from the phone, pod install on macOS).
 
 ## Running it
