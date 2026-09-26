@@ -16,18 +16,18 @@ import { z } from "zod";
 import { IsoDate, Uuid } from "./common";
 
 /** A pointer to the stored fact a sentence is based on. */
-export const CitationSchema = z.object({
+export const GrokbotCitationSchema = z.object({
   kind: z.enum(["stage", "reason_code", "extracted_field", "price_reason", "pool", "protocol", "profile", "alert", "observation"]),
   ref: z.string().max(120), // e.g. "relevance", "OFF_TOPIC", "depth_cm", "Few readings here"
   detail: z.string().max(300).nullable(),
 });
-export type Citation = z.infer<typeof CitationSchema>;
+export type GrokbotCitation = z.infer<typeof GrokbotCitationSchema>;
 
 export const GrokbotMessageSchema = z.object({
   headline: z.string().max(160),
   paragraphs: z.array(z.string().max(600)).max(6),
   next_steps: z.array(z.string().max(200)).max(5),
-  citations: z.array(CitationSchema).max(20),
+  citations: z.array(GrokbotCitationSchema).max(20),
   /** "grok" when a model wrote it; "template" when the deterministic fallback did (Grok down/mock). */
   source: z.enum(["grok", "template"]),
   generated_at: IsoDate,
@@ -102,7 +102,7 @@ export const EvidenceItemSchema = z.object({
   claim: z.string().max(300),
   supports: z.enum(["authentic", "inauthentic", "protocol_ok", "protocol_issue", "context", "neutral"]),
   strength: z.enum(["strong", "moderate", "weak"]),
-  citation: CitationSchema,
+  citation: GrokbotCitationSchema,
 });
 export const ReviewBriefSchema = z.object({
   submission_id: Uuid,
