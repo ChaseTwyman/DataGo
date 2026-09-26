@@ -59,9 +59,17 @@ export async function impactFigures(db: Db, sponsorId: string, from: string, to:
         where sponsor_id = $1 and kind = 'contribution' and created_at <= $3::timestamptz
           and (protocol_slug is not null or bounty_id is not null or region_center_lat is not null or region_polygon is not null)
      )
+     , first_general as (
+       select min(created_at) as at from public.sponsor_contributions
+        where sponsor_id = $1 and kind = 'contribution' and created_at <= $3::timestamptz
+          and protocol_slug is null and bounty_id is null and region_center_lat is null and region_polygon is null
+     )
+     -- General-pool requests count only if the allocation was made after this sponsor's money was in
+     -- the pool (review finding: a sponsor's first contribution must not claim earlier requests).
      select a.bounty_id as id from public.pool_allocations a join public.bounties b on b.id = a.bounty_id
       where a.created_at <= $3::timestamptz and b.starts_at < $3::timestamptz and b.ends_at > $2::timestamptz
-        and (a.contribution_id in (select id from mine) or (a.contribution_id is null and $4::boolean))
+        and (a.contribution_id in (select id from mine)
+             or (a.contribution_id is null and $4::boolean and a.created_at >= (select at from first_general)))
       group by a.bounty_id having sum(a.amount_cents) > 0`,
     [sponsorId, from, to, share > 0],
   );
@@ -132,7 +140,9 @@ export async function sponsorImpact(
   // pre-pool budgets migrated in 000007); the report says it starts at the sponsor's creation.
   const from = period.from ?? s.created_at;
   const f = await impactFigures(db, s.id, period.from ?? "1970-01-01T00:00:00.000Z", period.to);
-  const c = impactCase(s, f, from, period.to, o.audience);
+  // The narrative is written for the public (the public page reuses the admin-generated one), so the
+  // case file's audience is "public" for both routes.
+  const c = impactCase(s, f, from, period.to, "public");
   let narrative;
   if (o.audience === "admin") {
     narrative = await composeMessage(db, {
@@ -147,7 +157,7 @@ export async function sponsorImpact(
     });
   } else {
     // Same facts → same version: reuse what an admin already generated; never call the model here.
-    const reused = await cacheGet<SponsorImpact["narrative"]>(db, { kind: "impact", subjectId: c.subjectId, audience: "admin", version: caseVersion(c) });
+    const reused = await cacheGet<SponsorImpact["narrative"]>(db, { kind: "impact", subjectId: c.subjectId, audience: "public", version: caseVersion(c) });
     narrative = reused ?? finalize(impactTemplate(c), c, "template");
   }
   return SponsorImpactSchema.parse({

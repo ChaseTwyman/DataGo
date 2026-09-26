@@ -18,7 +18,10 @@ import type { CaseFile, DraftLine } from "./types";
 
 /** Anything that reads as a decision or a recommendation. Never reaches a reviewer. */
 export const VERDICT_RE =
-  /\b(approv\w*|reject\w*|recommend\w*|verdict\w*|should (be )?(accept|pay|paid|approve|reject|decline)\w*|(accept|decline|pay) (this|it|the (capture|submission|observation))|i (would|suggest you) (accept|pay|approve|reject))\b/i;
+  /\b(approv\w*|reject\w*|recommend\w*|verdict\w*|should (be )?(accept|pay|paid|approve|reject|decline|trust)\w*|(accept|decline|pay|trust|compensate) (this|it|the (capture|submission|observation|contributor))|i (would|suggest you|'d) (accept|pay|approve|reject|lean|trust)\w*|lean(s|ing)? (toward|towards|to)|looks? (solid|legit|legitimate|trustworthy|acceptable)|(seems|appears) (legit|legitimate|trustworthy|acceptable)|worth (paying|compensating|accepting|rewarding)|(safe|fine|ok|okay) to (accept|pay|approve|reject)|trustworthy|payable|(my|our) (call|decision|judgement|judgment))\b/i;
+// Review finding: a phrase blocklist is paraphrasable ("this one looks solid"). Broadened above; the
+// structural guarantees are that the schema has no verdict field and every evidence item must cite
+// a fact. Residual risk: an unforeseen soft-verdict phrasing in `summary` or a claim.
 
 type Supports = ReviewBrief["evidence"][number]["supports"];
 type Strength = ReviewBrief["evidence"][number]["strength"];

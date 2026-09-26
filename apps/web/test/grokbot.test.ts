@@ -240,6 +240,23 @@ describe("grounding validator", () => {
     expect(groundDraft({ headline: { text: "x", cites: [] }, paragraphs: [{ text: "Invented 77.", cites: ["status"] }], next_steps: [] }, tinyCase()).draft).toBeNull();
   });
 
+  it("also drops quantities in words and integrity synonyms for contributors (review findings)", () => {
+    const g = groundDraft(
+      {
+        headline: { text: "Price", cites: ["price"] },
+        paragraphs: [
+          { text: "About a dozen people already took this.", cites: ["price"] },
+          { text: "It pays twenty percent more than usual.", cites: ["price"] },
+          { text: "Your photo looked altered.", cites: ["status"] },
+          { text: "The price is $2.50.", cites: ["price"] },
+        ],
+        next_steps: [],
+      },
+      tinyCase("contributor"),
+    );
+    expect(g.draft?.paragraphs.map((p) => p.text)).toEqual(["The price is $2.50."]);
+  });
+
   it("uses the model when grounded, drops its ungrounded lines, and falls back to the template on error or nothing grounded", async () => {
     vi.stubEnv("MOCK_GROK", "0");
     try {
@@ -381,11 +398,13 @@ describe("verification companion (narration + explain)", () => {
     expect(e.paragraphs.join(" ")).toMatch(/blurry/i);
   });
 
-  it("logs grokbot model calls through the Grok logger", async () => {
+  it("contributors never get model text; researcher explanations call the model and are logged", async () => {
     const c = await user("contributor");
     const id = await submission(c.id, { status: "rejected", codes: ["TOO_DARK"], checks: checks({ protocol: ["fail", ["TOO_DARK"]] }) });
     logs.length = 0;
     await get(explain, "/x", id, c.token);
+    expect(logs.filter((l) => l.op.startsWith("grokbot"))).toEqual([]);
+    await get(explain, "/x", id, admin);
     expect(logs.some((l) => l.op === "grokbot_explain" && l.mock)).toBe(true);
   });
 });
@@ -442,6 +461,12 @@ describe("reviewer brief", () => {
     expect(g?.summary).toEqual(t.summary);
     expect(g?.uncertainties).toEqual([]);
     expect(VERDICT_RE.test("Approve it")).toBe(true);
+    for (const soft of ["This one looks solid.", "I'd lean toward trusting it.", "Worth compensating for.", "Safe to pay.", "The contributor seems trustworthy."]) {
+      expect(VERDICT_RE.test(soft), soft).toBe(true);
+    }
+    for (const ok of ["The waterline looks good in frame 2.", "Authenticity passed with score 0.90.", "Lighting is fine."]) {
+      expect(VERDICT_RE.test(ok), ok).toBe(false);
+    }
   });
 
   it("authz: contributors (even the owner) 403, researchers who don't own the bounty 404", async () => {

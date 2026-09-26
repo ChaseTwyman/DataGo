@@ -7,6 +7,11 @@
  *  - (contributor audience) talks about integrity checks the contributor must never learn about.
  * If nothing grounded is left, or Grok is unavailable/slow/mocked, the deterministic template is
  * returned instead (`source: "template"`). Results are cached per case-file version.
+ *
+ * Honest limits (heuristic, like injection.ts): a line must cite real facts, but whether the
+ * sentence is actually ENTAILED by the cited fact is not checked, so a model can still editorialize
+ * around a real citation. That is why contributors (where a wrong word leaks anti-cheat details)
+ * never get model text (submission.ts), and why researchers see `source` and the citations.
  */
 import { GrokbotMessageSchema, closeObjects, type GrokbotCitation, type GrokbotMessage, type JsonSchema } from "@groundtruth/shared";
 import { z } from "zod";
@@ -32,24 +37,35 @@ export function numbersIn(text: string): string[] {
 const URL_RE = /\b(https?:\/\/|www\.)\S+/i;
 
 /**
+ * Spelled-out quantities the digit check can't see ("a dozen readings", "twenty dollars"). Small
+ * counting words (one..ten) stay allowed: they read naturally and rarely carry a figure.
+ */
+const NUMBER_WORD_RE =
+  /\b(dozens?|half|quarter|double|triple|twice|hundreds?|thousands?|millions?|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|percent|per cent)\b/i;
+
+/**
  * What a contributor must never be told (PRD §7.5: naming the check that caught a cheater teaches
  * them to beat it). Contributor case files contain no integrity facts; this catches a model that
  * speculates anyway.
  */
 export const CONTRIBUTOR_FORBIDDEN_RE =
-  /\b(screens?|monitor|display|print(ed|out)?|ai[- ]?generated|generated image|fake|edit(ed|ing)|composit\w*|duplicate\w*|c2pa|metadata|provenance|parallax|challenge|velocity|travel|cheat\w*|fraud\w*|integrity|authentic\w*|trust score|recaptur\w*)\b/i;
+  /\b(screens?|monitor|display|print(ed|out)?|ai[- ]?generated|generated image|fake|edit(ed|ing)|composit\w*|duplicate\w*|c2pa|metadata|provenance|parallax|challenge|velocity|travel|cheat\w*|fraud\w*|integrity|authentic\w*|inauthentic\w*|genuine|trust score|recaptur\w*|alter(ed|ing)|manipulat\w*|doctored|tamper\w*|forg(ed|ery)|staged|fabricat\w*|suspicious|synthetic|spoof\w*)\b/i;
 
 export interface GroundingResult {
   draft: Draft | null;
   dropped: string[];
 }
 
-function lineOk(line: DraftLine, ids: Set<string>, nums: Set<string>, audience: Audience): string | null {
+const numberWordsIn = (text: string): string[] =>
+  (text.match(new RegExp(NUMBER_WORD_RE.source, "gi")) ?? []).map((w) => w.toLowerCase());
+
+function lineOk(line: DraftLine, ids: Set<string>, nums: Set<string>, words: Set<string>, audience: Audience): string | null {
   const text = line.text.trim();
   if (!text) return "empty";
   const cites = line.cites.filter((c) => ids.has(c));
   if (line.cites.length === 0 || cites.length !== line.cites.length) return "cites a fact that is not in the case file";
   for (const n of numbersIn(text)) if (!nums.has(n)) return `states a number (${n}) found in no fact`;
+  for (const w of numberWordsIn(text)) if (!words.has(w)) return `states a quantity in words (${w}) found in no fact`;
   if (URL_RE.test(text)) return "contains a link";
   if (audience === "contributor" && CONTRIBUTOR_FORBIDDEN_RE.test(text)) return "mentions integrity checks to a contributor";
   return null;
@@ -59,9 +75,10 @@ function lineOk(line: DraftLine, ids: Set<string>, nums: Set<string>, audience: 
 export function groundDraft(draft: Draft, c: Pick<CaseFile, "facts" | "audience">): GroundingResult {
   const ids = new Set(c.facts.map((f) => f.id));
   const nums = new Set(c.facts.flatMap((f) => numbersIn(f.text)));
+  const words = new Set(c.facts.flatMap((f) => numberWordsIn(f.text)));
   const dropped: string[] = [];
   const keep = (l: DraftLine) => {
-    const why = lineOk(l, ids, nums, c.audience);
+    const why = lineOk(l, ids, nums, words, c.audience);
     if (why) dropped.push(`${l.text.slice(0, 80)} (${why})`);
     return why === null;
   };

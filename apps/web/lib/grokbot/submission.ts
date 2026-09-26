@@ -62,9 +62,12 @@ export async function explainSubmission(db: Db, l: LoadedSubmission, o: { mockEr
     caseFile: c,
     task: EXPLAIN_TASK[l.view],
     template: contributor ? contributorExplainTemplate(c) : researcherExplainTemplate(c),
-    // Integrity rejects: the neutral sentence is the whole answer; nothing for a model to add. Rows
-    // still verifying change every few seconds: not worth a model call either.
-    templateOnly: (contributor && isNeutralForContributor(l.submission)) || !TERMINAL.has(l.submission.status),
+    // Contributors always get the deterministic template (review finding): their case file carries no
+    // integrity vocabulary, so a model adds nothing they may see that the template doesn't already
+    // say, and free text is the one channel through which a model could speculate about why a check
+    // fired (a word blocklist can't catch every synonym). Rows still verifying change every few
+    // seconds: not worth a model call for anyone.
+    templateOnly: contributor || !TERMINAL.has(l.submission.status),
     ...(o.mockError ? { mockError: true } : {}),
     ...(o.generate ? { generate: o.generate } : {}),
     ...(o.refresh ? { refresh: true } : {}),
