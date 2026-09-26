@@ -103,6 +103,12 @@ export const BountyMissionsResponseSchema = z.object({
   recession: z.array(RecessionSeriesSchema),
 });
 export type BountyMissionsResponse = z.infer<typeof BountyMissionsResponseSchema>;
+/** Dashboard read side: unknown mission statuses from a newer server still render. */
+export const LenientBountyMissionsResponseSchema = z.object({
+  missions: z.array(BountyMissionSchema.extend({ status: z.string() }).loose()),
+  recession: z.array(RecessionSeriesSchema.loose()).catch([]),
+});
+export type LenientBountyMissionsResponse = z.infer<typeof LenientBountyMissionsResponseSchema>;
 
 export const ImpactCardRequestSchema = z.object({
   /** Ask for a Grok Imagine abstract background (labelled AI-generated; cost-capped, may fall back). */

@@ -8,6 +8,7 @@ import { Tabs } from "@/components/ds/controls";
 import { MapPanel } from "@/components/ds/MapFrame";
 import { PanelHeader, ReadoutGrid } from "@/components/ds/primitives";
 import { FundingPanel } from "@/components/funding/FundingPanel";
+import { MissionsPanel } from "@/components/missions/MissionsPanel";
 import { HexMap, MapLegend, type MapPoint } from "@/components/map";
 import { Empty, ErrorBox, Loading, PageHeader, Stat } from "@/components/page";
 import { BriefingVideo } from "@/components/BriefingVideo";
@@ -154,6 +155,7 @@ export default function BountyPage() {
         <Stat label="Submissions" value={stream.submissions.length} sub={`${acceptedCount} accepted`} />
       </ReadoutGrid>
       <FundingPanel bounty={b} onChanged={bounty.refresh} />
+      {canManage ? <MissionsPanel bountyId={id} /> : null}
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_460px]">
         <div className="relative min-h-[420px] bg-[#0c0c0c]">

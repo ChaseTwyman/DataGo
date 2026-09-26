@@ -28,6 +28,7 @@ import {
   CreateBountyResponseSchema,
   ExampleImageResponseSchema,
   LenientBountyDetailSchema,
+  LenientBountyMissionsResponseSchema,
   LenientBountyListResponseSchema,
   LenientDevSessionResponseSchema,
   LenientHealthResponseSchema,
@@ -210,6 +211,7 @@ export const api = {
   bounties: () => apiFetch("/api/bounties", LenientBountyListResponseSchema),
   bounty: (id: string) => apiFetch(`/api/bounties/${id}`, LenientBountyDetailSchema),
   coverage: (id: string) => apiFetch(`/api/bounties/${id}/coverage`, CoverageResponseSchema),
+  bountyMissions: (id: string) => apiFetch(`/api/missions/bounties/${id}`, LenientBountyMissionsResponseSchema),
   createBounty: (input: z.input<typeof CreateBountyRequestSchema>) => {
     const body: CreateBountyRequest = CreateBountyRequestSchema.parse(input);
     return apiFetch("/api/bounties", CreateBountyResponseSchema, { body });
