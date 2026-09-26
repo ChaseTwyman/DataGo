@@ -112,6 +112,19 @@ describe("real path (stubbed SDK)", () => {
     expect(logs[0]).toMatchObject({ ok: true, mock: false, usage: { input_tokens: 10, output_tokens: 3 } });
   });
 
+  it("verification: one attempt, 150 s budget, no SDK retry", async () => {
+    create.mockResolvedValueOnce({ output_text: "{}" });
+    const challenge = streetFloodDepth.capture.challenges[0]!;
+    await verifyCapture({ protocol: streetFloodDepth, challenge, framesBase64: ["a"], intervalMs: 600 }).catch(() => undefined);
+    expect(create.mock.calls[0]![1]).toEqual({ timeout: 150_000, maxRetries: 0 });
+  });
+
+  it("frame check: 8 s budget, no SDK retry", async () => {
+    create.mockResolvedValueOnce({ output_text: "{}" });
+    await frameCheck({ protocol: streetFloodDepth, imageBase64: "x" }).catch(() => undefined);
+    expect(create.mock.calls[0]![1]).toEqual({ timeout: 8_000, maxRetries: 0 });
+  });
+
   it("retries once on invalid JSON, then succeeds", async () => {
     create.mockResolvedValueOnce({ output_text: "not json" }).mockResolvedValueOnce({ output_text: '{"ok":true}' });
     await expect(grokJSON(args)).resolves.toEqual({ ok: true });

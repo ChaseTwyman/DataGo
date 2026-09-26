@@ -23,6 +23,11 @@ export interface GrokJSONArgs<T> {
   /** Runtime validation of the parsed output. */
   parse: (raw: unknown) => T;
   timeoutMs?: number;
+  /**
+   * SDK-level retries on network errors/timeouts (default: the client's 1). Set 0 for long calls:
+   * a retried 60 s timeout silently doubled verification to 120 s (and the cost) on Vercel.
+   */
+  maxRetries?: number;
   /** Server-side tools (e.g. web_search, x_search) for P1 features. */
   tools?: { type: "web_search" | "x_search" }[];
   /** Deterministic fixture returned when MOCK_GROK=1. */
@@ -63,7 +68,7 @@ export async function grokJSON<T>(args: GrokJSONArgs<T>): Promise<T> {
           text: { format: { type: "json_schema", name: args.name, schema: args.schema, strict: true } },
           ...(args.tools ? { tools: args.tools as never } : {}),
         },
-        { timeout: args.timeoutMs ?? 30_000 },
+        { timeout: args.timeoutMs ?? 30_000, ...(args.maxRetries !== undefined ? { maxRetries: args.maxRetries } : {}) },
       );
       usage = (response.usage as GrokUsage | undefined) ?? null;
       const text = response.output_text;

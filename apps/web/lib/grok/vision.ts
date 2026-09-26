@@ -43,6 +43,9 @@ export async function frameCheck(args: {
     name: "frame_check",
     parse: (raw) => zod.parse(raw),
     timeoutMs: args.timeoutMs ?? 8_000,
+    // The phone's gate loop retries on its own and degrades after 10 s; an SDK retry would only
+    // push a stale frame's answer past that window.
+    maxRetries: 0,
     mock: async () => {
       if (args.variant === "slow") await new Promise((r) => setTimeout(r, 12_000));
       return mockFrameCheck(args.protocol, args.variant);
@@ -84,7 +87,10 @@ export async function verifyCapture(args: {
     schema: buildVerificationJsonSchema(args.protocol),
     name: "verification",
     parse: (raw) => parseVerification(args.protocol, raw),
-    timeoutMs: args.timeoutMs ?? 60_000,
+    // One attempt with a generous budget: from Vercel this call exceeded 60 s, and the SDK's hidden
+    // retry then doubled it. Must stay under the route/after() limit (300 s on Vercel Hobby).
+    timeoutMs: args.timeoutMs ?? 150_000,
+    maxRetries: 0,
     mock: () => mockVerification(args.protocol, args.variant),
   });
 }
