@@ -27,7 +27,7 @@ export function verifyLocalToken(op: LocalOp, path: string, token: string, now =
 export class LocalStorage implements ObjectStorage {
   readonly root: string;
   constructor(root?: string) {
-    this.root = resolve(root ?? process.env.LOCAL_STORAGE_DIR ?? join(process.env.LOCAL_DATA_DIR || join(process.cwd(), ".local"), "storage"));
+    this.root = resolve(/*turbopackIgnore: true*/ root ?? process.env.LOCAL_STORAGE_DIR ?? join(process.env.LOCAL_DATA_DIR || join(process.cwd(), ".local"), "storage"));
   }
 
   file(path: string): string {

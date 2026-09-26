@@ -18,13 +18,13 @@ const g = globalThis as typeof globalThis & { __gtDb?: DbCache };
 const cache: DbCache = (g.__gtDb ??= { promise: null, override: null });
 
 export function localDataRoot(): string {
-  return resolve(process.env.LOCAL_DATA_DIR || join(process.cwd(), ".local"));
+  return resolve(/*turbopackIgnore: true*/ process.env.LOCAL_DATA_DIR || join(process.cwd(), ".local"));
 }
 
 async function open(): Promise<Db> {
   if (isLocalBackend()) {
     const { openPglite } = await import("./pglite");
-    const dir = process.env.PGLITE_DIR === "memory" ? undefined : resolve(process.env.PGLITE_DIR || join(localDataRoot(), "pglite"));
+    const dir = process.env.PGLITE_DIR === "memory" ? undefined : resolve(/*turbopackIgnore: true*/ process.env.PGLITE_DIR || join(localDataRoot(), "pglite"));
     return (await openPglite(dir)).db;
   }
   const url = process.env.DATABASE_URL;
