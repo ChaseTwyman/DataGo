@@ -34,6 +34,15 @@ export const LIMITS = {
   resetRequestEmail: { name: "reset_request_email", max: 5, windowSeconds: HOUR, what: "password reset emails for this address" },
   resetConfirmIp: { name: "reset_confirm_ip", max: 30, windowSeconds: HOUR, what: "reset code attempts from this network" },
   resetConfirmEmail: { name: "reset_confirm_email", max: 10, windowSeconds: HOUR, what: "reset code attempts for this address" },
+  // Grokbot. Reads are cached per case-file version, so only a changed case costs a model call; the
+  // cap bounds a client that polls narration in a loop (a verify is ~20 polls).
+  grokbot: { name: "grokbot", max: 600, windowSeconds: HOUR, what: "assistant requests" },
+  matchRefresh: { name: "match_refresh", max: 10, windowSeconds: HOUR, what: "match refreshes" },
+  // Background refreshes kicked by /nearby or a profile change: silent, never a 429 to the client.
+  matchAuto: { name: "match_auto", max: 6, windowSeconds: HOUR, what: "automatic match refreshes" },
+  // Up to 1 image generation + 4 vision calls each.
+  selfCheck: { name: "self_check", max: 10, windowSeconds: HOUR, what: "protocol self-checks" },
+  publicImpact: { name: "public_impact", max: 120, windowSeconds: HOUR, what: "impact report requests from this network" },
 } as const satisfies Record<string, Limit>;
 
 export function rateLimited(limit: Limit): HttpError {

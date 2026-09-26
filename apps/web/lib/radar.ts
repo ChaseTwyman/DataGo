@@ -11,7 +11,9 @@ import { grokEnv } from "./grok/config";
 import { grokJSON } from "./grok/json";
 import { mockRadarDrafts } from "./grok/mocks/p1";
 
-const RadarOutputSchema = z.object({ drafts: z.array(DraftBountySchema).max(5) });
+/** What the model returns: drafts WITHOUT funding (that is the allocator's answer, computed after). */
+export const RadarModelDraftSchema = DraftBountySchema.omit({ funding: true });
+const RadarOutputSchema = z.object({ drafts: z.array(RadarModelDraftSchema).max(5) });
 
 export function radarJsonSchema(): JsonSchema {
   const js = z.toJSONSchema(RadarOutputSchema) as JsonSchema;
@@ -25,6 +27,8 @@ export async function radarDrafts(args: {
   radiusKm: number;
   alerts: NwsAlert[];
   protocols: { slug: string; name: string; why_it_matters: string }[];
+  /** Grokbot: sponsor-pool summary so the model proposes scopes the allocator can fund. */
+  poolSummary?: string;
 }): Promise<DraftBounty[]> {
   const slugs = new Set(args.protocols.map((p) => p.slug));
   const alertSummary = args.alerts.map((a) => ({ event: a.event, severity: a.severity, headline: a.headline, onset: a.onset, expires: a.expires }));
@@ -34,6 +38,7 @@ export async function radarDrafts(args: {
     `Only use these protocols (protocol_slug must be one of them): ${JSON.stringify(args.protocols)}.`,
     "Safety first: never center a bounty inside an area under a life-threatening warning (e.g. Flash Flood Emergency, Tornado Warning); prefer the safe edges and the after-the-event window.",
     "Return at most 3 drafts. Each needs a concrete center (lat/lng) near the requested region, a radius in meters (300-3000), a two-sentence summary for contributors, a rationale citing evidence, and source URLs.",
+    ...(args.poolSummary ? [args.poolSummary] : []),
   ].join(" ");
   const out = await grokJSON({
     op: "radar_scan",

@@ -8,6 +8,8 @@ import {
 import { json, originOf, parseQuery, route } from "@/lib/api/http";
 import { mediaUrl } from "@/lib/api/views";
 import { requireUser } from "@/lib/auth";
+import { runInBackground } from "@/lib/background";
+import { autoRefreshMatches } from "@/lib/grokbot/match";
 import { loadPricing } from "@/lib/coverage";
 import { getDb } from "@/lib/db";
 import { listActiveBounties } from "@/lib/db/repos/bounties";
@@ -72,6 +74,8 @@ export const GET = route(async (req) => {
     });
   }
   out.sort((a, b) => a.distance_m - b.distance_m);
+  // Grokbot For-you: fill/refresh match_cache after responding (stale rows only, rate-limited per user).
+  runInBackground(() => autoRefreshMatches(db, user.id));
   const body: NearbyResponse = { bounties: out };
   return json(body);
 });

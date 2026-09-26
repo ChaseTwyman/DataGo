@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ProtocolSchema } from "../protocols/protocol";
 import { IsoDate, Lat, Lng, Uuid } from "./common";
+import { RadarFundingSchema } from "./grokbot";
 
 // POST /api/voice/token
 export const VoiceTokenResponseSchema = z.object({
@@ -88,6 +89,11 @@ export const DraftBountySchema = z.object({
   rationale: z.string(),
   sources: z.array(z.string()),
   alert_event: z.string().nullable(),
+  /**
+   * Grokbot (additive): what the allocation engine would grant this draft right now, computed
+   * server-side after the model drafts it (never model output).
+   */
+  funding: RadarFundingSchema.optional(),
 });
 export type DraftBounty = z.infer<typeof DraftBountySchema>;
 export const RadarScanResponseSchema = z.object({
