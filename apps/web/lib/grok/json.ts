@@ -32,6 +32,8 @@ export interface GrokJSONArgs<T> {
   reasoningEffort?: "low" | "medium" | "high" | "xhigh";
   /** Server-side tools (e.g. web_search, x_search) for P1 features. */
   tools?: { type: "web_search" | "x_search" }[];
+  /** Cancels the request (e.g. verification after an off-topic relevance verdict). Never retried. */
+  signal?: AbortSignal;
   /** Deterministic fixture returned when MOCK_GROK=1. */
   mock: () => T | Promise<T>;
 }
@@ -39,7 +41,7 @@ export interface GrokJSONArgs<T> {
 export const jpegDataUrl = (base64: string): string =>
   base64.startsWith("data:") ? base64 : `data:image/jpeg;base64,${base64}`;
 
-export const imagePart = (base64: string, detail: "high" | "low" = "high"): InputPart => ({
+export const imagePart = (base64: string, detail: "high" | "low" | "auto" = "high"): InputPart => ({
   type: "input_image",
   image_url: jpegDataUrl(base64),
   detail,
@@ -48,6 +50,7 @@ export const imagePart = (base64: string, detail: "high" | "low" = "high"): Inpu
 export async function grokJSON<T>(args: GrokJSONArgs<T>): Promise<T> {
   if (isMockGrok()) {
     const t0 = Date.now();
+    if (args.signal?.aborted) throw new GrokError(`${args.op} aborted`, args.op, args.signal.reason);
     const out = await args.mock();
     logGrokCall({ op: args.op, model: args.model, ms: Date.now() - t0, ok: true, mock: true });
     return out;
@@ -71,7 +74,11 @@ export async function grokJSON<T>(args: GrokJSONArgs<T>): Promise<T> {
           ...(args.tools ? { tools: args.tools as never } : {}),
           ...(args.reasoningEffort ? { reasoning: { effort: args.reasoningEffort as never } } : {}),
         },
-        { timeout: args.timeoutMs ?? 30_000, ...(args.maxRetries !== undefined ? { maxRetries: args.maxRetries } : {}) },
+        {
+          timeout: args.timeoutMs ?? 30_000,
+          ...(args.maxRetries !== undefined ? { maxRetries: args.maxRetries } : {}),
+          ...(args.signal ? { signal: args.signal } : {}),
+        },
       );
       usage = (response.usage as GrokUsage | undefined) ?? null;
       const text = response.output_text;
@@ -84,7 +91,7 @@ export async function grokJSON<T>(args: GrokJSONArgs<T>): Promise<T> {
       const msg = err instanceof Error ? err.message : String(err);
       logGrokCall({ op: args.op, model: args.model, ms: Date.now() - t0, ok: false, mock: false, usage, attempt, error: msg });
       // Retry only on parse/validation failures; network/timeout/HTTP errors surface immediately.
-      if (!isParseError(err)) break;
+      if (!isParseError(err) || args.signal?.aborted) break;
     }
   }
   throw new GrokError(`${args.op} failed: ${errorMessage(lastError)}`, args.op, lastError);
