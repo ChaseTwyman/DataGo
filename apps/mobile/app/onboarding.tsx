@@ -36,7 +36,7 @@ export default function Onboarding() {
   const [err, setErr] = useState<string | null>(null);
   const setOnboarded = useApp((s) => s.setOnboarded);
   const me = useMe();
-  const firstName = me.data?.display_name?.trim().split(/s+/)[0] ?? null;
+  const firstName = me.data?.display_name?.trim().split(/\s+/)[0] ?? null;
 
   // Each prompt independently: one failing (or throwing) must not skip the others.
   const askAll = async () => {

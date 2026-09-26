@@ -2,7 +2,7 @@
 import { ENV } from "../lib/env";
 import { log } from "../lib/log";
 import { getSupabase, supabaseAccessToken, supabaseConfigured, supabasePasswordSignIn, supabaseSignOut, supabaseStoredSession } from "../lib/supabase";
-import { devUserStore, loadPersisted, useApp } from "../state/appStore";
+import { devUserStore, lastAccountStore, loadPersisted, useApp } from "../state/appStore";
 import { bootstrapAuth, isLegacyAnonymous, NO_REAUTH_CODES, sessionActionFor, type AuthNotice } from "./authFlow";
 import { endpoints } from "./endpoints";
 import { toUserMessage, UserFacingError } from "./errors";
@@ -60,6 +60,8 @@ const http = new Http({
   fetch: fetch as unknown as FetchLike,
   getToken: async () => {
     const s = useApp.getState();
+    // Never send a token after sign-out began (supabase-js clears its storage asynchronously).
+    if (s.session === "signed_out") return null;
     if (s.authMode === "supabase") return supabaseAccessToken();
     return s.devToken;
   },
@@ -113,6 +115,15 @@ export async function signIn(email: string, password: string): Promise<void> {
     throw new UserFacingError("Sign in with the email and password of your account.", "Couldn't sign in", false);
   }
   queryClient.clear();
+  // Onboarding (permissions + profile) is per account: a different account on this phone gets it.
+  try {
+    if ((await lastAccountStore.load()) !== s.userId) {
+      useApp.getState().setOnboarded(false);
+      await lastAccountStore.save(s.userId);
+    }
+  } catch (e) {
+    log.handled("last-account", e);
+  }
   useApp.getState().setBoot({ authMode: "supabase", userId: s.userId, devToken: null, session: "signed_in", authNotice: null, suspended: false });
 }
 
@@ -129,10 +140,14 @@ export async function signUp(body: Parameters<typeof api.signup>[0]): Promise<vo
 /** Sign out on this phone and show Welcome. Clears every cached server response. */
 export async function endSession(notice: AuthNotice | null): Promise<void> {
   const s = useApp.getState();
+  // Flip to signed-out FIRST (synchronously): the app unmounts now, and 401s from requests still in
+  // flight while the token is revoked are ignored (onAuthedError acts only while signed in), so
+  // they can't fire a second endSession that overwrites this notice.
+  useApp.setState({ lastSeenBalanceCents: null });
+  s.setBoot({ session: "signed_out", authNotice: notice, userId: null, devToken: null, suspended: false });
+  queryClient.clear();
   if (s.authMode === "supabase") await supabaseSignOut();
   queryClient.clear();
-  useApp.setState({ lastSeenBalanceCents: null });
-  useApp.getState().setBoot({ session: "signed_out", authNotice: notice, userId: null, devToken: null, suspended: false });
 }
 
 export const signOut = (): Promise<void> => endSession(null);

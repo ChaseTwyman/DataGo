@@ -29,7 +29,13 @@ interface AppState {
   setLastSeenBalance: (c: number) => void;
 }
 
-const K = { onboarded: "gt.onboarded", mock: "gt.mockVariant", devUser: "gt.devUserId" } as const;
+const K = { onboarded: "gt.onboarded", mock: "gt.mockVariant", devUser: "gt.devUserId", lastUser: "gt.lastAccountId" } as const;
+
+/** The last account that signed in on this phone (onboarding is per account, not per phone). */
+export const lastAccountStore = {
+  load: () => SecureStore.getItemAsync(K.lastUser),
+  save: (id: string) => SecureStore.setItemAsync(K.lastUser, id),
+};
 
 export const useApp = create<AppState>((set) => ({
   ready: false,

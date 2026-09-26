@@ -53,7 +53,8 @@ function Welcome({ onCreate, onSignIn }: { onCreate: () => void; onSignIn: () =>
   const notice = useApp((s) => s.authNotice);
   const health = useApp((s) => s.health);
   // Local dev backend (LOCAL_BACKEND=1) has no Supabase accounts; development only.
-  const devBackend = health?.backend !== "supabase" || !supabaseConfigured();
+  // __DEV__ too: a misconfigured Release build must never offer a password-less way in.
+  const devBackend = __DEV__ && (health?.backend !== "supabase" || !supabaseConfigured());
   const [busy, setBusy] = useState(false);
   return (
     <Frame>
