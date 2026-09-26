@@ -11,9 +11,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
-    "smoke": "tsx scripts/api-smoke.ts"
+    "smoke": "tsx scripts/api-smoke.ts",
+    "icons": "tsx scripts/generate-icons.ts"
   },
   "dependencies": {
+    "@expo-google-fonts/barlow": "^0.4.1",
+    "@expo-google-fonts/barlow-condensed": "^0.4.1",
+    "@expo/vector-icons": "^15.0.2",
     "@groundtruth/shared": "workspace:*",
     "@supabase/supabase-js": "^2.117.2",
     "@tanstack/react-query": "^5.103.2",
@@ -23,6 +27,7 @@
     "expo-dev-client": "~57.0.19",
     "expo-device": "~57.0.2",
     "expo-file-system": "~57.0.7",
+    "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-image-manipulator": "~57.0.20",
     "expo-linking": "~57.0.11",
@@ -30,6 +35,7 @@
     "expo-router": "~57.0.23",
     "expo-secure-store": "~57.0.4",
     "expo-sensors": "~57.0.3",
+    "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
@@ -49,6 +55,7 @@
   "devDependencies": {
     "@types/node": "^24.19.0",
     "eslint": "^9.39.5",
+    "sharp": "^0.35.4",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
