@@ -31,6 +31,16 @@ export default function ResetPasswordPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [fields, setFields] = useState<ResetErrors>({});
   const [localMode, setLocalMode] = useState(false);
+  const [revoked, setRevoked] = useState(true);
+  // Supabase refuses a second recovery email within 60 s; count down instead of letting it fail.
+  const [sentAt, setSentAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const wait = sentAt === null ? 0 : Math.max(0, Math.ceil((sentAt + 60_000 - now) / 1000));
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [wait]);
 
   useEffect(() => {
     api
@@ -67,6 +77,9 @@ export default function ResetPasswordPage() {
       setEmail(v.email);
       setCode("");
       setNotice(`If ${v.email} has a GroundTruth account, we've sent it a 6-digit code. It can take a minute; check spam too.`);
+      const at = Date.now();
+      setSentAt(at);
+      setNow(at);
       setStep("code");
     } catch (err) {
       fail(err);
@@ -88,6 +101,7 @@ export default function ResetPasswordPage() {
         step === "link" && tokenHash ? { token_hash: tokenHash, new_password: v.password } : { email, code: v.code ?? "", new_password: v.password },
       );
       signInEmail = r.email ?? (step === "code" ? email : null);
+      setRevoked(r.sessions_revoked !== false);
     } catch (err) {
       fail(err);
       setBusy(false);
@@ -111,7 +125,9 @@ export default function ResetPasswordPage() {
     step === "done" ? "Password changed" : step === "code" ? "Check your email" : step === "link" ? "Choose a new password" : "Reset your password";
   const description =
     step === "done"
-      ? "You've been signed out everywhere else. Signing you in…"
+      ? revoked
+        ? "You've been signed out everywhere else."
+        : "Your new password works now. We couldn't sign out your other devices just now; sign out there if you don't recognize them."
       : step === "code"
         ? "Enter the code from the email and a new password."
         : step === "link"
@@ -188,10 +204,10 @@ export default function ResetPasswordPage() {
                     <button
                       type="button"
                       className="cursor-pointer text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
-                      disabled={busy}
+                      disabled={busy || wait > 0}
                       onClick={() => void sendCode()}
                     >
-                      Send a new code
+                      {wait > 0 ? `Send a new code (${wait}s)` : "Send a new code"}
                     </button>
                   </div>
                 ) : (

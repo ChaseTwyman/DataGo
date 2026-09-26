@@ -107,11 +107,11 @@ describe("forgot-password errors", () => {
 describe("forgot-password endpoints", () => {
   it("request and confirm are unauthenticated calls with the right paths and bodies", async () => {
     const seen: string[] = [];
-    const { f, calls } = fetcher((p) => (p.endsWith("/request") ? { status: 202, body: { ok: true } } : { status: 200, body: { ok: true, email: "a@b.org" } }));
+    const { f, calls } = fetcher((p) => (p.endsWith("/request") ? { status: 202, body: { ok: true } } : { status: 200, body: { ok: true, email: "a@b.org", sessions_revoked: false } }));
     const http = new Http({ baseUrl: "http://lan", fetch: f, getToken: () => "stale.jwt", onAuthedError: (e) => seen.push(e.code) });
     const api = endpoints(http);
     await api.requestPasswordReset("a@b.org");
-    await expect(api.confirmPasswordReset({ email: "a@b.org", code: "123456", new_password: "long enough" })).resolves.toMatchObject({ ok: true });
+    await expect(api.confirmPasswordReset({ email: "a@b.org", code: "123456", new_password: "long enough" })).resolves.toMatchObject({ ok: true, sessions_revoked: false });
     expect(calls.map((c) => [c.method, c.url])).toEqual([
       ["POST", "http://lan/api/auth/password-reset/request"],
       ["POST", "http://lan/api/auth/password-reset/confirm"],

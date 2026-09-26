@@ -181,7 +181,7 @@ describe("POST /api/auth/password-reset/confirm", () => {
     setAccountAuthForTests(f);
     const r = await confirm({ email: user.email, code: "246 810", new_password: "brand new secret" });
     expect(r.status).toBe(200);
-    expect(PasswordResetConfirmResponseSchema.parse(await r.json())).toEqual({ ok: true, email: user.email });
+    expect(PasswordResetConfirmResponseSchema.parse(await r.json())).toEqual({ ok: true, email: user.email, sessions_revoked: true });
     expect(f.proofs).toEqual([{ email: user.email, code: "246810" }]);
     expect(f.set).toEqual([{ id: user.id, pw: "brand new secret" }]);
     expect(f.revoked).toEqual([{ id: user.id, email: user.email, accessToken: "recovery-jwt" }]);
@@ -255,10 +255,12 @@ describe("POST /api/auth/password-reset/confirm", () => {
     expect(await errCode(r)).toBe("RATE_LIMITED");
   });
 
-  it("if revoking sessions fails the reset still succeeds (password already changed) and it is logged", async () => {
+  it("if revoking sessions keeps failing: password still changed, logged, and reported as sessions_revoked=false", async () => {
     const user = { id: randomUUID(), email: freshEmail() };
     const f = fake(user);
+    let tries = 0;
     f.revokeSessions = async () => {
+      tries++;
       throw new Error("logout 500");
     };
     setAccountAuthForTests(f);
@@ -266,8 +268,36 @@ describe("POST /api/auth/password-reset/confirm", () => {
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     const r = await confirm({ email: user.email, code: "246810", new_password: "brand new secret" });
     expect(r.status).toBe(200);
+    expect(((await r.json()) as { sessions_revoked: boolean }).sessions_revoked).toBe(false);
     expect(f.set).toHaveLength(1);
+    expect(tries).toBe(2);
     expect(JSON.stringify(warn.mock.calls)).toContain("logout 500");
+  });
+
+  it("a transient revoke failure is retried once", async () => {
+    const user = { id: randomUUID(), email: freshEmail() };
+    const f = fake(user);
+    let tries = 0;
+    f.revokeSessions = async () => {
+      if (++tries === 1) throw new Error("blip");
+    };
+    setAccountAuthForTests(f);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const r = await confirm({ email: user.email, code: "246810", new_password: "brand new secret" });
+    expect(((await r.json()) as { sessions_revoked: boolean }).sessions_revoked).toBe(true);
+    expect(tries).toBe(2);
+  });
+
+  it("an auth-server throttle on the link path isn't worded as 'for this address'", async () => {
+    const f = fake({ id: randomUUID(), email: "x@example.org" });
+    f.verifyRecovery = async () => {
+      throw new RecoveryRateLimitedError();
+    };
+    setAccountAuthForTests(f);
+    const r = await confirm({ token_hash: "tokenhash-good", new_password: "long enough" });
+    expect(r.status).toBe(429);
+    expect(((await r.json()) as { error: { message: string } }).error.message).not.toMatch(/address/);
   });
 });
 

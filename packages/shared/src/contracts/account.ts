@@ -80,7 +80,12 @@ export const PasswordResetCodeConfirmSchema = z.object({ email: EmailSchema, cod
 export const PasswordResetLinkConfirmSchema = z.object({ token_hash: z.string().trim().min(8).max(512), new_password: PasswordSchema });
 export const PasswordResetConfirmRequestSchema = z.union([PasswordResetCodeConfirmSchema, PasswordResetLinkConfirmSchema]);
 export type PasswordResetConfirmRequest = z.infer<typeof PasswordResetConfirmRequestSchema>;
-export const PasswordResetConfirmResponseSchema = z.object({ ok: z.literal(true), email: z.string().nullable() });
+export const PasswordResetConfirmResponseSchema = z.object({
+  ok: z.literal(true),
+  email: z.string().nullable(),
+  /** false = the password changed but signing out other devices failed (clients must not claim it). */
+  sessions_revoked: z.boolean().optional(),
+});
 
 // GET /api/me/export → JSON attachment (profile, sessions, submissions + signed media URLs, ledger).
 // DELETE /api/me { confirm: "DELETE" } → 204. Photos, profile, wallet and sessions are deleted;

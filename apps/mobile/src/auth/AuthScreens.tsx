@@ -179,6 +179,7 @@ function ForgotPassword({ email, setEmail, onBack }: { email: string; setEmail: 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<UserMessage | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [revoked, setRevoked] = useState(true);
   const wait = resendWaitSeconds(state, now);
 
   // Tick the resend countdown only while it runs.
@@ -219,7 +220,7 @@ function ForgotPassword({ email, setEmail, onBack }: { email: string; setEmail: 
     setErrors({});
     setBusy(true);
     try {
-      await confirmPasswordReset(state.sentTo, v.code, v.password);
+      setRevoked(await confirmPasswordReset(state.sentTo, v.code, v.password));
     } catch (e) {
       log.handled("reset-confirm", e);
       setErr(toResetMessage(e));
@@ -242,7 +243,11 @@ function ForgotPassword({ email, setEmail, onBack }: { email: string; setEmail: 
         <View style={{ gap: S.sm }} accessibilityLiveRegion="polite">
           <StatusPill tone="ok" icon="check" text="Password changed" />
           <Heading>You're all set</Heading>
-          <Body color={C.muted}>Your new password works now, and you've been signed out on every other device.</Body>
+          <Body color={C.muted}>
+            {revoked
+              ? "Your new password works now, and you've been signed out on every other device."
+              : "Your new password works now. We couldn't sign out your other devices just now; sign out there if you don't recognize them."}
+          </Body>
         </View>
         {busy ? <Muted>Signing you in…</Muted> : null}
         {err ? <ErrorLine err={err} /> : null}

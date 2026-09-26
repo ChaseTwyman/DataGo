@@ -47,19 +47,25 @@ export const POST = route(async (req) => {
       user = await auth.verifyRecovery({ email: body.email, code: body.code });
     }
   } catch (err) {
-    if (err instanceof RecoveryRateLimitedError) throw rateLimited(LIMITS.resetConfirmEmail);
+    if (err instanceof RecoveryRateLimitedError) throw rateLimited(viaLink ? LIMITS.resetConfirmIp : LIMITS.resetConfirmEmail);
     throw err;
   }
   if (!user) throw resetCodeInvalid();
 
   await auth.setPassword(user.id, newPassword);
-  try {
-    await auth.revokeSessions(user);
-  } catch (err) {
-    // The password is already changed; old refresh tokens failing to revoke is logged, not shown.
-    console.warn(`[password-reset] revoking sessions of ${user.id} failed:`, err instanceof Error ? err.message : "unknown error");
+  // Revocation matters most when the reset is locking out someone who stole the password, so a
+  // transient failure gets one retry, and a lasting one is reported to the client (which then must
+  // not claim "signed out everywhere") instead of being swallowed.
+  let sessionsRevoked = false;
+  for (let attempt = 1; attempt <= 2 && !sessionsRevoked; attempt++) {
+    try {
+      await auth.revokeSessions(user);
+      sessionsRevoked = true;
+    } catch (err) {
+      console.warn(`[password-reset] revoking sessions of ${user.id} failed (attempt ${attempt}):`, err instanceof Error ? err.message : "unknown error");
+    }
   }
   console.info(`[password-reset] ${user.id} reset their password${viaLink ? " (link)" : ""}`);
-  const res: z.infer<typeof PasswordResetConfirmResponseSchema> = { ok: true, email: user.email };
+  const res: z.infer<typeof PasswordResetConfirmResponseSchema> = { ok: true, email: user.email, sessions_revoked: sessionsRevoked };
   return json(res, { headers: { "cache-control": "no-store" } });
 });

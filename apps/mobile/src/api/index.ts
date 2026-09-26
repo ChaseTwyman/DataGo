@@ -145,10 +145,12 @@ export async function requestPasswordReset(email: string): Promise<void> {
 /**
  * Forgot password step 2: redeem the emailed code and set the new password (the server signs the
  * account out everywhere). The caller then signs in with it, so a sign-in failure can be shown
- * separately from "the password was changed".
+ * separately from "the password was changed". Resolves false when the server couldn't sign the
+ * account out on other devices (older servers don't say: treated as revoked).
  */
-export async function confirmPasswordReset(email: string, code: string, newPassword: string): Promise<void> {
-  await api.confirmPasswordReset({ email, code, new_password: newPassword });
+export async function confirmPasswordReset(email: string, code: string, newPassword: string): Promise<boolean> {
+  const r = await api.confirmPasswordReset({ email, code, new_password: newPassword });
+  return r.sessions_revoked !== false;
 }
 
 /** Sign out on this phone and show Welcome. Clears every cached server response. */
