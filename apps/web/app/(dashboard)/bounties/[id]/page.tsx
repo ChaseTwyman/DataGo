@@ -82,7 +82,25 @@ export default function BountyPage() {
             {b.source === "demo" ? <Badge tone="warning">demo</Badge> : null}
           </span>
         }
-        description={`${b.protocol.name} · ends ${formatTime(b.ends_at)}${b.event_started_at ? ` · event started ${formatTime(b.event_started_at)}` : ""}`}
+        description={
+          <>
+            {b.protocol.name} · ends {formatTime(b.ends_at)}
+            {b.event_started_at ? ` · event started ${formatTime(b.event_started_at)}` : ""}
+            {b.sponsor_name ? (
+              <>
+                {" · Funded by "}
+                {b.sponsor_url ? (
+                  <a href={b.sponsor_url} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                    {b.sponsor_name}
+                  </a>
+                ) : (
+                  <span className="font-medium text-foreground">{b.sponsor_name}</span>
+                )}
+                {" — data free for everyone"}
+              </>
+            ) : null}
+          </>
+        }
         actions={
           <>
             <Link href="/bounties" className={buttonVariants({ variant: "ghost", size: "sm" })}>

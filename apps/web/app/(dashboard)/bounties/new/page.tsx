@@ -36,6 +36,8 @@ export default function NewBountyPage() {
   const [target, setTarget] = useState(5);
   const [priority, setPriority] = useState(1);
   const [budget, setBudget] = useState("500");
+  const [sponsorName, setSponsorName] = useState("");
+  const [sponsorUrl, setSponsorUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,6 +91,8 @@ export default function NewBountyPage() {
         target_per_cell: target,
         priority,
         budget_cents: budgetCents,
+        sponsor_name: sponsorName.trim() || null,
+        sponsor_url: sponsorUrl.trim() || null,
         status: "active",
         source: "manual",
       });
@@ -241,6 +245,18 @@ export default function NewBountyPage() {
             </Field>
             <Field label="Total budget ($)" htmlFor="budget" className="col-span-2">
               <Input id="budget" inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} required />
+            </Field>
+          </div>
+
+          <div className="space-y-3 rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">
+              Sponsors fund collection; the resulting dataset is published free for everyone (CC BY 4.0, no images).
+            </p>
+            <Field label="Sponsor (optional)" htmlFor="sponsor">
+              <Input id="sponsor" value={sponsorName} onChange={(e) => setSponsorName(e.target.value)} maxLength={120} placeholder="e.g. City Stormwater Office" />
+            </Field>
+            <Field label="Sponsor link (optional)" htmlFor="sponsor-url">
+              <Input id="sponsor-url" type="url" value={sponsorUrl} onChange={(e) => setSponsorUrl(e.target.value)} maxLength={300} placeholder="https://" />
             </Field>
           </div>
 

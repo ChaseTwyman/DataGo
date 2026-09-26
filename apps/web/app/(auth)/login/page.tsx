@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { Hexagon, LoaderCircle, UserRound } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
@@ -129,6 +130,13 @@ function Login() {
             <ErrorBox message={error} />
           </CardContent>
         </Card>
+        <p className="text-center text-sm text-muted-foreground">
+          Just want the data?{" "}
+          <Link href="/data" className="font-medium text-foreground underline underline-offset-4">
+            Browse open datasets
+          </Link>{" "}
+          — free, no login.
+        </p>
       </div>
     </main>
   );

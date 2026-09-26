@@ -2,6 +2,7 @@
 import {
   ClipboardCheck,
   Database,
+  Globe,
   FlaskConical,
   Hexagon,
   LogOut,
@@ -26,7 +27,10 @@ const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/red-team", label: "Red team", icon: Swords },
 ];
-const SECONDARY = [{ href: "/protocols", label: "Protocols", icon: FlaskConical }];
+const SECONDARY = [
+  { href: "/protocols", label: "Protocols", icon: FlaskConical },
+  { href: "/data", label: "Open data", icon: Globe },
+];
 
 export function Sidebar({ session, onSignOut }: { session: StoredSession; onSignOut: () => void }) {
   const pathname = usePathname();
