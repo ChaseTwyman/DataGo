@@ -1,11 +1,13 @@
+import Feather from "@expo/vector-icons/Feather";
 import { Redirect, Tabs } from "expo-router";
-import { Text, type ColorValue } from "react-native";
+import { StyleSheet, type ColorValue } from "react-native";
 import { useApp } from "../../src/state/appStore";
-import { C } from "../../src/ui/theme";
+import type { IconName } from "../../src/ui/components";
+import { C, F, TRACK } from "../../src/ui/theme";
 
-const icon = (glyph: string) =>
+const icon = (name: IconName) =>
   function TabIcon({ color }: { color: ColorValue }) {
-    return <Text style={{ color, fontSize: 20 }}>{glyph}</Text>;
+    return <Feather name={name} size={22} color={color as string} />;
   };
 
 export default function TabsLayout() {
@@ -14,16 +16,20 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: C.surface },
+        headerStyle: { backgroundColor: C.bg },
+        headerShadowVisible: false,
         headerTintColor: C.text,
-        tabBarStyle: { backgroundColor: C.surface, borderTopColor: C.border, minHeight: 56 },
-        tabBarActiveTintColor: C.accent,
+        headerTitleAlign: "left",
+        headerTitleStyle: { fontFamily: F.display, fontSize: 17, letterSpacing: TRACK.wide },
+        tabBarStyle: { backgroundColor: C.bg, borderTopColor: C.hairline, borderTopWidth: StyleSheet.hairlineWidth, minHeight: 56 },
+        tabBarLabelStyle: { fontFamily: F.display, fontSize: 12, letterSpacing: TRACK.label },
+        tabBarActiveTintColor: C.text,
         tabBarInactiveTintColor: C.muted,
       }}
     >
-      <Tabs.Screen name="map" options={{ title: "Map", tabBarIcon: icon("⬡"), headerShown: false }} />
-      <Tabs.Screen name="foryou" options={{ title: "For you", tabBarIcon: icon("★") }} />
-      <Tabs.Screen name="wallet" options={{ title: "Wallet", tabBarIcon: icon("$") }} />
+      <Tabs.Screen name="map" options={{ title: "MAP", tabBarIcon: icon("map"), headerShown: false }} />
+      <Tabs.Screen name="foryou" options={{ title: "FOR YOU", tabBarIcon: icon("crosshair") }} />
+      <Tabs.Screen name="wallet" options={{ title: "WALLET", tabBarIcon: icon("credit-card") }} />
     </Tabs>
   );
 }

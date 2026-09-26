@@ -16,8 +16,9 @@ import { ChecklistOverlay } from "../../src/capture/ChecklistOverlay";
 import { deviceInfo, photoCapturer, uploadJpeg } from "../../src/capture/nativeCapture";
 import { useCaptureGate } from "../../src/capture/useCaptureGate";
 import { useCaptureStore, type ActiveCapture } from "../../src/state/captureStore";
-import { Button, Muted, StatusPill } from "../../src/ui/components";
-import { C, S, TOUCH } from "../../src/ui/theme";
+import { Body, Button, Heading, Icon, IconButton, Label, StatusPill } from "../../src/ui/components";
+import { countdownLabel, indexLabel, tPlus } from "../../src/ui/telemetry";
+import { C, F, R, S, T, TOUCH, TRACK } from "../../src/ui/theme";
 import { CaptionList } from "../../src/voice/CaptionList";
 import { CAPTURE_DONE_RESPONSE_INSTRUCTIONS } from "../../src/voice/instructions";
 import type { ToolContext } from "../../src/voice/tools";
@@ -36,17 +37,20 @@ export default function CaptureScreen() {
   if (!active) {
     return (
       <View style={[styles.center, { padding: S.xl, gap: S.lg }]}>
-        <StatusPill tone="bad" text="This capture session is no longer available" />
-        <Button title="Back to bounties" onPress={() => router.replace("/foryou")} />
+        <Icon name="slash" size={28} color={C.muted} />
+        <Heading size={T.title}>Session unavailable</Heading>
+        <Body color={C.muted}>This capture session has ended or expired. Start a new one from the bounty briefing.</Body>
+        <Button title="Back to bounties" icon="arrow-left" onPress={() => router.replace("/foryou")} />
       </View>
     );
   }
   if (!perm.hasPermission) {
     return (
       <View style={[styles.center, { padding: S.xl, gap: S.lg }]}>
-        <StatusPill tone="warn" text="Camera permission needed" />
-        <Muted>GroundTruth only takes photos inside the app. Nothing is imported from your library.</Muted>
-        <Button title="Allow camera" onPress={() => void perm.requestPermission()} />
+        <Icon name="camera-off" size={28} color={C.amber} />
+        <Heading size={T.title}>Camera access needed</Heading>
+        <Body color={C.muted}>GroundTruth only takes photos inside the app. Nothing is imported from your library.</Body>
+        <Button title="Allow camera" icon="camera" onPress={() => void perm.requestPermission()} />
         <Button title="Cancel" kind="secondary" onPress={() => router.back()} />
       </View>
     );
@@ -217,30 +221,48 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
       {/* top: captions + controls */}
       <View style={[styles.topBar, { paddingTop: insets.top + S.sm }]}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: S.sm }}>
-          <Pressable accessibilityRole="button" onPress={() => { send({ type: "END", reason: "user_cancelled" }); router.back(); }} style={styles.iconBtn}>
-            <Text style={styles.iconBtnText}>✕</Text>
-          </Pressable>
-          <StatusPill
-            tone={voice.status === "open" ? (voice.agentSpeaking ? "info" : "ok") : voice.status === "error" ? "bad" : "neutral"}
-            text={voice.status === "open" ? (voice.agentSpeaking ? "Guide speaking" : "Guide listening") : `Voice ${voice.status}`}
-            style={{ backgroundColor: C.overlay }}
+          <IconButton
+            icon="x"
+            label="End capture"
+            onPress={() => {
+              send({ type: "END", reason: "user_cancelled" });
+              router.back();
+            }}
           />
-          <Pressable accessibilityRole="switch" accessibilityState={{ checked: voiceOn }} onPress={() => setVoiceOn((v) => !v)} style={styles.iconBtn}>
-            <Text style={styles.iconBtnText}>{voiceOn ? "🎙" : "🔇"}</Text>
-          </Pressable>
+          <View style={{ alignItems: "center", gap: 4 }}>
+            <MissionClock />
+            <StatusPill
+              tone={voice.status === "open" ? (voice.agentSpeaking ? "info" : "ok") : voice.status === "error" ? "bad" : "neutral"}
+              text={voice.status === "open" ? (voice.agentSpeaking ? "Guide speaking" : "Guide listening") : `Voice ${voice.status}`}
+              icon={voice.status === "open" ? (voice.agentSpeaking ? "volume-2" : "mic") : voiceOn ? "radio" : "mic-off"}
+              style={{ backgroundColor: C.scrim, alignSelf: "center" }}
+            />
+          </View>
+          <IconButton
+            icon={voiceOn ? "mic" : "mic-off"}
+            label={voiceOn ? "Turn voice guide off" : "Turn voice guide on"}
+            role="switch"
+            checked={voiceOn}
+            color={voiceOn ? C.text : C.amber}
+            onPress={() => setVoiceOn((v) => !v)}
+          />
         </View>
         <View style={styles.captions}>
           <CaptionList captions={voice.captions} max={3} />
-          {voice.error ? <Text style={{ color: C.red, marginTop: 4 }}>Voice: {voice.error}</Text> : null}
+          {voice.error ? (
+            <View style={{ flexDirection: "row", gap: S.sm, marginTop: S.sm }}>
+              <Icon name="alert-octagon" size={15} color={C.red} style={{ marginTop: 2 }} />
+              <Text style={{ color: C.red, fontFamily: F.body, fontSize: 15, flex: 1 }}>Voice: {voice.error}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
       {showChallenge ? (
-        <View style={styles.challenge} pointerEvents="none">
+        <View style={styles.challenge} pointerEvents="none" accessibilityLiveRegion="assertive">
+          <Label color={C.amber}>Challenge</Label>
           <Text style={styles.challengeText}>{session.challenge.instruction}</Text>
-          <Text style={{ color: C.text, fontSize: 18, marginTop: S.sm }}>
-            {state.phase === "capturing" ? "Capturing…" : countdown !== null ? `Starting in ${countdown}` : ""}
-          </Text>
+          <Text style={styles.challengeClock}>{state.phase === "capturing" ? "CAPTURING" : countdown !== null ? countdownLabel(countdown) : ""}</Text>
         </View>
       ) : null}
 
@@ -248,9 +270,13 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
       <View style={[styles.sheet, { paddingBottom: insets.bottom + S.md }]}>
         {ended ? (
           <View style={{ gap: S.md }}>
-            <StatusPill tone={state.endReason === "unsafe" ? "warn" : "neutral"} text={state.endReason === "unsafe" ? "Session ended for your safety" : "Session ended"} />
-            <Muted>There is no penalty for ending a session.</Muted>
-            <Button title="Back to bounties" onPress={() => router.replace("/foryou")} />
+            <StatusPill
+              tone={state.endReason === "unsafe" ? "warn" : "neutral"}
+              icon={state.endReason === "unsafe" ? "shield" : "square"}
+              text={state.endReason === "unsafe" ? "Session ended for your safety" : "Session ended"}
+            />
+            <Body>There is no penalty for ending a session.</Body>
+            <Button title="Back to bounties" icon="arrow-left" onPress={() => router.replace("/foryou")} />
           </View>
         ) : inNotes ? (
           <NotesForm
@@ -264,12 +290,16 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
         ) : (
           <View style={{ gap: S.md }}>
             <ChecklistOverlay protocol={protocol} state={state} />
-            {state.lastHint && state.phase !== "ready" && !state.degraded ? <Text style={{ color: C.text, fontSize: 15 }}>💡 {state.lastHint}</Text> : null}
+            {state.lastHint && state.phase !== "ready" && !state.degraded ? (
+              <View style={{ flexDirection: "row", gap: S.sm, alignItems: "flex-start" }}>
+                <Icon name="corner-down-right" size={16} color={C.accent} style={{ marginTop: 3 }} />
+                <Text style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: 17, lineHeight: 23, flex: 1 }}>{state.lastHint}</Text>
+              </View>
+            ) : null}
             <Shutter locked={state.phase !== "ready"} reason={gate.lock} busy={showChallenge} onPress={onShutter} />
-            <Muted style={{ textAlign: "center", fontSize: 12 }}>
-              Say “capture” or tap · checks {state.frameChecks}/{state.frameLimit}
-              {state.error && !state.degraded ? ` · ${state.error}` : ""}
-            </Muted>
+            <Label style={{ textAlign: "center" }}>
+              {`Say “capture” or tap · checks ${state.frameChecks}/${state.frameLimit}${state.error && !state.degraded ? ` · ${state.error}` : ""}`}
+            </Label>
           </View>
         )}
       </View>
@@ -277,7 +307,27 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
   );
 }
 
+/** T+MM:SS since the capture screen opened. Own component so the 1 s tick re-renders only this. */
+function MissionClock() {
+  const [t0] = useState(() => Date.now());
+  const [now, setNow] = useState(t0);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <Text style={styles.clock} accessibilityLabel={`Elapsed ${Math.floor((now - t0) / 1000)} seconds`}>
+      {tPlus(now - t0)}
+    </Text>
+  );
+}
+
+/**
+ * Unlocked: solid white bar, black type (maximum contrast in sunlight). Locked: black with an amber
+ * outline, a lock icon and the single most important missing item.
+ */
 function Shutter({ locked, reason, busy, onPress }: { locked: boolean; reason: string | null; busy: boolean; onPress: () => void }) {
+  const fg = busy ? C.text : locked ? C.amber : C.bg;
   return (
     <Pressable
       accessibilityRole="button"
@@ -287,11 +337,17 @@ function Shutter({ locked, reason, busy, onPress }: { locked: boolean; reason: s
       disabled={busy}
       style={({ pressed }) => [
         styles.shutter,
-        { backgroundColor: locked ? C.surface2 : C.green, borderColor: locked ? C.amber : C.green, opacity: pressed ? 0.8 : 1 },
+        busy
+          ? { backgroundColor: C.surface2, borderColor: C.hairline }
+          : locked
+            ? { backgroundColor: C.bg, borderColor: C.amber }
+            : { backgroundColor: C.text, borderColor: C.text },
+        pressed && { opacity: 0.8 },
       ]}
     >
-      <Text style={{ color: locked ? C.amber : "#032010", fontSize: 18, fontWeight: "800" }} numberOfLines={2}>
-        {busy ? "Capturing…" : locked ? `🔒 ${reason ?? "Locked"}` : "● Capture"}
+      <Icon name={busy ? "aperture" : locked ? "lock" : "aperture"} size={22} color={fg} />
+      <Text style={[styles.shutterText, { color: fg }]} numberOfLines={2}>
+        {busy ? "CAPTURING…" : locked ? (reason ?? "Locked") : "CAPTURE"}
       </Text>
     </Pressable>
   );
@@ -313,16 +369,19 @@ function NotesForm({
   error: string | null;
 }) {
   return (
-    <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ gap: S.md }}>
-      <StatusPill tone="ok" text="Captured — answer by voice or tap" />
-      {questions.map((q) => (
-        <View key={q.id} style={{ gap: S.xs }}>
-          <Text style={{ color: C.text, fontSize: 16, fontWeight: "600" }}>{q.question}</Text>
+    <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ gap: S.lg }} keyboardShouldPersistTaps="handled">
+      <StatusPill tone="ok" text="Captured · answer by voice or tap" icon="check-circle" />
+      {questions.map((q, i) => (
+        <View key={q.id} style={{ gap: S.sm }}>
+          <View style={{ flexDirection: "row", gap: S.sm, alignItems: "flex-start" }}>
+            <Text style={styles.qIndex}>{indexLabel(i)}</Text>
+            <Text style={{ color: C.text, fontFamily: F.bodySemi, fontSize: 17, lineHeight: 23, flex: 1 }}>{q.question}</Text>
+          </View>
           <QuestionInput q={q} value={notes[q.id]} onAnswer={(v) => onAnswer(q.id, v)} />
         </View>
       ))}
       {error ? <StatusPill tone="bad" text={error} /> : null}
-      <Button title={uploading ? "Uploading…" : "Submit for verification"} onPress={onSubmit} loading={uploading} />
+      <Button title={uploading ? "Uploading…" : "Submit for verification"} icon="upload" onPress={onSubmit} loading={uploading} />
     </ScrollView>
   );
 }
@@ -342,12 +401,10 @@ function QuestionInput({ q, value, onAnswer }: { q: FieldQuestion; value: unknow
               accessibilityRole="radio"
               accessibilityState={{ selected }}
               onPress={() => onAnswer(o.v)}
-              style={[styles.chip, { borderColor: selected ? C.green : C.border, backgroundColor: selected ? C.surface2 : "transparent" }]}
+              style={[styles.chip, selected ? { borderColor: C.text, backgroundColor: C.text } : { borderColor: C.hairline, backgroundColor: C.bg }]}
             >
-              <Text style={{ color: selected ? C.green : C.text, fontWeight: "700" }}>
-                {selected ? "✓ " : ""}
-                {o.label}
-              </Text>
+              {selected ? <Icon name="check" size={16} color={C.bg} /> : null}
+              <Text style={[styles.chipText, { color: selected ? C.bg : C.text }]}>{o.label}</Text>
             </Pressable>
           );
         })}
@@ -368,7 +425,8 @@ function QuestionInput({ q, value, onAnswer }: { q: FieldQuestion; value: unknow
       keyboardType={q.type === "number" ? "decimal-pad" : "default"}
       placeholder="Type an answer"
       placeholderTextColor={C.muted}
-      style={{ minHeight: TOUCH, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.text, paddingHorizontal: S.md }}
+      accessibilityLabel={q.question}
+      style={{ minHeight: TOUCH, borderBottomWidth: 1, borderColor: C.hairline, color: C.text, fontFamily: F.body, fontSize: T.body, paddingVertical: S.sm }}
     />
   );
 }
@@ -376,12 +434,36 @@ function QuestionInput({ q, value, onAnswer }: { q: FieldQuestion; value: unknow
 const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: C.bg, justifyContent: "center" },
   topBar: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: S.lg, gap: S.sm },
-  iconBtn: { minWidth: TOUCH, minHeight: TOUCH, borderRadius: TOUCH / 2, backgroundColor: C.overlay, alignItems: "center", justifyContent: "center" },
-  iconBtnText: { color: C.text, fontSize: 20 },
-  captions: { backgroundColor: C.overlay, borderRadius: 12, padding: S.md, minHeight: 56 },
-  challenge: { position: "absolute", top: "35%", left: S.lg, right: S.lg, backgroundColor: C.overlay, borderRadius: 16, padding: S.xl, alignItems: "center" },
-  challengeText: { color: C.amber, fontSize: 24, fontWeight: "900", textAlign: "center" },
-  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: C.overlay, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: S.lg },
-  shutter: { minHeight: 64, borderRadius: 32, borderWidth: 2, alignItems: "center", justifyContent: "center", paddingHorizontal: S.lg },
-  chip: { minHeight: TOUCH, minWidth: 72, borderWidth: 1, borderRadius: 10, paddingHorizontal: S.md, alignItems: "center", justifyContent: "center" },
+  clock: { color: C.text, fontFamily: F.numeralRegular, fontSize: 20, letterSpacing: TRACK.label, fontVariant: ["tabular-nums"], textShadowColor: "rgba(0,0,0,0.9)", textShadowRadius: 6 },
+  captions: { backgroundColor: C.scrim, borderRadius: R.md, padding: S.md, minHeight: 56, borderWidth: StyleSheet.hairlineWidth, borderColor: C.hairline },
+  challenge: {
+    position: "absolute",
+    top: "32%",
+    left: S.lg,
+    right: S.lg,
+    backgroundColor: C.scrim,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.amber,
+    padding: S.xl,
+    alignItems: "center",
+    gap: S.sm,
+  },
+  challengeText: { color: C.text, fontFamily: F.display, fontSize: 30, lineHeight: 34, letterSpacing: TRACK.heading, textAlign: "center", textTransform: "uppercase" },
+  challengeClock: { color: C.amber, fontFamily: F.numeral, fontSize: T.numeralHero, fontVariant: ["tabular-nums"] },
+  sheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: C.scrim,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.hairline,
+    padding: S.lg,
+  },
+  shutter: { minHeight: 68, borderRadius: R.sm, borderWidth: 2, flexDirection: "row", gap: S.md, alignItems: "center", justifyContent: "center", paddingHorizontal: S.lg },
+  shutterText: { fontFamily: F.display, fontSize: 20, letterSpacing: TRACK.heading, textTransform: "uppercase", flexShrink: 1, textAlign: "center" },
+  chip: { minHeight: TOUCH, minWidth: 72, borderWidth: 1, borderRadius: R.sm, paddingHorizontal: S.md, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center" },
+  chipText: { fontFamily: F.display, fontSize: 16, letterSpacing: TRACK.label, textTransform: "uppercase" },
+  qIndex: { color: C.muted, fontFamily: F.numeralRegular, fontSize: 17, fontVariant: ["tabular-nums"], minWidth: 22, marginTop: 1 },
 });

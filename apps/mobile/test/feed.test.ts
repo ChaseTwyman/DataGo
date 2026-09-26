@@ -9,6 +9,8 @@ const b = (id: string, match: number | null, price: number, dist = 100): BountyS
   protocol_slug: "street-flood-depth",
   protocol_name: "Street flood depth",
   safety_level: "elevated",
+  sponsor_name: null,
+  sponsor_url: null,
   center_lat: 0,
   center_lng: 0,
   radius_m: 800,

@@ -1,11 +1,11 @@
-import { formatCents, type MockVariant } from "@groundtruth/shared";
+import { type MockVariant } from "@groundtruth/shared";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useWallet } from "../../src/api/queries";
 import { useApp } from "../../src/state/appStore";
-import { Card, ErrorBox, H, Muted, StatusPill } from "../../src/ui/components";
-import { C, S, TOUCH } from "../../src/ui/theme";
+import { Divider, EmptyState, ErrorBox, Icon, Label, LoadingState, Money, Muted, Readout, Section } from "../../src/ui/components";
+import { C, F, R, S, T, TOUCH } from "../../src/ui/theme";
 import { useCountUp } from "../../src/ui/useCountUp";
 
 const VARIANTS: MockVariant[] = ["default", "screen_recapture", "missing_element"];
@@ -30,38 +30,53 @@ export default function Wallet() {
   return (
     <FlatList
       style={{ flex: 1, backgroundColor: C.bg }}
-      contentContainerStyle={{ padding: S.lg, gap: S.md }}
+      contentContainerStyle={{ padding: S.lg, paddingBottom: S.xxl }}
       data={q.data?.entries ?? []}
       keyExtractor={(e) => e.id}
-      refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => void q.refetch()} tintColor={C.accent} />}
+      refreshControl={<RefreshControl refreshing={q.isFetching && !q.isLoading} onRefresh={() => void q.refetch()} tintColor={C.text} />}
+      ItemSeparatorComponent={Divider}
       ListHeaderComponent={
-        <View style={{ gap: S.md }}>
-          <Card style={{ gap: S.xs, alignItems: "center", paddingVertical: S.xl }}>
-            <Muted>Balance (simulated)</Muted>
-            <Text style={{ color: C.green, fontSize: 48, fontWeight: "900", fontVariant: ["tabular-nums"] }} accessibilityLiveRegion="polite">
-              {shown === null ? "—" : formatCents(shown)}
-            </Text>
-            {q.data ? <StatusPill tone="info" text={`Trust score ${q.data.trust_score.toFixed(2)}`} /> : null}
-          </Card>
-          {q.error ? <ErrorBox message={q.error.message} onRetry={() => void q.refetch()} /> : null}
-          <H size={16}>History</H>
+        <View style={{ gap: S.xl, marginBottom: S.lg }}>
+          <View style={{ gap: S.xs, paddingTop: S.md }} accessibilityLiveRegion="polite">
+            <Label>Balance · simulated</Label>
+            {shown === null ? (
+              <Text style={{ color: C.muted, fontFamily: F.numeral, fontSize: T.numeralHero }}>—</Text>
+            ) : (
+              <Money cents={shown} size={T.numeralHero} />
+            )}
+          </View>
+          {q.data ? (
+            <View style={{ flexDirection: "row", gap: S.xl }}>
+              <Readout label="Trust score" value={q.data.trust_score.toFixed(2)} size={28} />
+              <Readout label="Entries" value={String(q.data.entries.length)} size={28} />
+            </View>
+          ) : null}
+          {q.error ? <ErrorBox title="Could not load wallet" message={q.error.message} onRetry={() => void q.refetch()} /> : null}
+          <Section title="History" />
         </View>
       }
-      ListEmptyComponent={q.isLoading ? <Muted>Loading…</Muted> : <Muted>No payouts yet. Accepted observations show up here.</Muted>}
-      renderItem={({ item }) => (
-        <Card style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={{ color: C.text, fontWeight: "600" }}>{item.bounty_title ?? item.kind}</Text>
-            <Muted>
-              {item.kind} · {new Date(item.created_at).toLocaleString()}
-            </Muted>
+      ListEmptyComponent={
+        q.isLoading ? (
+          <LoadingState label="Loading ledger…" />
+        ) : q.error ? null : (
+          <EmptyState icon="inbox" title="No payouts yet" body="Accepted observations are credited here the moment verification passes." />
+        )
+      }
+      renderItem={({ item }) => {
+        const credit = item.amount_cents >= 0;
+        return (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: S.md, paddingVertical: S.md, minHeight: TOUCH + 12 }}>
+            <Icon name={credit ? "arrow-down-left" : "arrow-up-right"} size={18} color={credit ? C.green : C.red} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: T.body }} numberOfLines={1}>
+                {item.bounty_title ?? item.kind}
+              </Text>
+              <Label>{`${item.kind} · ${new Date(item.created_at).toLocaleString()}`}</Label>
+            </View>
+            <Money cents={item.amount_cents} size={24} color={credit ? C.green : C.red} prefix={credit ? "+" : ""} />
           </View>
-          <Text style={{ color: item.amount_cents >= 0 ? C.green : C.red, fontWeight: "800", fontSize: 18 }}>
-            {item.amount_cents >= 0 ? "+" : "−"}
-            {formatCents(Math.abs(item.amount_cents))}
-          </Text>
-        </Card>
-      )}
+        );
+      }}
       ListFooterComponent={__DEV__ ? <DevSettings /> : null}
     />
   );
@@ -74,37 +89,38 @@ function DevSettings() {
   const health = useApp((s) => s.health);
   const mode = useApp((s) => s.authMode);
   return (
-    <Card style={{ gap: S.sm, marginTop: S.xl }}>
-      <H size={16}>Developer</H>
+    <Section title="Developer" style={{ marginTop: S.xxl }}>
       <Muted>
         Backend: {health?.backend ?? "?"} · auth: {mode ?? "?"} · mock Grok: {health?.mock_grok ? "on" : "off"} · realtime:{" "}
         {health?.realtime ? "on" : "polling"}
       </Muted>
-      <Muted>Mock variant (x-mock-variant header):</Muted>
+      <Label>Mock variant (x-mock-variant header)</Label>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: S.sm }}>
-        {VARIANTS.map((v) => (
-          <Pressable
-            key={v}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: v === variant }}
-            onPress={() => setVariant(v)}
-            style={{
-              minHeight: TOUCH,
-              paddingHorizontal: S.md,
-              borderRadius: 10,
-              justifyContent: "center",
-              borderWidth: 1,
-              borderColor: v === variant ? C.accent : C.border,
-              backgroundColor: v === variant ? C.surface2 : "transparent",
-            }}
-          >
-            <Text style={{ color: v === variant ? C.accent : C.text, fontWeight: "600" }}>
-              {v === variant ? "● " : "○ "}
-              {v}
-            </Text>
-          </Pressable>
-        ))}
+        {VARIANTS.map((v) => {
+          const on = v === variant;
+          return (
+            <Pressable
+              key={v}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on }}
+              onPress={() => setVariant(v)}
+              style={{
+                minHeight: TOUCH,
+                paddingHorizontal: S.md,
+                borderRadius: R.sm,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: S.sm,
+                borderWidth: 1,
+                borderColor: on ? C.text : C.hairline,
+              }}
+            >
+              <Icon name={on ? "check-circle" : "circle"} size={16} color={on ? C.text : C.muted} />
+              <Text style={{ color: on ? C.text : C.muted, fontFamily: F.bodyMedium, fontSize: T.bodySmall }}>{v}</Text>
+            </Pressable>
+          );
+        })}
       </View>
-    </Card>
+    </Section>
   );
 }

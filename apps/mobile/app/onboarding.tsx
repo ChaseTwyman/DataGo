@@ -5,17 +5,21 @@
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AudioManager } from "react-native-audio-api";
 import { useCameraPermission } from "react-native-vision-camera";
 import { api } from "../src/api";
 import { useApp } from "../src/state/appStore";
-import { Button, Card, H, Muted, StatusPill } from "../src/ui/components";
-import { C, S, TOUCH } from "../src/ui/theme";
+import { Body, Button, Divider, Heading, Icon, Label, Muted, Section, StatusPill, type IconName } from "../src/ui/components";
+import { C, F, R, S, T, TOUCH } from "../src/ui/theme";
 
 type Perm = "unknown" | "granted" | "denied";
 
+const MARK = require("../assets/splash-icon.png") as number;
+
 export default function Onboarding() {
+  const insets = useSafeAreaInsets();
   const cam = useCameraPermission();
   const [mic, setMic] = useState<Perm>("unknown");
   const [loc, setLoc] = useState<Perm>("unknown");
@@ -54,51 +58,61 @@ export default function Onboarding() {
     }
   };
 
+  const camState: Perm = cam.hasPermission ? "granted" : cam.canRequestPermission ? "unknown" : "denied";
   const permsOk = cam.hasPermission && mic === "granted" && loc === "granted";
+  const ready = adult && consent;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: C.bg }} contentContainerStyle={{ padding: S.lg, paddingTop: 72, gap: S.lg }}>
-      <H size={30}>GroundTruth</H>
-      <Muted>Get paid to capture verified, research-grade observations of the world around you. A voice guide coaches you, hands-free.</Muted>
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <ScrollView contentContainerStyle={{ padding: S.lg, paddingTop: insets.top + S.xl, gap: S.xxl, paddingBottom: S.xxl }} keyboardShouldPersistTaps="handled">
+        <View style={{ gap: S.lg }}>
+          <Image source={MARK} style={{ width: 56, height: 56 }} accessibilityIgnoresInvertColors accessibilityLabel="GroundTruth mark" />
+          <Heading size={T.hero}>GroundTruth</Heading>
+          <Body color={C.muted}>Get paid to capture verified, research-grade observations of the world around you. A voice guide coaches you, hands-free.</Body>
+        </View>
 
-      <Card style={{ gap: S.sm }}>
-        <H size={17}>1 · Permissions</H>
-        <PermRow label="Camera (in-app capture only)" state={cam.hasPermission ? "granted" : cam.canRequestPermission ? "unknown" : "denied"} />
-        <PermRow label="Microphone (voice guide)" state={mic} />
-        <PermRow label="Location, only while using the app" state={loc} />
-        <Button title={permsOk ? "All set" : "Allow access"} kind={permsOk ? "secondary" : "primary"} onPress={() => void askAll()} disabled={permsOk} />
-      </Card>
+        <Section index={0} title="Permissions">
+          <PermRow icon="camera" label="Camera" detail="In-app capture only" state={camState} />
+          <PermRow icon="mic" label="Microphone" detail="Voice field guide" state={mic} />
+          <PermRow icon="map-pin" label="Location" detail="Only while using the app" state={loc} />
+          <Button title={permsOk ? "Access granted" : "Allow access"} kind={permsOk ? "secondary" : "primary"} icon={permsOk ? "check" : "unlock"} onPress={() => void askAll()} disabled={permsOk} />
+        </Section>
 
-      <Card style={{ gap: S.sm }}>
-        <H size={17}>2 · Eligibility and license</H>
-        <Check checked={adult} onToggle={() => setAdult((v) => !v)} label="I am 18 or older (required for paid bounties)." />
-        <Check
-          checked={consent}
-          onToggle={() => setConsent((v) => !v)}
-          label="I license my accepted observations under CC BY 4.0 (“GroundTruth contributors”). Raw images stay private to approved researchers."
-        />
-      </Card>
+        <Section index={1} title="Eligibility and license">
+          <Check checked={adult} onToggle={() => setAdult((v) => !v)} label="I am 18 or older (required for paid bounties)." />
+          <Divider />
+          <Check
+            checked={consent}
+            onToggle={() => setConsent((v) => !v)}
+            label="I license my accepted observations under CC BY 4.0 (“GroundTruth contributors”). Raw images stay private to approved researchers."
+          />
+        </Section>
 
-      <Card style={{ gap: S.sm }}>
-        <H size={17}>3 · About you (optional)</H>
-        <Field value={name} onChange={setName} placeholder="Display name" />
-        <Field value={occupation} onChange={setOccupation} placeholder="Occupation (e.g. civil engineer)" />
-        <Field value={skills} onChange={setSkills} placeholder="Skills, comma separated" />
-        <Muted>Used to match you with bounties. Voice interview coming soon.</Muted>
-      </Card>
+        <Section index={2} title="About you" right={<Label>Optional</Label>}>
+          <Field label="Display name" value={name} onChange={setName} placeholder="e.g. Sam" />
+          <Field label="Occupation" value={occupation} onChange={setOccupation} placeholder="e.g. civil engineer" />
+          <Field label="Skills" value={skills} onChange={setSkills} placeholder="Comma separated" />
+          <Muted>Used to match you with bounties. Voice interview coming soon.</Muted>
+        </Section>
 
-      {err ? <StatusPill tone="bad" text={err} /> : null}
-      <Button title="Continue" onPress={() => void finish()} disabled={!adult || !consent} loading={saving} />
-      {!adult || !consent ? <Muted style={{ textAlign: "center" }}>Confirm age and license to continue.</Muted> : null}
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ gap: S.md }}>
+          {err ? <StatusPill tone="bad" text={err} /> : null}
+          <Button title="Continue" icon="arrow-right" onPress={() => void finish()} disabled={!ready} loading={saving} />
+          {!ready ? <Label style={{ textAlign: "center" }}>Confirm age and license to continue</Label> : null}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-function PermRow({ label, state }: { label: string; state: Perm }) {
+function PermRow({ icon, label, detail, state }: { icon: IconName; label: string; detail: string; state: Perm }) {
   return (
-    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 32 }}>
-      <Text style={{ color: C.text, flex: 1 }}>{label}</Text>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: S.md, minHeight: TOUCH }}>
+      <Icon name={icon} size={20} color={C.text} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: T.body }}>{label}</Text>
+        <Muted>{detail}</Muted>
+      </View>
       <StatusPill tone={state === "granted" ? "ok" : state === "denied" ? "bad" : "neutral"} text={state === "granted" ? "Allowed" : state === "denied" ? "Denied" : "Not yet"} />
     </View>
   );
@@ -109,36 +123,41 @@ function Check({ checked, onToggle, label }: { checked: boolean; onToggle: () =>
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
+      accessibilityLabel={label}
       onPress={onToggle}
-      style={{ flexDirection: "row", gap: S.md, alignItems: "center", minHeight: TOUCH }}
+      style={{ flexDirection: "row", gap: S.md, alignItems: "center", minHeight: TOUCH + 8 }}
     >
       <View
         style={{
           width: 28,
           height: 28,
-          borderRadius: 6,
-          borderWidth: 2,
-          borderColor: checked ? C.green : C.muted,
-          backgroundColor: checked ? C.green : "transparent",
+          borderRadius: R.sm,
+          borderWidth: 1.5,
+          borderColor: checked ? C.accent : C.muted,
+          backgroundColor: checked ? C.accent : "transparent",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        {checked ? <Text style={{ color: C.bg, fontWeight: "900" }}>✓</Text> : null}
+        {checked ? <Icon name="check" size={18} color={C.onAccent} /> : null}
       </View>
-      <Text style={{ color: C.text, flex: 1, fontSize: 15, lineHeight: 21 }}>{label}</Text>
+      <Body style={{ flex: 1 }}>{label}</Body>
     </Pressable>
   );
 }
 
-function Field({ value, onChange, placeholder }: { value: string; onChange: (s: string) => void; placeholder: string }) {
+function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (s: string) => void; placeholder: string }) {
   return (
-    <TextInput
-      value={value}
-      onChangeText={onChange}
-      placeholder={placeholder}
-      placeholderTextColor={C.muted}
-      style={{ minHeight: TOUCH, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.text, paddingHorizontal: S.md }}
-    />
+    <View style={{ gap: S.xs }}>
+      <Label>{label}</Label>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={C.muted}
+        accessibilityLabel={label}
+        style={{ minHeight: TOUCH, borderBottomWidth: 1, borderColor: C.hairline, color: C.text, fontFamily: F.body, fontSize: T.body, paddingVertical: S.sm }}
+      />
+    </View>
   );
 }

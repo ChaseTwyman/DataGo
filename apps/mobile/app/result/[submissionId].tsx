@@ -5,7 +5,6 @@
  */
 import {
   ChecksSchema,
-  formatCents,
   pendingChecks,
   ReasonCodeSchema,
   SubmissionStatusSchema,
@@ -15,16 +14,18 @@ import {
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { z } from "zod";
 import { api } from "../../src/api";
-import { resultView, watchSubmission } from "../../src/api/submissionWatch";
+import { resultView, watchSubmission, type ResultKind } from "../../src/api/submissionWatch";
 import { getSupabase } from "../../src/lib/supabase";
 import { preciseFix } from "../../src/lib/useUserLocation";
 import { useApp } from "../../src/state/appStore";
 import { canRetryInSession, findCaptureBySubmission, useCaptureStore } from "../../src/state/captureStore";
-import { Button, Card, H, Muted, StatusPill, type Tone } from "../../src/ui/components";
-import { C, S } from "../../src/ui/theme";
+import { Body, Button, Divider, Heading, Icon, Label, Money, Section, StatusPill, toneColor, type IconName, type Tone } from "../../src/ui/components";
+import { indexLabel } from "../../src/ui/telemetry";
+import { C, F, S, T } from "../../src/ui/theme";
 import { useCountUp } from "../../src/ui/useCountUp";
 
 /** The subset of a submission row the phone renders (realtime rows are parsed leniently). */
@@ -40,7 +41,7 @@ type ViewRow = z.infer<typeof ViewRowSchema>;
 
 const STAGE_TONE: Record<StageStatus, { tone: Tone; text: string }> = {
   pending: { tone: "neutral", text: "Waiting" },
-  running: { tone: "info", text: "Checking…" },
+  running: { tone: "info", text: "Checking" },
   pass: { tone: "ok", text: "Passed" },
   warn: { tone: "warn", text: "Warning" },
   fail: { tone: "bad", text: "Failed" },
@@ -49,8 +50,17 @@ const STAGE_TONE: Record<StageStatus, { tone: Tone; text: string }> = {
   error: { tone: "warn", text: "Needs a human" },
 };
 
+const HEADER: Record<ResultKind, { tone: Tone; icon: IconName }> = {
+  verifying: { tone: "info", icon: "loader" },
+  accepted: { tone: "ok", icon: "check-circle" },
+  needs_review: { tone: "warn", icon: "clock" },
+  protocol_reject: { tone: "bad", icon: "rotate-ccw" },
+  integrity_reject: { tone: "bad", icon: "x-circle" },
+};
+
 export default function ResultScreen() {
   const { submissionId } = useLocalSearchParams<{ submissionId: string }>();
+  const insets = useSafeAreaInsets();
   const realtime = useApp((s) => s.health?.realtime === true && s.authMode === "supabase");
   const [row, setRow] = useState<ViewRow | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -117,42 +127,62 @@ export default function ResultScreen() {
     }
   };
 
+  const head = HEADER[view.kind];
+  const color = toneColor(head.tone);
+  const hideDetail = view.kind === "integrity_reject";
+  const done = checks.filter((c) => c.status !== "pending" && c.status !== "running").length;
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: C.bg }} contentContainerStyle={{ padding: S.lg, gap: S.lg, paddingBottom: 48 }}>
-      <Card style={{ gap: S.sm, alignItems: "center", paddingVertical: S.xl, borderColor: headerColor(view.kind) }}>
-        <Text style={{ color: headerColor(view.kind), fontSize: 28, fontWeight: "900" }}>{view.title}</Text>
-        {view.kind === "accepted" && payout !== null ? (
-          <Text style={{ color: C.green, fontSize: 48, fontWeight: "900", fontVariant: ["tabular-nums"] }}>+{formatCents(payout)}</Text>
-        ) : null}
-        {view.kind === "accepted" ? <Muted>Locked price × quality multiplier, credited to your wallet.</Muted> : null}
-        {view.messages.map((m) => (
-          <Text key={m} style={{ color: C.text, fontSize: 16, textAlign: "center" }}>
-            {m}
-          </Text>
-        ))}
-      </Card>
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <ScrollView contentContainerStyle={{ padding: S.lg, gap: S.xxl, paddingBottom: S.xxl }}>
+        <View style={{ gap: S.md, paddingTop: S.md }} accessibilityLiveRegion="polite">
+          <View style={{ flexDirection: "row", alignItems: "center", gap: S.sm }}>
+            {view.kind === "verifying" ? <ActivityIndicator color={color} /> : <Icon name={head.icon} size={22} color={color} />}
+            <Heading size={T.heading} color={color}>
+              {view.title}
+            </Heading>
+          </View>
+          {row?.bounty_title ? <Label>{row.bounty_title}</Label> : null}
+          {view.kind === "accepted" && payout !== null ? (
+            <View style={{ gap: S.xs }}>
+              <Money cents={payout} size={T.numeralHero} prefix="+" />
+              <Label>Locked price × quality · credited to your wallet</Label>
+            </View>
+          ) : null}
+          {view.messages.map((m) => (
+            <Body key={m}>{m}</Body>
+          ))}
+        </View>
 
-      <Card style={{ gap: S.md }}>
-        <H size={17}>Verification</H>
-        {checks.map((c, i) => (
-          <StageRow key={c.stage} stage={c} index={i} hideDetail={view.kind === "integrity_reject"} />
-        ))}
-      </Card>
+        <Section title="Verification" right={<Label>{hideDetail ? "" : `${done}/${checks.length}`}</Label>}>
+          <View>
+            {checks.map((c, i) => (
+              <View key={c.stage}>
+                {i > 0 ? <Divider /> : null}
+                <StageRow stage={c} index={i} hideDetail={hideDetail} />
+              </View>
+            ))}
+          </View>
+        </Section>
 
-      {err ? <StatusPill tone="warn" text={`Connection: ${err}`} /> : null}
+        {err ? <StatusPill tone="warn" text={`Connection: ${err}`} icon="wifi-off" /> : null}
+      </ScrollView>
 
-      {view.kind === "protocol_reject" && view.retryable ? (
-        <Button title="Retry capture" icon="↻" onPress={() => void retry()} loading={retrying} />
-      ) : null}
       {view.kind !== "verifying" ? (
-        <Button title={view.kind === "accepted" ? "See wallet" : "Back to bounties"} kind="secondary" onPress={() => router.replace(view.kind === "accepted" ? "/wallet" : "/foryou")} />
+        <View style={[styles.footer, { paddingBottom: insets.bottom + S.md }]}>
+          {view.kind === "protocol_reject" && view.retryable ? (
+            <Button title="Retry capture" icon="rotate-ccw" onPress={() => void retry()} loading={retrying} />
+          ) : null}
+          <Button
+            title={view.kind === "accepted" ? "See wallet" : "Back to bounties"}
+            kind={view.kind === "protocol_reject" && view.retryable ? "secondary" : "primary"}
+            icon={view.kind === "accepted" ? "credit-card" : "arrow-left"}
+            onPress={() => router.replace(view.kind === "accepted" ? "/wallet" : "/foryou")}
+          />
+        </View>
       ) : null}
-    </ScrollView>
+    </View>
   );
-}
-
-function headerColor(kind: string): string {
-  return kind === "accepted" ? C.green : kind === "needs_review" ? C.amber : kind === "verifying" ? C.blue : C.red;
 }
 
 function StageRow({ stage, index, hideDetail }: { stage: StageResult; index: number; hideDetail: boolean }) {
@@ -165,12 +195,19 @@ function StageRow({ stage, index, hideDetail }: { stage: StageResult; index: num
   // Integrity rejects never reveal which layer fired: every finished stage reads the same.
   const t = hideDetail ? { tone: "neutral" as Tone, text: status === "pending" || status === "running" ? "…" : "Checked" } : STAGE_TONE[status];
   return (
-    <Animated.View style={{ opacity: fade, flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 36, gap: S.sm }}>
+    <Animated.View style={{ opacity: fade, flexDirection: "row", alignItems: "center", minHeight: 52, gap: S.md, paddingVertical: S.sm }}>
+      <Text style={styles.index}>{indexLabel(index)}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: C.text, fontSize: 15, fontWeight: "600" }}>{stage.label}</Text>
-        {!hideDetail && stage.status === "waived" ? <Muted>Weather check waived (demo)</Muted> : null}
+        <Text style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: T.body }}>{stage.label}</Text>
+        {!hideDetail && stage.status === "waived" ? <Label>Weather check waived (demo)</Label> : null}
       </View>
+      {status === "running" && !hideDetail ? <ActivityIndicator color={C.blue} size="small" /> : null}
       <StatusPill tone={t.tone} text={t.text} />
     </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  index: { color: C.muted, fontFamily: F.numeralRegular, fontSize: T.body, fontVariant: ["tabular-nums"], minWidth: 22 },
+  footer: { paddingHorizontal: S.lg, paddingTop: S.md, gap: S.sm, backgroundColor: C.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.hairline },
+});

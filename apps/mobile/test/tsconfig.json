@@ -20,6 +20,9 @@
     "../src/api/authFlow.ts",
     "../src/api/submissionWatch.ts",
     "../src/lib/feed.ts",
+    "../src/ui/theme.ts",
+    "../src/ui/contrast.ts",
+    "../src/ui/telemetry.ts",
     "../scripts/*.ts"
   ],
   "exclude": []
