@@ -28,9 +28,10 @@ export default function CaptureScreen() {
   const active = useCaptureStore((s) => (sessionId ? s.bySession[sessionId] : undefined));
   const perm = useCameraPermission();
 
+  const { hasPermission, canRequestPermission, requestPermission } = perm;
   useEffect(() => {
-    if (!perm.hasPermission && perm.canRequestPermission) void perm.requestPermission();
-  }, [perm]);
+    if (!hasPermission && canRequestPermission) void requestPermission();
+  }, [hasPermission, canRequestPermission, requestPermission]);
 
   if (!active) {
     return (
@@ -132,8 +133,10 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
       saveNote: (id, value) => send({ type: "NOTE", id, value }),
       reportUnsafe: () => send({ type: "END", reason: "unsafe" }),
       endSession: (reason) => {
-        if (gate.stateRef.current.phase === "notes") void submit();
-        else if (!["uploading", "done"].includes(gate.stateRef.current.phase)) send({ type: "END", reason });
+        const phase = gate.stateRef.current.phase;
+        if (phase === "notes") void submit();
+        // Never end mid-burst or mid-upload; the burst finishes and the agent can ask again.
+        else if (phase === "locating" || phase === "framing" || phase === "ready") send({ type: "END", reason });
       },
     }),
     [gate, protocol, send, submit],

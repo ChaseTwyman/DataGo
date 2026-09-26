@@ -120,8 +120,11 @@ export function deviceOk(d: DeviceChecks): boolean {
 /** Shutter unlock rule. */
 export function isUnlocked(s: GateState): boolean {
   if (!deviceOk(s.device)) return false;
+  // A known screen/print flag survives degraded mode: degrading drops the need for fresh green
+  // frames, it never erases evidence of a recapture.
+  if (s.screenSuspected) return false;
   if (s.degraded) return true;
-  return s.greenStreak >= GREEN_STREAK_TO_UNLOCK && !s.screenSuspected;
+  return s.greenStreak >= GREEN_STREAK_TO_UNLOCK;
 }
 
 function derivePhase(s: GateState): GateState {
@@ -177,6 +180,8 @@ export function gateReducer(protocol: Protocol) {
       }
 
       case "TICK": {
+        // degraded describes the conditions the burst was taken under; freeze it after capture starts
+        if (!PRE_CAPTURE.includes(s.phase)) return s;
         if (s.inFlightSince !== null && e.now - s.inFlightSince >= DEGRADE_AFTER_MS) {
           return derivePhase(markTrouble({ ...s, troubleSince: s.troubleSince ?? s.inFlightSince }, e.now));
         }
@@ -273,8 +278,8 @@ export function lockReason(protocol: Protocol, s: GateState): string | null {
   if (!d.insideArea) return "Move into the bounty area";
   if (!d.tiltOk) return "Hold the phone level";
   if (!d.steady) return "Hold steady";
-  if (s.degraded) return null;
   if (s.screenSuspected) return "Point at the real scene, not a screen or print";
+  if (s.degraded) return null;
   if (!s.lastFrame) return "Checking the frame…";
   const missing = protocol.capture.required_elements.find((el) => !s.elements[el.id]);
   if (missing) return `Show the ${missing.label.toLowerCase()}`;

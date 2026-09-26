@@ -153,6 +153,23 @@ describe("gate: degraded mode", () => {
     expect(s.phase).toBe("ready");
   });
 
+  it("degraded mode never unlocks over a known screen/print flag", () => {
+    const screen = frame({ suspected_screen_or_print: { value: true, confidence: 0.9 } });
+    let s = run([{ type: "DEVICE", checks: GOOD_DEVICE }, { type: "FRAME_REQUESTED", now: 0 }, { type: "FRAME_RESULT", result: screen, now: 100 }]);
+    s = run([{ type: "FRAME_ERROR", now: 200 }, { type: "FRAME_ERROR", now: 10_200 }], s);
+    expect(s.degraded).toBe(true);
+    expect(isUnlocked(s)).toBe(false);
+    expect(s.phase).toBe("framing");
+    expect(lockReason(streetFloodDepth, s)).toMatch(/screen or print/);
+  });
+
+  it("degraded is frozen once the capture starts", () => {
+    let s = run([{ type: "DEVICE", checks: GOOD_DEVICE }, ...green(0), ...green(1200), { type: "FRAME_REQUESTED", now: 2400 }, { type: "TRIGGER" }]);
+    s = run([{ type: "TICK", now: 20_000 }], s);
+    expect(s.phase).toBe("challenge");
+    expect(s.degraded).toBe(false);
+  });
+
   it("degraded still requires the device checks", () => {
     let s = run([{ type: "DEVICE", checks: GOOD_DEVICE }, { type: "FRAME_ERROR", now: 0 }, { type: "FRAME_ERROR", now: 10_000 }]);
     s = reduce(s, { type: "DEVICE", checks: { ...GOOD_DEVICE, tiltOk: false } });

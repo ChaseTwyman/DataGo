@@ -17,6 +17,10 @@ const PASTED_EAS_OWNER: string | undefined = undefined;
 const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID || PASTED_EAS_PROJECT_ID;
 const EAS_OWNER = process.env.EAS_OWNER || PASTED_EAS_OWNER;
 
+/** A free Personal Team may need a globally unique id: IOS_BUNDLE_ID=com.yourname.groundtruth. */
+const IOS_BUNDLE_ID = process.env.IOS_BUNDLE_ID || "dev.groundtruth.app";
+const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE || "dev.groundtruth.app";
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "GroundTruth",
@@ -28,7 +32,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: "dark",
   backgroundColor: "#0B0F14",
   ios: {
-    bundleIdentifier: "dev.groundtruth.app",
+    bundleIdentifier: IOS_BUNDLE_ID,
     supportsTablet: false,
     infoPlist: {
       NSCameraUsageDescription: CAMERA,
@@ -42,7 +46,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   android: {
-    package: "dev.groundtruth.app",
+    package: ANDROID_PACKAGE,
     permissions: [
       "android.permission.CAMERA",
       "android.permission.RECORD_AUDIO",
@@ -62,7 +66,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       { locationWhenInUsePermission: LOCATION, isIosBackgroundLocationEnabled: false, isAndroidBackgroundLocationEnabled: false },
     ],
     ["expo-sensors", { motionPermission: "GroundTruth checks that the phone is level and steady before capture." }],
-    ["expo-notifications", {}],
+    // No expo-notifications: installing it auto-applies a plugin that adds the aps-environment
+    // (push) entitlement, which a free Apple ID "Personal Team" cannot sign. P1 local
+    // notifications would re-add it with a plugin that strips that entitlement.
     [
       "react-native-audio-api",
       {

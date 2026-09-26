@@ -145,6 +145,10 @@ export class RealtimeVoiceSession {
   private responseInProgress = false;
   private currentResponseId: string | null = null;
   private readonly droppedResponses = new Set<string>();
+  /** We asked for a response (response.create / force_message) but have no id for it yet. */
+  private awaitingResponseId = false;
+  /** Barge-in happened while awaiting that id: drop the response once its id arrives. */
+  private dropNextResponse = false;
   private pendingCalls = 0;
   private needFollowUp = false;
   private followUpScheduled = false;
@@ -299,6 +303,7 @@ export class RealtimeVoiceSession {
     this.openerTimer = null;
     // The server runs a full response lifecycle for it; mark busy now so nothing interleaves.
     this.responseInProgress = true;
+    this.awaitingResponseId = true;
     this.send(forceMessageEvent(this.opts.opener, false));
   }
 
@@ -316,6 +321,9 @@ export class RealtimeVoiceSession {
       case "response_created":
         this.responseInProgress = true;
         this.currentResponseId = ev.responseId;
+        this.awaitingResponseId = false;
+        if (this.dropNextResponse && ev.responseId) this.droppedResponses.add(ev.responseId);
+        this.dropNextResponse = false;
         this.opts.onAgentSpeaking?.(true);
         break;
       case "audio_delta": {
@@ -328,7 +336,9 @@ export class RealtimeVoiceSession {
         break;
       }
       case "response_done":
+        if (ev.status === "failed") this.opts.onError?.("response failed");
         this.responseInProgress = false;
+        this.awaitingResponseId = false;
         this.currentResponseId = null;
         void this.afterResponseDone();
         break;
@@ -362,7 +372,11 @@ export class RealtimeVoiceSession {
       case "error":
         // A rejected response.create (e.g. "active response in progress") never gets
         // response.created/done; don't let the optimistic busy flag wedge the session.
-        if (!this.currentResponseId) this.responseInProgress = false;
+        if (!this.currentResponseId) {
+          this.responseInProgress = false;
+          this.awaitingResponseId = false;
+          this.dropNextResponse = false;
+        }
         this.opts.onError?.(ev.message);
         this.opts.log?.("[voice] server error", ev.code, ev.message);
         break;
@@ -383,6 +397,7 @@ export class RealtimeVoiceSession {
     this.userSpeaking = true;
     this.opts.sink.clear();
     if (this.currentResponseId) this.droppedResponses.add(this.currentResponseId);
+    else if (this.awaitingResponseId) this.dropNextResponse = true;
     // server_vad will answer the user's turn itself; a queued follow-up would collide with it.
     this.needFollowUp = false;
     this.opts.onAgentSpeaking?.(false);
@@ -430,8 +445,13 @@ export class RealtimeVoiceSession {
     if (this.closed || this.pendingCalls > 0 || this.responseInProgress || this.followUpScheduled) return;
     if (!this.needFollowUp && !this.endRequested) return;
     this.followUpScheduled = true;
-    await this.opts.sink.whenIdle();
-    this.followUpScheduled = false;
+    try {
+      await this.opts.sink.whenIdle();
+    } catch {
+      /* treat a failed drain as idle */
+    } finally {
+      this.followUpScheduled = false;
+    }
     if (this.closed || this.pendingCalls > 0 || this.responseInProgress) return;
     if (this.needFollowUp) {
       this.needFollowUp = false;
@@ -443,6 +463,7 @@ export class RealtimeVoiceSession {
 
   private requestResponse(instructions?: string): void {
     this.responseInProgress = true; // optimistic, until response.created/done arrive
+    this.awaitingResponseId = true;
     this.send(instructions ? { type: "response.create", response: { instructions } } : { type: "response.create" });
   }
 

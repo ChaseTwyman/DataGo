@@ -271,6 +271,35 @@ describe("RealtimeVoiceSession: function calls", () => {
     expect(ends).toEqual(["ended by agent"]);
   });
 
+  it("barge-in before response.created still drops that response", async () => {
+    const { s, sock, sink, timers } = setup();
+    sock.open();
+    s.setCameraStatus({ missing: [], hint: "Hold still.", ready: true });
+    timers.advance(1000); // sends response.create, no id yet
+    expect(sock.types()).toContain("response.create");
+    sock.server({ type: "input_audio_buffer.speech_started" });
+    sock.server({ type: "response.created", response: { id: "rX" } });
+    sock.server({ type: "response.output_audio.delta", response_id: "rX", delta: AUDIO });
+    expect(sink.queued).toBe(0);
+    sock.server({ type: "response.created", response: { id: "rY" } });
+    sock.server({ type: "response.output_audio.delta", response_id: "rY", delta: AUDIO });
+    expect(sink.queued).toBe(1);
+  });
+
+  it("a rejecting sink.whenIdle does not wedge follow-ups", async () => {
+    const { sock, sink } = setup();
+    let fail = true;
+    const orig = sink.whenIdle.bind(sink);
+    sink.whenIdle = () => (fail ? ((fail = false), Promise.reject(new Error("audio died"))) : orig());
+    sock.open();
+    sock.server({ type: "response.created", response: { id: "r1" } });
+    sock.server({ type: "response.function_call_arguments.done", name: "a", call_id: "c1", arguments: "{}" });
+    sock.server({ type: "response.done", response: { id: "r1" } });
+    await flush();
+    await flush();
+    expect(sock.types().filter((t) => t === "response.create")).toHaveLength(1);
+  });
+
   it("barge-in cancels a queued follow-up (server VAD answers the user's turn instead)", async () => {
     const { sock, sink } = setup();
     sock.open();

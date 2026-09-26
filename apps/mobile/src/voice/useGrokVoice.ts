@@ -64,8 +64,14 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
     await deactivateVoiceAudioSession();
   }, []);
 
+  /** Bumped by every connect/disconnect; an in-flight connect() bails out when it changes. */
+  const genRef = useRef(0);
+  const connectingRef = useRef(false);
+
   const disconnect = useCallback(
     async (reason = "closed by user") => {
+      genRef.current++;
+      connectingRef.current = false;
       sessionRef.current?.close(reason);
       await teardown();
     },
@@ -73,13 +79,20 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
   );
 
   const connect = useCallback(async () => {
-    if (sessionRef.current) return;
+    // Synchronous re-entrancy guard: set before the first await so a double tap / double effect
+    // cannot start two mics, players, and sockets.
+    if (sessionRef.current || connectingRef.current) return;
+    connectingRef.current = true;
+    const gen = ++genRef.current;
+    const stale = () => genRef.current !== gen;
     setError(null);
     setCaptions([]);
     setStatus("connecting");
     try {
       if (!(await ensureMicPermission())) throw new Error("Microphone permission denied");
+      if (stale()) return;
       await activateVoiceAudioSession();
+      if (stale()) return;
       const player = new QueuePlayer();
       playerRef.current = player;
       const mode = modeRef.current;
@@ -127,14 +140,17 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
         api.voiceToken(),
         mic.start((chunk) => sessionRef.current?.appendAudio(chunk)),
       ]);
-      if (sessionRef.current !== session) return; // disconnected meanwhile
+      if (stale() || sessionRef.current !== session) return; // disconnected meanwhile
       const url = token.url?.startsWith("wss://") ? token.url : undefined;
       session.connect(token.token, url);
     } catch (e) {
+      if (stale()) return;
       setError(e instanceof Error ? e.message : String(e));
       setStatus("error");
       sessionRef.current?.close("connect failed");
       await teardown();
+    } finally {
+      if (!stale()) connectingRef.current = false;
     }
   }, [teardown]);
 
