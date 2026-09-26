@@ -28,6 +28,8 @@ export interface GrokJSONArgs<T> {
    * a retried 60 s timeout silently doubled verification to 120 s (and the cost) on Vercel.
    */
   maxRetries?: number;
+  /** Reasoning models only (grok-4.7 defaults to "high"). Sent as Responses `reasoning.effort`. */
+  reasoningEffort?: "low" | "medium" | "high" | "xhigh";
   /** Server-side tools (e.g. web_search, x_search) for P1 features. */
   tools?: { type: "web_search" | "x_search" }[];
   /** Deterministic fixture returned when MOCK_GROK=1. */
@@ -67,6 +69,7 @@ export async function grokJSON<T>(args: GrokJSONArgs<T>): Promise<T> {
           ],
           text: { format: { type: "json_schema", name: args.name, schema: args.schema, strict: true } },
           ...(args.tools ? { tools: args.tools as never } : {}),
+          ...(args.reasoningEffort ? { reasoning: { effort: args.reasoningEffort as never } } : {}),
         },
         { timeout: args.timeoutMs ?? 30_000, ...(args.maxRetries !== undefined ? { maxRetries: args.maxRetries } : {}) },
       );

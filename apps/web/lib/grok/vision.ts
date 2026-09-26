@@ -91,6 +91,7 @@ export async function verifyCapture(args: {
     // retry then doubled it. Must stay under the route/after() limit (300 s on Vercel Hobby).
     timeoutMs: args.timeoutMs ?? 150_000,
     maxRetries: 0,
+    reasoningEffort: grokEnv.verificationEffort,
     mock: () => mockVerification(args.protocol, args.variant),
   });
 }

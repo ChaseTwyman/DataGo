@@ -117,6 +117,21 @@ describe("real path (stubbed SDK)", () => {
     const challenge = streetFloodDepth.capture.challenges[0]!;
     await verifyCapture({ protocol: streetFloodDepth, challenge, framesBase64: ["a"], intervalMs: 600 }).catch(() => undefined);
     expect(create.mock.calls[0]![1]).toEqual({ timeout: 150_000, maxRetries: 0 });
+    expect(create.mock.calls[0]![0].reasoning).toEqual({ effort: "medium" });
+  });
+
+  it("verification effort is configurable via env", async () => {
+    vi.stubEnv("GROK_VERIFICATION_EFFORT", "high");
+    create.mockResolvedValueOnce({ output_text: "{}" });
+    const challenge = streetFloodDepth.capture.challenges[0]!;
+    await verifyCapture({ protocol: streetFloodDepth, challenge, framesBase64: ["a"], intervalMs: 600 }).catch(() => undefined);
+    expect(create.mock.calls[0]![0].reasoning).toEqual({ effort: "high" });
+  });
+
+  it("frame check sends no reasoning option (non-reasoning model)", async () => {
+    create.mockResolvedValueOnce({ output_text: "{}" });
+    await frameCheck({ protocol: streetFloodDepth, imageBase64: "x" }).catch(() => undefined);
+    expect(create.mock.calls[0]![0]).not.toHaveProperty("reasoning");
   });
 
   it("frame check: 8 s budget, no SDK retry", async () => {

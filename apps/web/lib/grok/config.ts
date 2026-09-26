@@ -19,6 +19,14 @@ export const grokEnv = {
   get videoModel() {
     return process.env.GROK_VIDEO_MODEL || "grok-imagine-video-1.5";
   },
+  /**
+   * reasoning_effort for the grok-4.7 verification call. xAI default is "high" (~90 s for three
+   * frames from Vercel); "medium" keeps reasoning for the skeptical audit at lower latency.
+   */
+  get verificationEffort(): "low" | "medium" | "high" | "xhigh" {
+    const v = process.env.GROK_VERIFICATION_EFFORT;
+    return v === "low" || v === "high" || v === "xhigh" ? v : "medium";
+  },
   get voiceModel() {
     return process.env.GROK_VOICE_MODEL || "grok-voice-latest";
   },
