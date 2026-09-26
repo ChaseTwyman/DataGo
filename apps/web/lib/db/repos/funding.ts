@@ -396,9 +396,13 @@ export async function countFundedLive(db: Db, userId: string, now: Date): Promis
 }
 
 /** Active, funded, live requests for one protocol (demand factor). */
-export async function liveFundedForProtocol(db: Db, protocolId: string, now: Date): Promise<{ id: string; created_by: string | null; cells: string[] }[]> {
-  return db.query<{ id: string; created_by: string | null; cells: string[] }>(
-    `select id, created_by, cells from public.bounties
+export async function liveFundedForProtocol(
+  db: Db,
+  protocolId: string,
+  now: Date,
+): Promise<{ id: string; created_by: string | null; cells: string[]; remaining_cents: number }[]> {
+  return db.query<{ id: string; created_by: string | null; cells: string[]; remaining_cents: number }>(
+    `select id, created_by, cells, (budget_cents - spent_cents)::int as remaining_cents from public.bounties
       where protocol_id = $1 and status = 'active' and budget_cents > spent_cents
         and starts_at <= $2::timestamptz and ends_at > $2::timestamptz`,
     [protocolId, now.toISOString()],

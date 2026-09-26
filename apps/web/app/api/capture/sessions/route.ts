@@ -14,7 +14,8 @@ import { requireUser } from "@/lib/auth";
 import { loadPricing } from "@/lib/coverage";
 import { worstCaseCents } from "@/lib/pricing/engine";
 import { getDb } from "@/lib/db";
-import { insertSession } from "@/lib/db/repos/sessions";
+import { pausedCells } from "@/lib/hazards";
+import { abandonOpenSessions, insertSession } from "@/lib/db/repos/sessions";
 import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
 import { getStorage } from "@/lib/storage";
 
@@ -40,36 +41,47 @@ export const POST = route(async (req) => {
     throw new HttpError(422, "OUTSIDE_AREA", "You are outside the bounty area");
   }
   const cell = cellForPoint(body.lat, body.lng);
-  const pricing = await loadPricing(db, bounty, protocol.definition, now);
-  const coverage = pricing.cells;
-  const here = coverage.find((c) => c.cell === cell) ?? [...coverage].sort((a, b) => b.price_cents - a.price_cents)[0];
-  if (!here) throw conflict("BOUNTY_NOT_ACTIVE", "Bounty has no cells");
-  if (here.paused) throw conflict("HAZARD_PAUSED", here.paused_reason ?? "Captures are paused here because of an active hazard warning");
-  // The allocation must cover this quote at the best quality multiplier on top of every quote already
-  // locked on this request (open sessions, submissions still being verified or reviewed).
-  if (pricing.remainingCents < worstCaseCents(here.price_cents)) throw conflict("BUDGET_EXHAUSTED", "This bounty has run out of budget");
+  // Warm the hazard lookup (NWS, cached) outside the per-request lock below.
+  await pausedCells(db, bounty, now);
 
   const id = randomUUID();
-  const quote = lockQuote(here.price_cents, now);
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MIN * 60_000).toISOString();
   const challenge = pickChallenge(protocol.definition);
   const nonce = randomBytes(16).toString("hex");
   const paths = Array.from({ length: protocol.definition.capture.frames }, (_, i) => `observations/${user.id}/${id}/${i}.jpg`);
 
-  await insertSession(db, {
-    id,
-    bounty_id: bounty.id,
-    user_id: user.id,
-    nonce,
-    challenge,
-    cell,
-    start_lat: body.lat,
-    start_lng: body.lng,
-    price_quote_cents: quote.priceCents,
-    quote_expires_at: quote.expiresAt,
-    started_at: now.toISOString(),
-    expires_at: expiresAt,
-    upload_paths: paths,
+  // Read-check-insert under a per-request advisory lock: two concurrent opens can't both pass the
+  // allocation check on the same snapshot of locked quotes.
+  const quote = await db.tx(async (tx) => {
+    await tx.query("select pg_advisory_xact_lock(7340002, hashtext($1))", [bounty.id]);
+    // one open session per contributor per request (their earlier held quote is released first)
+    await abandonOpenSessions(tx, user.id, bounty.id);
+    const pricing = await loadPricing(tx, bounty, protocol.definition, now);
+    const coverage = pricing.cells;
+    const here = coverage.find((c) => c.cell === cell) ?? [...coverage].sort((a, b) => b.price_cents - a.price_cents)[0];
+    if (!here) throw conflict("BOUNTY_NOT_ACTIVE", "Bounty has no cells");
+    if (here.paused) throw conflict("HAZARD_PAUSED", here.paused_reason ?? "Captures are paused here because of an active hazard warning");
+    // The allocation must cover this quote at the best quality multiplier on top of every quote already
+    // locked on this request (open sessions, submissions still being verified or reviewed).
+    if (pricing.remainingCents < worstCaseCents(here.price_cents)) throw conflict("BUDGET_EXHAUSTED", "This bounty has run out of budget");
+
+    const q = lockQuote(here.price_cents, now);
+    await insertSession(tx, {
+      id,
+      bounty_id: bounty.id,
+      user_id: user.id,
+      nonce,
+      challenge,
+      cell,
+      start_lat: body.lat,
+      start_lng: body.lng,
+      price_quote_cents: q.priceCents,
+      quote_expires_at: q.expiresAt,
+      started_at: now.toISOString(),
+      expires_at: expiresAt,
+      upload_paths: paths,
+  });
+  return q;
   });
   const storage = getStorage();
   const origin = originOf(req);

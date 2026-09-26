@@ -279,6 +279,8 @@ revoke execute on function public.pool_reverse_contribution(uuid, integer, text,
 revoke execute on function public.pool_record_external_funding(uuid, text, text, text) from public, anon, authenticated;
 revoke execute on function public.pool_backfill_legacy() from public, anon, authenticated;
 revoke execute on function public.spend_bounty_budget(uuid, integer) from public, anon, authenticated;
+revoke execute on function public.pool_assert_server() from public, anon, authenticated;
+revoke execute on function public.pool_is_earmarked(public.sponsor_contributions) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------- 4. backfill
 select public.pool_backfill_legacy();

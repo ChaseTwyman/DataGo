@@ -76,6 +76,7 @@ describe("factors", () => {
     expect(urgencyFactor(3, 3, false)).toBeCloseTo(1 + Math.exp(-1));
     expect(urgencyFactor(null, 3, false)).toBe(1);
     expect(urgencyFactor(0, 3, true)).toBe(1);
+    expect(urgencyFactor(-2, 3, false)).toBe(1); // event in the future: no urgency (requester-set field)
   });
 
   it("demand: +10% per other want, capped", () => {

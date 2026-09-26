@@ -337,6 +337,9 @@ describe("pricing on the server", () => {
     const s2 = await session(c2.token, body.id, where.center_lat, where.center_lng);
     expect(s2.status).toBe(409);
     expect(await s2.json()).toMatchObject({ error: { code: "BUDGET_EXHAUSTED" } });
+    // the same contributor re-opening replaces their own held quote instead of stacking holds
+    const again = await session(c1.token, body.id, where.center_lat, where.center_lng);
+    expect(again.status).toBe(201);
   });
 });
 

@@ -41,10 +41,11 @@ export const PRICING = {
   urgency: { beta: 1 },
   /**
    * Demand: 1 + gamma × min(maxExtra, other wants). "Other wants" = other funded requests (from other
-   * researchers) for the same protocol covering the cell + sponsor earmarks with money left that
-   * match the protocol/region. A researcher's own overlapping requests never count.
+   * researchers, counted once per researcher, only with at least minRemainingCents left) for the same
+   * protocol covering the cell + sponsor earmarks with money left that match the protocol/region.
+   * A researcher's own overlapping requests never count.
    */
-  demand: { gamma: 0.1, maxExtra: 4 },
+  demand: { gamma: 0.1, maxExtra: 4, minRemainingCents: 5_000 },
   /**
    * Supply: inverse of recent contributor activity near the cell (distinct contributors who opened a
    * capture session in the cell or its ring-1 neighbours in the last `windowHours`).

@@ -74,6 +74,18 @@ export async function setSessionStatus(db: Db, id: string, status: SessionRow["s
   await db.query("update public.capture_sessions set status = $2::public.session_status where id = $1", [id, status]);
 }
 
+/**
+ * One open session per contributor per request: a new session abandons the caller's earlier open
+ * ones there, so a contributor can't lock up a request's allocation with many held quotes.
+ */
+export async function abandonOpenSessions(db: Db, userId: string, bountyId: string): Promise<number> {
+  const rows = await db.query<{ id: string }>(
+    "update public.capture_sessions set status = 'abandoned' where user_id = $1 and bounty_id = $2 and status = 'open' returning id",
+    [userId, bountyId],
+  );
+  return rows.length;
+}
+
 /** Atomically moves an open session to submitted. False if it was not open (double submit). */
 export async function markSubmittedIfOpen(db: Db, id: string): Promise<boolean> {
   const rows = await db.query<{ id: string }>(

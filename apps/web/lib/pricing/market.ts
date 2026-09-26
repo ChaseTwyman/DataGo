@@ -62,11 +62,16 @@ export async function loadPricing(db: Db, req: MarketRequest, protocol: Protocol
   ]);
 
   // Demand: other researchers' funded requests (a researcher's own overlapping requests never count)
-  const otherCells = new Map<string, number>();
+  // Counted per distinct other researcher (not per request), and only requests with a meaningful
+  // allocation left, so cheap shell requests from one account can't stack demand.
+  const otherOwners = new Map<string, Set<string>>();
   for (const o of others) {
     if (o.id === req.id || (req.created_by !== null && o.created_by === req.created_by)) continue;
-    for (const c of o.cells) otherCells.set(c, (otherCells.get(c) ?? 0) + 1);
+    if (o.remaining_cents < PRICING.demand.minRemainingCents) continue;
+    const owner = o.created_by ?? o.id;
+    for (const c of o.cells) otherOwners.set(c, (otherOwners.get(c) ?? new Set<string>()).add(owner));
   }
+  const otherCells = new Map([...otherOwners].map(([c, owners]) => [c, owners.size]));
   const earmarksHere = earmarks.filter((e) => e.bounty_id === null);
 
   const cells: CellMarket[] = req.cells.map((cell) => {
@@ -89,7 +94,7 @@ export async function loadPricing(db: Db, req: MarketRequest, protocol: Protocol
   const res = priceCells({
     rate,
     tauHours: urgencyTauHours(protocol),
-    hoursSinceEvent: req.event_started_at ? Math.max(0, hoursBetween(req.event_started_at, now)) : null,
+    hoursSinceEvent: req.event_started_at ? hoursBetween(req.event_started_at, now) : null,
     cells,
     pacing: {
       allocationCents: req.budget_cents,

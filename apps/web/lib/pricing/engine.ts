@@ -58,8 +58,9 @@ export function scarcityFactor(accepted: number, target: number, cfg: PricingCon
 }
 
 export function urgencyFactor(hoursSinceEvent: number | null, tauHours: number, inHazard: boolean, cfg: PricingConfig = PRICING): number {
-  if (inHazard || hoursSinceEvent === null || tauHours <= 0) return 1;
-  return 1 + cfg.urgency.beta * Math.exp(-Math.max(0, hoursSinceEvent) / tauHours);
+  // An event that hasn't started (future timestamp) earns no urgency: the field is requester-set.
+  if (inHazard || hoursSinceEvent === null || hoursSinceEvent < 0 || tauHours <= 0) return 1;
+  return 1 + cfg.urgency.beta * Math.exp(-hoursSinceEvent / tauHours);
 }
 
 /** otherWants = other funded requests + matching sponsor earmarks for this cell/protocol. */

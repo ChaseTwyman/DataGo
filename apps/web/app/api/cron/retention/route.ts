@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { HttpError, json, route } from "@/lib/api/http";
 import { getDb } from "@/lib/db";
+import { runAllocation } from "@/lib/funding/allocation";
 import { pruneRateLimits } from "@/lib/rateLimit";
 import { purgeRejectedMedia } from "@/lib/retention";
 import { getStorage } from "@/lib/storage";
@@ -23,7 +24,9 @@ const run = route(async (req) => {
   const db = await getDb();
   const media = await purgeRejectedMedia(db, getStorage());
   const rateLimitWindows = await pruneRateLimits(db);
-  return json({ ok: true, rejected_media: media, rate_limit_windows_pruned: rateLimitWindows });
+  // Sponsor pool housekeeping: release money from ended requests, fund pending ones.
+  const allocation = await runAllocation(db);
+  return json({ ok: true, rejected_media: media, rate_limit_windows_pruned: rateLimitWindows, allocation });
 });
 
 /** Vercel Cron invokes GET (vercel.json, daily); POST for manual runs. */
