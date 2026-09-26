@@ -1,6 +1,6 @@
 "use client";
 import { Clapperboard, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorBox } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/client/api";
@@ -76,8 +76,10 @@ export function BriefingVideo({
 
   // Signed URLs get a fresh token on every bounty fetch; keep the first one per stored clip so a
   // refresh doesn't reload a playing video.
-  const src = useRef<string | null>(null);
-  if (videoKey(videoUrl) !== videoKey(src.current)) src.current = videoUrl;
+  // (State adjusted during render — React's documented pattern for deriving from a prop; a ref write
+  // here would break under concurrent rendering.)
+  const [stableSrc, setStableSrc] = useState(videoUrl);
+  if (videoKey(videoUrl) !== videoKey(stableSrc)) setStableSrc(videoUrl);
 
   if (!videoUrl && !canManage) return null;
 
@@ -87,7 +89,7 @@ export function BriefingVideo({
         <figure className="relative overflow-hidden rounded-md bg-black">
           <video
             key={videoKey(videoUrl) ?? videoUrl}
-            src={src.current ?? videoUrl}
+            src={stableSrc ?? videoUrl}
             controls
             playsInline
             muted
