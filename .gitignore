@@ -23,3 +23,5 @@ apps/web/test/fixtures/generated/
 .claude-flow/
 .swarm/
 .hive-mind/
+# local backend data (PGlite + filesystem storage)
+apps/web/.local/
