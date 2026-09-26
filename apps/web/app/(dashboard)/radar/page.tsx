@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { DEMO, type DraftBounty } from "@groundtruth/shared";
 import { HexMap } from "@/components/map";
+import { Slider } from "@/components/ds/controls";
+import { JobProgress } from "@/components/ds/primitives";
 import { Empty, ErrorBox, PageHeader } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -67,13 +69,13 @@ export default function RadarPage() {
       <PageHeader
         title={
           <span className="flex items-center gap-2">
-            <Radar className="size-5 text-sky-600" aria-hidden /> Opportunity Radar
+            <Radar className="size-6 text-primary" strokeWidth={1.5} aria-hidden /> Opportunity Radar
           </span>
         }
         description="Scan a region for active weather alerts and recent reports. Grok drafts bounties where ground-truth data would be scarce and valuable; you review and publish."
       />
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="relative min-h-[380px] lg:min-h-[480px]">
+        <div className="relative min-h-[380px] bg-[#0c0c0c] lg:min-h-[480px]">
           <HexMap
             center={center}
             zoom={zoomForRadiusM(radiusKm * 1000)}
@@ -84,12 +86,12 @@ export default function RadarPage() {
             cursor="crosshair"
             className="absolute inset-0"
           />
-          <p className="pointer-events-none absolute top-3 left-3 rounded-md border bg-card/95 px-2.5 py-1.5 text-xs text-muted-foreground shadow-sm">
+          <p className="caps pointer-events-none absolute top-3 left-3 rounded-sm border bg-black/80 px-2.5 py-1.5 text-[10px] text-muted-foreground backdrop-blur-sm">
             Click the map to move the scan center
           </p>
         </div>
 
-        <div className="space-y-4 border-l bg-card p-5">
+        <div className="space-y-5 border-l bg-card p-5">
           <Field label="Start from one of your bounties" htmlFor="bounty-center" hint="Uses that bounty's center.">
             <Select
               id="bounty-center"
@@ -131,12 +133,11 @@ export default function RadarPage() {
               />
             </Field>
           </div>
-          {!typedValid ? <p className="text-xs text-red-700">Enter a latitude between -90 and 90 and a longitude between -180 and 180.</p> : null}
+          {!typedValid ? <p className="text-xs text-destructive" role="alert">Enter a latitude between -90 and 90 and a longitude between -180 and 180.</p> : null}
 
           <Field label={`Radius: ${radiusKm} km`} htmlFor="radius" hint="Weather alerts are National Weather Service (US only).">
-            <input
+            <Slider
               id="radius"
-              type="range"
               min={RADIUS_KM_MIN}
               max={RADIUS_KM_MAX}
               step={5}
@@ -145,7 +146,6 @@ export default function RadarPage() {
               onChange={(e) => setRadiusKm(Number(e.target.value))}
               onPointerUp={() => setFly((n) => n + 1)}
               onKeyUp={() => setFly((n) => n + 1)}
-              className="w-full accent-[var(--color-primary)]"
             />
           </Field>
 
@@ -181,18 +181,10 @@ function ScanStatus({ job, onRetry }: { job: RadarJob; onRetry: () => void }) {
   if (job.status === "running") {
     const elapsed = Math.max(0, now - job.startedAt);
     return (
-      <div role="status" className="space-y-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
-        <div className="flex items-center gap-2 font-medium">
-          <LoaderCircle className="size-4 animate-spin" aria-hidden /> {radarStage(elapsed)}
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-sky-100">
-          <div className="h-full rounded-full bg-sky-500 transition-[width] duration-1000" style={{ width: `${Math.min(95, (elapsed / EXPECTED_MS) * 100)}%` }} />
-        </div>
-        <p className="text-xs text-sky-900/80">
-          {Math.round(elapsed / 1000)} s · usually 1–3 minutes for {job.request.radius_km} km around {job.request.lat.toFixed(3)}, {job.request.lng.toFixed(3)}. You can
-          leave this page; the results will be here when you come back.
-        </p>
-      </div>
+      <JobProgress stage={radarStage(elapsed)} pct={Math.min(95, (elapsed / EXPECTED_MS) * 100)}>
+        {Math.round(elapsed / 1000)} s · usually 1–3 minutes for {job.request.radius_km} km around {job.request.lat.toFixed(3)}, {job.request.lng.toFixed(3)}. You can
+        leave this page; the results will be here when you come back.
+      </JobProgress>
     );
   }
   if (job.status === "error") return <ErrorBox message={job.message} onRetry={onRetry} />;
@@ -207,7 +199,7 @@ function Results({ job }: { job: Extract<RadarJob, { status: "done" }> }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <CloudLightning className="size-4 text-amber-600" aria-hidden />
+          <CloudLightning className="size-4 text-warning" strokeWidth={1.75} aria-hidden />
           <span className="font-medium">
             {alerts === 0 ? "No active weather alerts" : `${alerts} active weather alert${alerts === 1 ? "" : "s"}`} considered
           </span>
@@ -269,12 +261,12 @@ function DraftCard({ d }: { d: DraftBounty }) {
       <CardContent className="flex flex-1 flex-col gap-3 text-sm">
         <p>{d.summary}</p>
         <div>
-          <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Why here, why now</div>
+          <div className="caps text-[10px] text-muted-foreground">Why here, why now</div>
           <p className="mt-0.5 text-muted-foreground">{d.rationale}</p>
         </div>
         {links.length ? (
           <div>
-            <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Sources</div>
+            <div className="caps text-[10px] text-muted-foreground">Sources</div>
             <ul className="mt-1 flex flex-wrap gap-1.5">
               {links.map((l) => (
                 <li key={l.href}>
@@ -282,7 +274,7 @@ function DraftCard({ d }: { d: DraftBounty }) {
                     href={l.href}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-muted"
+                    className="inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-xs text-muted-foreground hover:border-muted-foreground hover:text-foreground"
                     title={l.href}
                   >
                     {l.label} <ExternalLink className="size-3" aria-hidden />

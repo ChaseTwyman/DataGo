@@ -60,7 +60,7 @@ export default function ProtocolsPage() {
                   </CardHeader>
                   <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
                     <div>
-                      <h4 className="mb-1 text-xs font-semibold text-muted-foreground">Required in frame</h4>
+                      <h4 className="caps mb-2 text-[10px] text-muted-foreground">Required in frame</h4>
                       <ul className="space-y-1">
                         {d.capture.required_elements.map((e) => (
                           <li key={e.id}>
@@ -71,18 +71,18 @@ export default function ProtocolsPage() {
                       </ul>
                     </div>
                     <div>
-                      <h4 className="mb-1 text-xs font-semibold text-muted-foreground">Capture</h4>
+                      <h4 className="caps mb-2 text-[10px] text-muted-foreground">Capture</h4>
                       <p>
                         {d.capture.mode === "burst" ? `${d.capture.frames}-frame burst, ${d.capture.frame_interval_ms} ms apart` : "single photo"} ·{" "}
                         {d.capture.orientation} · tilt ≤ {d.capture.max_tilt_deg}°
                       </p>
-                      <h4 className="mt-3 mb-1 text-xs font-semibold text-muted-foreground">Challenges</h4>
+                      <h4 className="caps mt-4 mb-2 text-[10px] text-muted-foreground">Challenges</h4>
                       <ul className="list-disc pl-4 text-muted-foreground">
                         {d.capture.challenges.map((c) => (
                           <li key={c.id}>{c.instruction}</li>
                         ))}
                       </ul>
-                      <h4 className="mt-3 mb-1 text-xs font-semibold text-muted-foreground">Extracted fields</h4>
+                      <h4 className="caps mt-4 mb-2 text-[10px] text-muted-foreground">Extracted fields</h4>
                       <p className="font-mono text-xs">{Object.keys(d.extraction_schema.properties).join(", ")}</p>
                     </div>
                   </CardContent>

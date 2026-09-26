@@ -9,18 +9,21 @@ import {
   type PublicDatasetListResponse,
   type PublicDatasetSummary,
 } from "@groundtruth/shared";
+import { Mark } from "../ds/Mark";
+import { COLORS } from "../ds/tokens";
 import { HexCoverage } from "./HexCoverage";
 
 /**
  * /data — public open-data page. Minimal black aesthetic: #000, white, hairline grey rules,
  * uppercase letter-spaced condensed headings, one accent colour.
  */
-const ACCENT = "#38bdf8";
+/** The design-system accent (components/ds/tokens.ts). */
+const ACCENT = COLORS.accent;
 const PREVIEW_ROWS = 20;
 const LIST_REFRESH_MS = 60_000;
 const PREVIEW_REFRESH_MS = 30_000;
 
-const HEAD = "font-[family-name:var(--font-condensed)] uppercase tracking-[0.18em]";
+const HEAD = "font-[family-name:var(--font-display)] uppercase tracking-[0.18em]";
 
 export function OpenDataPage() {
   const [list, setList] = useState<PublicDatasetListResponse | null>(null);
@@ -60,13 +63,11 @@ export function OpenDataPage() {
     : null;
 
   return (
-    <div
-      className="min-h-screen bg-black text-white antialiased selection:bg-sky-400/40"
-      style={{ ["--font-condensed" as string]: '"Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif' }}
-    >
+    <div className="min-h-screen bg-black text-white antialiased">
       <header className="sticky top-0 z-10 border-b border-white/10 bg-black/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-8">
-          <Link href="/data" className={`${HEAD} text-sm font-semibold tracking-[0.35em]`}>
+          <Link href="/data" className={`${HEAD} flex items-center gap-2.5 text-sm font-semibold tracking-[0.35em]!`}>
+            <Mark className="size-6" />
             GroundTruth
           </Link>
           <nav className={`${HEAD} flex items-center gap-5 text-[11px] text-white/60 sm:gap-8`}>
@@ -82,7 +83,7 @@ export function OpenDataPage() {
           <p className={`${HEAD} text-[11px] text-white/50`}>
             Open data <span style={{ color: ACCENT }}>·</span> {OPEN_DATA_LICENSE.short_name} <span style={{ color: ACCENT }}>·</span> No login
           </p>
-          <h1 className={`${HEAD} mt-6 text-4xl leading-[1.05] font-semibold tracking-[0.08em] sm:text-7xl`}>
+          <h1 className={`${HEAD} mt-6 text-4xl leading-[1.05] font-semibold tracking-[0.06em]! sm:text-7xl`}>
             Open data.
             <br />
             Free for every scientist.
@@ -104,8 +105,8 @@ export function OpenDataPage() {
         <section id="datasets" className="border-t border-white/10">
           <div className="mx-auto max-w-6xl px-4 sm:px-8">
             {error && !list ? <Notice>{error}</Notice> : null}
-            {error && list ? <p className={`${HEAD} pt-6 text-[10px] text-white/40`}>Reconnecting… showing the last loaded catalogue.</p> : null}
-            {!list && !error ? <p className={`${HEAD} py-16 text-[11px] text-white/40`}>Loading datasets…</p> : null}
+            {error && list ? <p className={`${HEAD} pt-6 text-[10px] text-white/55`}>Reconnecting… showing the last loaded catalogue.</p> : null}
+            {!list && !error ? <p className={`${HEAD} py-16 text-[11px] text-white/55`}>Loading datasets…</p> : null}
             {list && list.datasets.length === 0 ? (
               <Notice title="No datasets published yet">
                 A dataset appears here as soon as a protocol is published. Rows are added only after verification, so there is
@@ -120,7 +121,7 @@ export function OpenDataPage() {
       </main>
 
       <footer className="border-t border-white/10">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-10 text-xs text-white/40 sm:flex-row sm:justify-between sm:px-8">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-10 text-xs text-white/55 sm:flex-row sm:justify-between sm:px-8">
           <span>
             Data: {OPEN_DATA_LICENSE.short_name}, attribution &ldquo;{OPEN_DATA_LICENSE.attribution}&rdquo;.
           </span>
@@ -136,9 +137,9 @@ export function OpenDataPage() {
 function Figure({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
     <div className="border-b border-white/15 py-5 pr-4 sm:border-r sm:border-b-0 sm:px-5 sm:first:pl-0 sm:last:border-r-0">
-      <dt className={`${HEAD} text-[10px] text-white/45`}>{label}</dt>
+      <dt className={`${HEAD} text-[10px] text-white/55`}>{label}</dt>
       <dd className="mt-2 text-2xl font-light tabular-nums sm:text-3xl">{value}</dd>
-      {sub ? <dd className="mt-1 text-[11px] text-white/45">{sub}</dd> : null}
+      {sub ? <dd className="mt-1 text-[11px] text-white/55">{sub}</dd> : null}
     </div>
   );
 }
@@ -151,10 +152,10 @@ function DatasetSection({ d }: { d: PublicDatasetSummary }) {
     <article id={d.slug} className="scroll-mt-16 border-b border-white/10 py-16 sm:py-24">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
-          <p className={`${HEAD} text-[11px] text-white/45`}>
+          <p className={`${HEAD} text-[11px] text-white/55`}>
             Dataset <span className="text-white/25">/</span> {d.slug} <span className="text-white/25">/</span> v{d.version}
           </p>
-          <h2 className={`${HEAD} mt-3 text-3xl font-semibold tracking-[0.1em] sm:text-5xl`}>{d.name}</h2>
+          <h2 className={`${HEAD} mt-3 text-3xl font-semibold tracking-[0.08em]! sm:text-5xl`}>{d.name}</h2>
         </div>
         {d.includes_demo_rows ? (
           <span className={`${HEAD} border border-amber-300/40 px-2 py-1 text-[10px] text-amber-200`}>Includes demo rows</span>
@@ -210,7 +211,7 @@ function DatasetSection({ d }: { d: PublicDatasetSummary }) {
             <HexCoverage cells={d.cells} accent={ACCENT} className="h-full w-full" />
           </div>
           {d.bbox ? (
-            <p className="mt-3 font-mono text-[11px] text-white/40">
+            <p className="mt-3 font-mono text-[11px] text-white/55">
               bbox {d.bbox.map((x) => x.toFixed(4)).join(", ")}
             </p>
           ) : null}
@@ -259,7 +260,7 @@ function Downloads({ d }: { d: PublicDatasetSummary }) {
               {...(x.label === "CSV" || x.label === "GeoJSON" ? { download: true } : { target: "_blank", rel: "noreferrer" })}
             >
               <span className={`${HEAD} text-sm`}>{x.label}</span>
-              <span className="flex items-center gap-3 text-xs text-white/45">
+              <span className="flex items-center gap-3 text-xs text-white/55">
                 {x.note}
                 <span className="text-base transition-transform group-hover:translate-x-1" style={{ color: ACCENT }} aria-hidden>
                   →
@@ -269,7 +270,7 @@ function Downloads({ d }: { d: PublicDatasetSummary }) {
           </li>
         ))}
       </ul>
-      <p className="mt-4 text-xs leading-relaxed text-white/45">
+      <p className="mt-4 text-xs leading-relaxed text-white/55">
         Licensed{" "}
         <a href={d.license.url} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
           {d.license.short_name}
@@ -312,7 +313,7 @@ function Cite({ d }: { d: PublicDatasetSummary }) {
       </div>
       <div className="mt-5 border border-white/10">
         <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
-          <span className={`${HEAD} text-[10px] text-white/45`}>BibTeX</span>
+          <span className={`${HEAD} text-[10px] text-white/55`}>BibTeX</span>
           <CopyButton text={d.citation.bibtex} />
         </div>
         <pre className="overflow-x-auto p-3 font-mono text-[11px] leading-relaxed text-white/70">{d.citation.bibtex}</pre>
@@ -360,7 +361,7 @@ function Preview({ slug, total }: { slug: string; total: number }) {
         <h3 className={`${HEAD} text-[11px] text-white/55`}>
           Live preview <span className="text-white/30">·</span> first {Math.min(PREVIEW_ROWS, total)} of {total} rows
         </h3>
-        <span className={`${HEAD} flex items-center gap-2 text-[10px] text-white/45`}>
+        <span className={`${HEAD} flex items-center gap-2 text-[10px] text-white/55`}>
           <span className="size-1.5 animate-pulse rounded-full" style={{ background: ACCENT }} aria-hidden />
           Structured data
         </span>
@@ -409,8 +410,8 @@ function Method() {
   return (
     <section id="method" className="border-t border-white/10">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-8 sm:py-28">
-        <p className={`${HEAD} text-[11px] text-white/45`}>Method</p>
-        <h2 className={`${HEAD} mt-3 text-3xl font-semibold tracking-[0.1em] sm:text-5xl`}>How this data is made</h2>
+        <p className={`${HEAD} text-[11px] text-white/55`}>Method</p>
+        <h2 className={`${HEAD} mt-3 text-3xl font-semibold tracking-[0.08em]! sm:text-5xl`}>How this data is made</h2>
         <ol className="mt-12 grid border-t border-white/15 sm:grid-cols-5">
           {STEPS.map((s) => (
             <li key={s.n} className="border-b border-white/15 py-6 sm:border-r sm:border-b-0 sm:px-5 sm:first:pl-0 sm:last:border-r-0">

@@ -1,7 +1,7 @@
 "use client";
-import { Radio } from "lucide-react";
 import { useMemo } from "react";
 import { formatCents } from "@groundtruth/shared";
+import { ReadoutGrid } from "@/components/ds/primitives";
 import { Empty, ErrorBox, Loading, PageHeader, Stat } from "@/components/page";
 import { SubmissionCard } from "@/components/submissions/SubmissionCard";
 import { useSubmissionStream } from "@/lib/client/realtime";
@@ -25,18 +25,18 @@ export default function LivePage() {
       <PageHeader
         title={
           <span className="flex items-center gap-2">
-            <Radio className="size-4 text-red-500" aria-hidden /> Live
+            <span className="size-2 animate-pulse rounded-full bg-destructive" aria-hidden /> Live
           </span>
         }
         description={`All active bounties · ${stream.mode === "realtime" ? "realtime updates" : "polling every 2 s"}`}
       />
-      <div className="grid grid-cols-2 gap-4 border-b bg-card px-6 py-3 sm:grid-cols-5">
+      <ReadoutGrid>
         <Stat label="Recent" value={stats.total} />
         <Stat label="Accepted" value={stats.accepted} />
         <Stat label="Needs review" value={stats.review} />
         <Stat label="Rejected" value={stats.rejected} />
-        <Stat label="Paid out" value={formatCents(stats.paid)} />
-      </div>
+        <Stat label="Paid out" value={<span className="text-primary">{formatCents(stats.paid)}</span>} />
+      </ReadoutGrid>
       <div className="mx-auto w-full max-w-4xl space-y-2 p-6">
         <ErrorBox message={stream.error} />
         {stream.loading ? <Loading /> : null}

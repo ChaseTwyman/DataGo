@@ -6,9 +6,9 @@ import { ReasonCode, StageStatusBadge } from "../status";
 export function CheckTable({ checks, fillMissing = true }: { checks: StageResult[]; fillMissing?: boolean }) {
   const rows = fillMissing ? orderedChecks(checks) : checks;
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-sm border">
       <table className="w-full text-xs">
-        <thead className="bg-muted/60 text-muted-foreground">
+        <thead className="caps border-b text-[10px] text-muted-foreground">
           <tr>
             <th className="px-2 py-1.5 text-left font-medium">Stage</th>
             <th className="px-2 py-1.5 text-left font-medium">Status</th>

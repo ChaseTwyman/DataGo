@@ -124,6 +124,11 @@ function Rail() {
 function TopBar({ session, onSignOut }: { session: StoredSession; onSignOut: () => void }) {
   const pathname = usePathname();
   const crumbs = breadcrumbs(pathname);
+  // Dashboard pages are client components (no per-page metadata export): title from the breadcrumb.
+  const pageTitle = crumbs.map((c) => c.label).reverse().join(" · ");
+  useEffect(() => {
+    document.title = pageTitle ? `${pageTitle} · GroundTruth` : "GroundTruth";
+  }, [pageTitle]);
   return (
     <div className="flex h-14 shrink-0 items-center justify-between gap-4 border-b px-6">
       <nav aria-label="Breadcrumb" className="min-w-0">

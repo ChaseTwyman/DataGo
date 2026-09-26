@@ -84,9 +84,9 @@ export function BriefingVideo({
   if (!videoUrl && !canManage) return null;
 
   return (
-    <div className={cn("space-y-2 rounded-lg border bg-card/95 p-2 shadow-md backdrop-blur", className)}>
+    <div className={cn("space-y-2 rounded-sm border bg-black/80 p-2 backdrop-blur-sm", className)}>
       {videoUrl ? (
-        <figure className="relative overflow-hidden rounded-md bg-black">
+        <figure className="relative overflow-hidden rounded-sm bg-black">
           <video
             key={videoKey(videoUrl) ?? videoUrl}
             src={stableSrc ?? videoUrl}
@@ -98,14 +98,14 @@ export function BriefingVideo({
             className="block aspect-[9/16] w-full object-cover"
             aria-label="AI-generated mission briefing clip"
           />
-          <figcaption className="pointer-events-none absolute top-2 left-2 inline-flex items-center gap-1 rounded bg-violet-600 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase shadow">
+          <figcaption className="caps pointer-events-none absolute top-2 left-2 inline-flex items-center gap-1 rounded-[2px] bg-white px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.12em] text-black">
             <Sparkles className="size-3" aria-hidden />
             AI-generated briefing
           </figcaption>
         </figure>
       ) : (
-        <div className="flex items-center gap-1.5 px-1 pt-1 text-xs font-medium">
-          <Clapperboard className="size-3.5 text-violet-600" aria-hidden /> Briefing clip
+        <div className="caps flex items-center gap-1.5 px-1 pt-1 text-[11px] font-semibold">
+          <Clapperboard className="size-3.5 text-primary" strokeWidth={1.75} aria-hidden /> Briefing clip
         </div>
       )}
 
@@ -118,8 +118,8 @@ export function BriefingVideo({
           </span>
         </p>
       ) : null}
-      {state.phase === "timeout" ? <p className="px-1 text-[11px] text-amber-700">Still rendering — check back later.</p> : null}
-      {state.phase === "ready" ? <p className="px-1 text-[11px] text-emerald-700">New briefing clip ready.</p> : null}
+      {state.phase === "timeout" ? <p className="px-1 text-[11px] text-warning">Still rendering — check back later.</p> : null}
+      {state.phase === "ready" ? <p className="px-1 text-[11px] text-success">New briefing clip ready.</p> : null}
       {state.phase === "error" ? <ErrorBox message={state.message} className="px-2 py-1.5 text-xs" /> : null}
       {!videoUrl && state.phase === "idle" ? (
         <p className="px-1 text-[11px] text-muted-foreground">A short AI-generated clip contributors see before they capture.</p>

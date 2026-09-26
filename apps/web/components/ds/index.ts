@@ -20,6 +20,7 @@ export {
   EmptyState,
   ErrorState,
   Eyebrow,
+  JobProgress,
   KeyValue,
   LoadingState,
   Notice,

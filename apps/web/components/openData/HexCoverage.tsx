@@ -46,7 +46,7 @@ export function HexCoverage({ cells, accent, className }: { cells: { h3_cell: st
 
   if (!shapes) {
     return (
-      <div className={`flex items-center justify-center text-[11px] tracking-[0.25em] text-white/40 uppercase ${className ?? ""}`}>
+      <div className={`flex items-center justify-center text-[11px] tracking-[0.25em] text-white/55 uppercase ${className ?? ""}`}>
         No observations yet
       </div>
     );

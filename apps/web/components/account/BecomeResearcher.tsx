@@ -3,6 +3,7 @@ import { FlaskConical, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { BecomeResearcherRequestSchema, type Me } from "@groundtruth/shared";
+import { Checkbox } from "@/components/ds/controls";
 import { ErrorBox } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +48,7 @@ export function BecomeResearcher({ me, onDone, embedded = false }: { me: Me; onD
       <Card className={embedded ? "w-full" : "w-full max-w-lg"}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <FlaskConical className="size-4 text-sky-600" aria-hidden /> Become a researcher
+            <FlaskConical className="size-4 text-primary" aria-hidden /> Become a researcher
           </CardTitle>
           <CardDescription>
             Researchers post bounties, design capture protocols, review observations and export datasets. Tell us who you are
@@ -62,16 +63,14 @@ export function BecomeResearcher({ me, onDone, embedded = false }: { me: Me; onD
             <Field label="What will you use GroundTruth data for?" htmlFor="purpose" error={fields.purpose} hint="A sentence or two is enough.">
               <Textarea id="purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} maxLength={1000} rows={4} required />
             </Field>
-            <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-0.5 size-4" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
-              <span>
-                I will pay contributors the posted bounties, never ask anyone to approach a hazard, and follow the open-data license
-                (CC BY 4.0) for what I publish. Admins may turn off researcher access for misuse.
-              </span>
-            </label>
+            <Checkbox
+              checked={terms}
+              onChange={(e) => setTerms(e.target.checked)}
+              label="I will pay contributors the posted bounties, never ask anyone to approach a hazard, and follow the open-data license (CC BY 4.0) for what I publish. Admins may turn off researcher access for misuse."
+            />
             <ErrorBox message={error} />
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <Link href="/account" className="text-sm text-muted-foreground underline underline-offset-4">
+              <Link href="/account" className="caps text-[11px] text-muted-foreground hover:text-foreground">
                 Account settings
               </Link>
               <Button type="submit" disabled={busy}>

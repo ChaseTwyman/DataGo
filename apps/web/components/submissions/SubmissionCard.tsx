@@ -3,7 +3,8 @@ import { ChevronDown, ChevronRight, ImageOff, MapPin } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { formatCents, type LenientSubmissionWithMedia as SubmissionWithMedia } from "@groundtruth/shared";
 import { extractedRows, formatScore } from "@/lib/client/checkFormat";
-import { cn, formatTime, shortId, timeAgo } from "@/lib/client/cn";
+import { cn, formatTime, shortId } from "@/lib/client/cn";
+import { RelativeTime } from "../ds/RelativeTime";
 import { ReasonCode, SubmissionStatusBadge } from "../status";
 import { CheckTable } from "./CheckTable";
 
@@ -23,14 +24,14 @@ export function SubmissionCard({
   const [open, setOpen] = useState(defaultOpen);
   const thumb = s.media_urls[0];
   return (
-    <div className={cn("rounded-lg border bg-card", fresh && "gt-arrive")}>
+    <div className={cn("rounded-sm border bg-card transition-colors hover:border-input", fresh && "gt-arrive")}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full cursor-pointer items-start gap-3 p-3 text-left hover:bg-muted/40"
+        className="flex w-full cursor-pointer items-start gap-3 p-3 text-left hover:bg-white/[0.02]"
       >
-        <div className="size-14 shrink-0 overflow-hidden rounded-md border bg-muted">
+        <div className="size-14 shrink-0 overflow-hidden rounded-sm border bg-muted">
           {thumb ? (
             <img src={thumb} alt="Submission frame 1" className="size-full object-cover" />
           ) : (
@@ -44,18 +45,16 @@ export function SubmissionCard({
             <SubmissionStatusBadge status={s.status} />
             {s.verifier === "none" || s.verifier === "mock" ? (
               <span
-                className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                className="caps rounded-[2px] border border-warning/45 px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.1em] text-warning"
                 title="Not verified by the real pipeline: never exported or published"
               >
                 {s.verifier === "none" ? "Demo seed" : "Mock AI"}
               </span>
             ) : null}
             {s.payout_cents !== null && s.payout_cents > 0 ? (
-              <span className="text-sm font-semibold text-emerald-700 tabular-nums">{formatCents(s.payout_cents)}</span>
+              <span className="numeral text-lg text-primary">{formatCents(s.payout_cents)}</span>
             ) : null}
-            <span className="ml-auto text-[11px] whitespace-nowrap text-muted-foreground" title={s.received_at}>
-              {timeAgo(s.received_at)}
-            </span>
+            <RelativeTime iso={s.received_at} className="ml-auto text-[11px] whitespace-nowrap text-muted-foreground" />
           </div>
           <div className="truncate text-xs text-muted-foreground">
             {showBounty && s.bounty_title ? <span className="font-medium text-foreground">{s.bounty_title} · </span> : null}
@@ -98,7 +97,7 @@ export function SubmissionDetail({ s }: { s: SubmissionWithMedia }) {
   return (
     <div className="space-y-4 border-t p-3">
       <section>
-        <h4 className="mb-1.5 text-xs font-semibold">Frames ({s.media_urls.length || s.media.length})</h4>
+        <h4 className="caps mb-2 text-[10px] text-muted-foreground">Frames ({s.media_urls.length || s.media.length})</h4>
         {s.media_purged_at ? (
           <p className="text-xs text-muted-foreground">
             Photos deleted per retention policy ({new Date(s.media_purged_at).toLocaleDateString()}). The verification record below is kept.
@@ -106,7 +105,7 @@ export function SubmissionDetail({ s }: { s: SubmissionWithMedia }) {
         ) : s.media_urls.some(Boolean) ? (
           <div className="grid grid-cols-3 gap-2">
             {s.media_urls.map((u, i) => (
-              <a key={i} href={u} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border">
+              <a key={i} href={u} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-sm border hover:border-muted-foreground">
                 <img src={u} alt={`Frame ${i + 1}`} className="aspect-[4/3] w-full object-cover" />
               </a>
             ))}
@@ -124,17 +123,17 @@ export function SubmissionDetail({ s }: { s: SubmissionWithMedia }) {
       </section>
 
       <section>
-        <h4 className="mb-1.5 text-xs font-semibold">Verification checks</h4>
+        <h4 className="caps mb-2 text-[10px] text-muted-foreground">Verification checks</h4>
         <CheckTable checks={s.checks} />
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2">
         <div>
-          <h4 className="mb-1.5 text-xs font-semibold">Extracted fields</h4>
+          <h4 className="caps mb-2 text-[10px] text-muted-foreground">Extracted fields</h4>
           <KVTable rows={fields} empty="Not extracted yet." />
         </div>
         <div>
-          <h4 className="mb-1.5 text-xs font-semibold">Field notes</h4>
+          <h4 className="caps mb-2 text-[10px] text-muted-foreground">Field notes</h4>
           <KVTable rows={notes} empty="No field notes." />
         </div>
       </section>
@@ -156,9 +155,9 @@ export function SubmissionDetail({ s }: { s: SubmissionWithMedia }) {
 
 function KV({ k, v }: { k: string; v: ReactNode }) {
   return (
-    <div className="rounded-md border px-2 py-1.5">
-      <div className="text-[10px] tracking-wide text-muted-foreground uppercase">{k}</div>
-      <div className="font-mono text-sm font-semibold tabular-nums">{v}</div>
+    <div className="rounded-sm border px-3 py-2">
+      <div className="caps text-[10px] text-muted-foreground">{k}</div>
+      <div className="numeral mt-1 text-xl">{v}</div>
     </div>
   );
 }
@@ -171,7 +170,7 @@ function KVTable({ rows, empty }: { rows: { key: string; value: string }[]; empt
         {rows.map((r) => (
           <tr key={r.key} className="border-b last:border-0">
             <td className="py-1 pr-2 font-mono text-muted-foreground">{r.key}</td>
-            <td className="py-1 break-all">{r.value}</td>
+            <td className="py-1 text-right break-all tabular-nums">{r.value}</td>
           </tr>
         ))}
       </tbody>

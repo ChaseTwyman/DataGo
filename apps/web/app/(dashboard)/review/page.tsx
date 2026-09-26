@@ -2,6 +2,7 @@
 import { CircleCheck, CircleX, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import type { LenientSubmissionWithMedia as SubmissionWithMedia } from "@groundtruth/shared";
+import { Checkbox } from "@/components/ds/controls";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
 import { SubmissionCard } from "@/components/submissions/SubmissionCard";
 import { Button } from "@/components/ui/button";
@@ -67,15 +68,12 @@ function ReviewActions({ s, onDone }: { s: SubmissionWithMedia; onDone: () => vo
           {busy === "reject" ? <LoaderCircle className="animate-spin" aria-hidden /> : <CircleX aria-hidden />}
           Reject
         </Button>
-        <label className="flex h-8 items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            className="size-4"
-            checked={integrity}
-            onChange={(e) => setIntegrity(e.target.checked)}
-          />
-          Integrity issue (fraud/fake — larger trust penalty)
-        </label>
+        <Checkbox
+          className="h-8 items-center text-xs"
+          checked={integrity}
+          onChange={(e) => setIntegrity(e.target.checked)}
+          label="Integrity issue (fraud/fake — larger trust penalty)"
+        />
         <Input
           value={note}
           onChange={(e) => setNote(e.target.value)}

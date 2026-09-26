@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, Hexagon, LoaderCircle, MailCheck } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { AuthHeading, AuthLayout } from "@/components/ds/AuthLayout";
+import { LoadingState, Notice } from "@/components/ds/primitives";
 import { ErrorBox } from "@/components/page";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/form";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
 import { signIn } from "@/lib/client/auth";
@@ -135,110 +136,88 @@ export default function ResetPasswordPage() {
           : "Enter the email you signed up with and we'll send you a code.";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,oklch(0.93_0.04_240),transparent_60%)] p-6">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-center justify-center gap-2">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-sky-500 text-white">
-            <Hexagon className="size-5" aria-hidden />
-          </span>
-          <div className="text-lg font-semibold">GroundTruth</div>
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {step === "loading" ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" aria-hidden /> Loading…
+    <AuthLayout>
+      <AuthHeading eyebrow="Account recovery" title={title}>
+        {description}
+      </AuthHeading>
+      <div className="space-y-5">
+        {step === "loading" ? <LoadingState inline label="Loading…" className="p-0" /> : null}
+        {notice && step !== "done" && step !== "link" ? <Notice tone="info">{notice}</Notice> : null}
+
+        {step === "email" ? (
+          <form onSubmit={(e) => void sendCode(e)} className="space-y-3" noValidate>
+            <Field label="Email" htmlFor="email" error={fields.email}>
+              <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />
+            </Field>
+            <Button type="submit" size="lg" className="w-full" disabled={busy}>
+              {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
+              Send code
+            </Button>
+          </form>
+        ) : null}
+
+        {step === "code" || step === "link" ? (
+          <form onSubmit={(e) => void onConfirm(e)} className="space-y-3" noValidate>
+            {step === "code" ? (
+              <Field label="6-digit code" htmlFor="code" error={fields.code}>
+                <Input
+                  id="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={12}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="font-mono tracking-[0.3em]"
+                  autoFocus
+                  required
+                />
+              </Field>
+            ) : null}
+            <PasswordInput id="new-password" label="New password" value={password} onChange={setPassword} error={fields.new_password} hint="At least 8 characters." />
+            <PasswordInput id="confirm-password" label="Confirm new password" value={confirm} onChange={setConfirm} error={fields.confirm_password} />
+            <Button type="submit" size="lg" className="w-full" disabled={busy}>
+              {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
+              Set new password
+            </Button>
+            {step === "code" ? (
+              <div className="flex items-center justify-between text-sm">
+                <button type="button" className="caps cursor-pointer text-[11px] text-muted-foreground hover:text-foreground" onClick={() => setStep("email")}>
+                  Use a different email
+                </button>
+                <button
+                  type="button"
+                  className="caps cursor-pointer text-[11px] text-muted-foreground tabular-nums hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={busy || wait > 0}
+                  onClick={() => void sendCode()}
+                >
+                  {wait > 0 ? `Send a new code (${wait}s)` : "Send a new code"}
+                </button>
               </div>
-            ) : null}
-            {notice && step !== "done" && step !== "link" ? (
-              <p className="flex gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950" role="status">
-                {step === "code" ? <MailCheck className="mt-0.5 size-4 shrink-0" aria-hidden /> : null}
-                {notice}
-              </p>
-            ) : null}
+            ) : (
+              <button type="button" className="caps cursor-pointer text-[11px] text-muted-foreground hover:text-foreground" onClick={() => setStep("email")}>
+                Link not working? Get a code instead
+              </button>
+            )}
+          </form>
+        ) : null}
 
-            {step === "email" ? (
-              <form onSubmit={(e) => void sendCode(e)} className="space-y-3" noValidate>
-                <Field label="Email" htmlFor="email" error={fields.email}>
-                  <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />
-                </Field>
-                <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
-                  Send code
-                </Button>
-              </form>
-            ) : null}
+        {step === "done" && busy ? (
+          <LoadingState inline label="Signing you in…" className="p-0" />
+        ) : null}
+        {step === "done" && !busy ? (
+          <Link href="/login" className={buttonVariants({ size: "lg", className: "w-full" })}>
+            Sign in with your new password
+          </Link>
+        ) : null}
 
-            {step === "code" || step === "link" ? (
-              <form onSubmit={(e) => void onConfirm(e)} className="space-y-3" noValidate>
-                {step === "code" ? (
-                  <Field label="6-digit code" htmlFor="code" error={fields.code}>
-                    <Input
-                      id="code"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={12}
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      className="font-mono tracking-[0.3em]"
-                      autoFocus
-                      required
-                    />
-                  </Field>
-                ) : null}
-                <PasswordInput id="new-password" label="New password" value={password} onChange={setPassword} error={fields.new_password} hint="At least 8 characters." />
-                <PasswordInput id="confirm-password" label="Confirm new password" value={confirm} onChange={setConfirm} error={fields.confirm_password} />
-                <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
-                  Set new password
-                </Button>
-                {step === "code" ? (
-                  <div className="flex items-center justify-between text-sm">
-                    <button type="button" className="cursor-pointer text-muted-foreground underline underline-offset-4 hover:text-foreground" onClick={() => setStep("email")}>
-                      Use a different email
-                    </button>
-                    <button
-                      type="button"
-                      className="cursor-pointer text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
-                      disabled={busy || wait > 0}
-                      onClick={() => void sendCode()}
-                    >
-                      {wait > 0 ? `Send a new code (${wait}s)` : "Send a new code"}
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" className="cursor-pointer text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground" onClick={() => setStep("email")}>
-                    Link not working? Get a code instead
-                  </button>
-                )}
-              </form>
-            ) : null}
-
-            {step === "done" && busy ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" aria-hidden /> Signing you in…
-              </div>
-            ) : null}
-            {step === "done" && !busy ? (
-              <Link href="/login" className={buttonVariants({ className: "w-full" })}>
-                Sign in with your new password
-              </Link>
-            ) : null}
-
-            <ErrorBox message={error} />
-          </CardContent>
-        </Card>
-        <p className="text-center text-sm">
-          <Link href="/login" className="inline-flex items-center gap-1 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+        <ErrorBox message={error} />
+        <p className="border-t pt-5">
+          <Link href="/login" className="caps inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground">
             <ArrowLeft className="size-3.5" aria-hidden /> Back to sign in
           </Link>
         </p>
       </div>
-    </main>
+    </AuthLayout>
   );
 }
 

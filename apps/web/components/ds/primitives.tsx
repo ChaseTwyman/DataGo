@@ -281,3 +281,19 @@ export function KeyValue({ items, className }: { items: { k: ReactNode; v: React
     </dl>
   );
 }
+
+/** Long-running job (model drafting, scans): caps stage line, thin accent progress rule, caption. */
+export function JobProgress({ stage, pct, children, className }: { stage: ReactNode; pct: number; children?: ReactNode; className?: string }) {
+  return (
+    <div role="status" className={cn("space-y-3 border border-l-2 border-l-primary bg-card p-4 text-sm", className)}>
+      <div className="caps flex items-center gap-2 text-xs font-semibold">
+        <span className="gt-skeleton inline-block size-1.5 rounded-full bg-primary" aria-hidden />
+        {stage}
+      </div>
+      <div className="h-px bg-input" aria-hidden>
+        <div className="-mt-px h-[3px] bg-primary transition-[width] duration-1000" style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
+      </div>
+      {children ? <p className="text-xs text-muted-foreground tabular-nums">{children}</p> : null}
+    </div>
+  );
+}

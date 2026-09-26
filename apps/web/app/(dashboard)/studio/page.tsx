@@ -3,6 +3,9 @@ import { ArrowRight, Braces, CheckCircle2, FileText, LoaderCircle, Plus, Sparkle
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ProtocolSchema, type FieldQuestion, type Protocol } from "@groundtruth/shared";
+import { Checkbox } from "@/components/ds/controls";
+import { useConfirm } from "@/components/ds/Dialog";
+import { JobProgress } from "@/components/ds/primitives";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -58,10 +61,10 @@ export default function StudioPage() {
       <div className="grid gap-4 p-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0 space-y-4">
           {published ? (
-            <Card className="border-emerald-300">
+            <Card className="border-success/50">
               <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
                 <p className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="size-4 text-emerald-600" aria-hidden />
+                  <CheckCircle2 className="size-4 text-success" aria-hidden />
                   <span>
                     <span className="font-medium">{published.name}</span> is published. Every researcher can now use it for bounties.
                   </span>
@@ -108,7 +111,7 @@ export default function StudioPage() {
                 }}
                 className={cn(
                   "flex w-full cursor-pointer items-start gap-2 rounded-md border p-2 text-left text-sm hover:bg-muted/50",
-                  editing?.id === d.id && "border-sky-400 bg-sky-50",
+                  editing?.id === d.id && "border-primary bg-primary/[0.06]",
                 )}
               >
                 <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -145,7 +148,7 @@ function NeedForm() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Sparkles className="size-4 text-sky-600" aria-hidden /> What data do you need?
+          <Sparkles className="size-4 text-primary" aria-hidden /> What data do you need?
         </CardTitle>
         <CardDescription>
           Say what you want measured, where, and why. The draft includes safety rules, what must be in frame, anti-fake challenges, field
@@ -165,25 +168,17 @@ function NeedForm() {
         {!running && !need ? (
           <div className="flex flex-wrap gap-1.5">
             {EXAMPLES.map((ex) => (
-              <button key={ex} type="button" onClick={() => setNeed(ex)} className="cursor-pointer rounded-full border px-2.5 py-1 text-xs hover:bg-muted">
+              <button key={ex} type="button" onClick={() => setNeed(ex)} className="cursor-pointer rounded-sm border px-2.5 py-1 text-xs text-muted-foreground hover:border-muted-foreground hover:text-foreground">
                 {ex}
               </button>
             ))}
           </div>
         ) : null}
         {running ? (
-          <div role="status" className="space-y-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
-            <div className="flex items-center gap-2 font-medium">
-              <LoaderCircle className="size-4 animate-spin" aria-hidden /> {draftStage(elapsed)}
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-sky-100">
-              <div className="h-full rounded-full bg-sky-500 transition-[width] duration-1000" style={{ width: `${Math.min(95, (elapsed / 120_000) * 100)}%` }} />
-            </div>
-            <p className="text-xs text-sky-900/80">
-              {Math.round(elapsed / 1000)} s · usually 1–2 minutes. You can leave this page; the draft is saved to &quot;Your drafts&quot; when it&apos;s
-              ready.
-            </p>
-          </div>
+          <JobProgress stage={draftStage(elapsed)} pct={Math.min(95, (elapsed / 120_000) * 100)}>
+            {Math.round(elapsed / 1000)} s · usually 1–2 minutes. You can leave this page; the draft is saved to &quot;Your drafts&quot; when it&apos;s
+            ready.
+          </JobProgress>
         ) : null}
         <ErrorBox message={job.status === "error" ? job.message : null} />
         <Button disabled={running || tooShort} onClick={() => startDraftJob(need.trim(), (n) => api.draftProtocol(n), errorMessage)}>
@@ -206,6 +201,7 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
+  const confirm = useConfirm();
   // Rows live in their own state so a new (still unnamed) field doesn't vanish from the form.
   const [fields, setFieldRows] = useState<ExtractionField[]>(() => extractionFields(initial));
   const setFields = (f: ExtractionField[]) => {
@@ -248,7 +244,14 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
     }
     const v = ProtocolSchema.safeParse(def);
     if (!v.success) return setIssues(protocolIssues(v.error));
-    if (!window.confirm(`Publish "${v.data.name}"? Published protocols can't be edited; you'd draft a new version.`)) return;
+    if (
+      !(await confirm({
+        title: "Publish protocol",
+        body: `Publish "${v.data.name}"? Published protocols can't be edited; you'd draft a new version.`,
+        confirmLabel: "Publish",
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await api.publishProtocol(id, v.data);
@@ -272,7 +275,7 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
           </CardTitle>
           <CardDescription className="mt-1">Check every section. Contributors see this wording, and the verifier enforces it.</CardDescription>
         </div>
-        <div className="flex rounded-md border p-0.5 text-xs" role="tablist" aria-label="Editor">
+        <div className="caps flex rounded-sm border p-0.5 text-[11px]" role="tablist" aria-label="Editor">
           {(["form", "json"] as const).map((t) => (
             <button
               key={t}
@@ -280,7 +283,7 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
               role="tab"
               aria-selected={tab === t}
               onClick={() => switchTab(t)}
-              className={cn("flex cursor-pointer items-center gap-1 rounded px-2.5 py-1", tab === t ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+              className={cn("flex cursor-pointer items-center gap-1 rounded px-2.5 py-1", tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
             >
               {t === "form" ? <FileText className="size-3.5" aria-hidden /> : <Braces className="size-3.5" aria-hidden />}
               {t === "form" ? "Form" : "Raw JSON"}
@@ -430,9 +433,12 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
                       ))}
                     </Select>
                     <Input aria-label="Field description" placeholder="Description" value={f.description} onChange={(e) => upd({ ...f, description: e.target.value })} />
-                    <label className="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                      <input type="checkbox" checked={f.required} onChange={(e) => upd({ ...f, required: e.target.checked })} /> required
-                    </label>
+                    <Checkbox
+                      className="items-center self-center text-xs whitespace-nowrap"
+                      checked={f.required}
+                      onChange={(e) => upd({ ...f, required: e.target.checked })}
+                      label="required"
+                    />
                   </div>
                 )}
               />
@@ -473,8 +479,8 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   return (
     <section className="space-y-3">
       <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+        <h3 className="caps border-b pb-2 text-[11px] font-semibold">{title}</h3>
+        {hint ? <p className="mt-2 text-xs text-muted-foreground">{hint}</p> : null}
       </div>
       {children}
     </section>
@@ -484,9 +490,9 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 function IssueList({ lines }: { lines: string[] | null }) {
   if (!lines?.length) return null;
   return (
-    <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-      <p className="font-medium">Fix these before publishing:</p>
-      <ul className="mt-1 list-disc pl-5">
+    <div role="alert" className="border border-l-2 border-destructive bg-card px-4 py-3 text-sm">
+      <p className="caps text-xs font-semibold text-destructive">Fix these before publishing:</p>
+      <ul className="mt-2 list-disc pl-5 text-foreground/85">
         {lines.map((l) => (
           <li key={l}>{l}</li>
         ))}

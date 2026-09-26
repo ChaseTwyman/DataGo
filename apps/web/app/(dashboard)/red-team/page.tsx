@@ -2,6 +2,7 @@
 import { Copy, LoaderCircle, MapPinOff, ShieldAlert, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
 import { Suspense, useMemo, useState } from "react";
 import type { AttackType } from "@groundtruth/shared";
+import { RelativeTime } from "@/components/ds/RelativeTime";
 import { BountySelect, useSelectedBounty } from "@/components/BountyPicker";
 import { Empty, ErrorBox, Loading, PageHeader, Stat } from "@/components/page";
 import { ReasonCode, ToneBadge } from "@/components/status";
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { api, errorMessage } from "@/lib/client/api";
 import { caughtBy, parseChecksLoose } from "@/lib/client/checkFormat";
-import { cn, formatTime } from "@/lib/client/cn";
+import { cn } from "@/lib/client/cn";
 import { useApi } from "@/lib/client/useApi";
 
 const ATTACKS: { type: AttackType; label: string; icon: LucideIcon; blurb: string }[] = [
@@ -91,8 +92,8 @@ function RedTeam() {
           {ATTACKS.map((a) => (
             <Card key={a.type} className="flex flex-col">
               <CardContent className="flex flex-1 flex-col gap-3 pt-5">
-                <div className="flex items-center gap-2 font-semibold">
-                  <a.icon className="size-4 text-red-600" aria-hidden /> {a.label}
+                <div className="caps flex items-center gap-2 text-sm font-semibold">
+                  <a.icon className="size-4 text-destructive" strokeWidth={1.75} aria-hidden /> {a.label}
                 </div>
                 <p className="flex-1 text-sm text-muted-foreground">{a.blurb}</p>
                 <Button variant="destructive" disabled={!bountyId || busy !== null} onClick={() => void launch(a.type)}>
@@ -111,7 +112,7 @@ function RedTeam() {
             <Stat
               label="Caught rate"
               value={
-                <span className={cn(list.length && caught === list.length ? "text-emerald-700" : list.length ? "text-amber-700" : "")}>
+                <span className={cn(list.length && caught === list.length ? "text-success" : list.length ? "text-warning" : "")}>
                   {list.length ? `${Math.round((caught / list.length) * 100)}%` : "—"}
                 </span>
               }
@@ -126,7 +127,7 @@ function RedTeam() {
             const checks = parseChecksLoose(r.checks);
             const layers = caughtBy(checks);
             return (
-              <Card key={r.id} className={cn(r.id === lastRunId && "ring-2 ring-red-300")}>
+              <Card key={r.id} className={cn(r.id === lastRunId && "border-destructive/60")}>
                 <div className="grid gap-4 p-4 md:grid-cols-[240px_1fr]">
                   <SyntheticImage
                     src={r.image_url}
@@ -137,7 +138,7 @@ function RedTeam() {
                   />
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold">{(ATTACK_LABEL[r.attack_type as AttackType] ?? "Unknown")}</span>
+                      <span className="caps text-sm font-semibold">{(ATTACK_LABEL[r.attack_type as AttackType] ?? "Unknown")}</span>
                       {r.caught ? (
                         <ToneBadge tone="success" icon={ShieldCheck}>
                           Caught
@@ -150,7 +151,7 @@ function RedTeam() {
                       <span className="text-xs text-muted-foreground">
                         pipeline → <span className="font-medium text-foreground">{r.status.replace("_", " ")}</span>
                       </span>
-                      <span className="ml-auto text-xs text-muted-foreground">{formatTime(r.created_at)}</span>
+                      <RelativeTime iso={r.created_at} className="ml-auto text-xs text-muted-foreground" />
                     </div>
                     {layers.length ? (
                       <p className="text-sm">

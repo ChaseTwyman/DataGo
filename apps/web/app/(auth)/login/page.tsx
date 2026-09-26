@@ -1,16 +1,17 @@
 "use client";
 import Link from "next/link";
-import { Hexagon, LoaderCircle, UserRound } from "lucide-react";
+import { LoaderCircle, UserRound } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { SignupRequestSchema, type LenientHealthResponse } from "@groundtruth/shared";
+import { AuthHeading, AuthLayout } from "@/components/ds/AuthLayout";
+import { Checkbox, Tabs } from "@/components/ds/controls";
+import { LoadingState, Notice } from "@/components/ds/primitives";
 import { ErrorBox } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/form";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
 import { signIn, signInLocalResearcher, signUp } from "@/lib/client/auth";
-import { cn } from "@/lib/client/cn";
 import { supabaseConfigured } from "@/lib/supabase/browser";
 
 export default function LoginPage() {
@@ -84,128 +85,91 @@ function Login() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,oklch(0.93_0.04_240),transparent_60%)] p-6">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-center justify-center gap-2">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-sky-500 text-white">
-            <Hexagon className="size-5" aria-hidden />
-          </span>
-          <div>
-            <div className="text-lg font-semibold">GroundTruth</div>
-            <div className="text-xs text-muted-foreground">A bounty board for reality</div>
-          </div>
-        </div>
-        <Card>
-          <CardHeader>
-            <div className="mb-2 grid grid-cols-2 rounded-md border p-0.5 text-sm" role="tablist" aria-label="Account">
-              {(["signin", "signup"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === t}
-                  onClick={() => {
-                    setTab(t);
-                    setError(null);
-                    setFields({});
-                  }}
-                  className={cn("cursor-pointer rounded px-3 py-1.5 font-medium", tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}
-                >
-                  {t === "signin" ? "Sign in" : "Create account"}
-                </button>
-              ))}
+    <AuthLayout>
+      <AuthHeading eyebrow="Researcher console" title={tab === "signin" ? "Sign in" : "Create account"}>
+        {tab === "signin"
+          ? "Researchers post bounties and export datasets. Contributors can download or delete their data here."
+          : "One account for contributing from the phone app and, if you like, running research. No email verification needed."}
+      </AuthHeading>
+      <Tabs
+        label="Account"
+        className="mb-6 w-full"
+        items={[
+          { id: "signin", label: "Sign in" },
+          { id: "signup", label: "Create account" },
+        ]}
+        value={tab}
+        onChange={(t) => {
+          setTab(t);
+          setError(null);
+          setFields({});
+        }}
+      />
+      <div className="space-y-5">
+        {health === null ? <LoadingState inline label="Checking backend…" className="p-0" /> : null}
+        {notice ? <Notice tone="info">{notice}</Notice> : null}
+
+        {canPassword && tab === "signin" ? (
+          <form onSubmit={onSignIn} className="space-y-4">
+            <Field label="Email" htmlFor="email">
+              <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </Field>
+            <Field label="Password" htmlFor="password">
+              <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </Field>
+            <div className="-mt-1 text-right">
+              <Link
+                href={email.trim() ? `/reset-password?email=${encodeURIComponent(email.trim())}` : "/reset-password"}
+                className="caps text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                Forgot password?
+              </Link>
             </div>
-            <CardTitle className="text-base">{tab === "signin" ? "Welcome back" : "Create your GroundTruth account"}</CardTitle>
-            <CardDescription>
-              {tab === "signin"
-                ? "Researchers post bounties and export datasets. Contributors can download or delete their data here."
-                : "One account for contributing from the phone app and, if you like, running research. No email verification needed."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {health === null ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" aria-hidden /> Checking backend…
-              </div>
-            ) : null}
-            {notice ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{notice}</p> : null}
+            <Button type="submit" size="lg" className="w-full" disabled={busy}>
+              {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
+              Sign in
+            </Button>
+          </form>
+        ) : null}
 
-            {canPassword && tab === "signin" ? (
-              <form onSubmit={onSignIn} className="space-y-3">
-                <Field label="Email" htmlFor="email">
-                  <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                </Field>
-                <Field label="Password" htmlFor="password">
-                  <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                </Field>
-                <div className="-mt-1 text-right">
-                  <Link
-                    href={email.trim() ? `/reset-password?email=${encodeURIComponent(email.trim())}` : "/reset-password"}
-                    className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-                <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
-                  Sign in
-                </Button>
-              </form>
-            ) : null}
+        {canPassword && tab === "signup" ? (
+          <form onSubmit={onSignUp} className="space-y-4">
+            <Field label="Name" htmlFor="name" error={fields.display_name} hint="Shown to researchers reviewing your captures.">
+              <Input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
+            </Field>
+            <Field label="Email" htmlFor="su-email" error={fields.email}>
+              <Input id="su-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </Field>
+            <Field label="Password" htmlFor="su-password" error={fields.password} hint="At least 8 characters.">
+              <Input id="su-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </Field>
+            <Checkbox label="I am 18 or older." checked={adult} onChange={(e) => setAdult(e.target.checked)} />
+            <Checkbox
+              label="I accept the terms. Accepted observations are published as open data (CC BY 4.0) without my name; photos are never published."
+              checked={terms}
+              onChange={(e) => setTerms(e.target.checked)}
+            />
+            <Button type="submit" size="lg" className="w-full" disabled={busy}>
+              {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
+              Create account
+            </Button>
+          </form>
+        ) : null}
 
-            {canPassword && tab === "signup" ? (
-              <form onSubmit={onSignUp} className="space-y-3">
-                <Field label="Name" htmlFor="name" error={fields.display_name} hint="Shown to researchers reviewing your captures.">
-                  <Input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
-                </Field>
-                <Field label="Email" htmlFor="su-email" error={fields.email}>
-                  <Input id="su-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                </Field>
-                <Field label="Password" htmlFor="su-password" error={fields.password} hint="At least 8 characters.">
-                  <Input id="su-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                </Field>
-                <label className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" className="mt-0.5 size-4" checked={adult} onChange={(e) => setAdult(e.target.checked)} />
-                  <span>I am 18 or older.</span>
-                </label>
-                <label className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" className="mt-0.5 size-4" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
-                  <span>
-                    I accept the terms. Accepted observations are published as open data (CC BY 4.0) without my name; photos are never published.
-                  </span>
-                </label>
-                <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
-                  Create account
-                </Button>
-              </form>
-            ) : null}
+        {localMode && tab === "signin" ? (
+          <div className="space-y-2 border-t pt-5">
+            <p className="text-xs text-muted-foreground">Local backend: skip the password and use the seeded demo admin.</p>
+            <Button variant="outline" className="w-full" disabled={busy} onClick={() => void run(signInLocalResearcher)}>
+              <UserRound aria-hidden /> Continue as demo researcher
+            </Button>
+          </div>
+        ) : null}
 
-            {localMode && tab === "signin" ? (
-              <div className="space-y-2 border-t pt-4">
-                <p className="text-xs text-muted-foreground">Local backend: skip the password and use the seeded demo admin.</p>
-                <Button variant="outline" className="w-full" disabled={busy} onClick={() => void run(signInLocalResearcher)}>
-                  <UserRound aria-hidden /> Continue as demo researcher
-                </Button>
-              </div>
-            ) : null}
-
-            {health === "error" ? <ErrorBox message="Can't reach the GroundTruth server right now. Check your connection and reload the page." /> : null}
-            {health !== null && health !== "error" && !canPassword ? (
-              <ErrorBox message="Sign-in isn't configured on this deployment yet." />
-            ) : null}
-            <ErrorBox message={error} />
-          </CardContent>
-        </Card>
-        <p className="text-center text-sm text-muted-foreground">
-          Just want the data?{" "}
-          <Link href="/data" className="font-medium text-foreground underline underline-offset-4">
-            Browse open datasets
-          </Link>{" "}
-          — free, no login.
-        </p>
+        {health === "error" ? <ErrorBox message="Can't reach the GroundTruth server right now. Check your connection and reload the page." /> : null}
+        {health !== null && health !== "error" && !canPassword ? <ErrorBox message="Sign-in isn't configured on this deployment yet." /> : null}
+        <ErrorBox message={error} />
       </div>
-    </main>
+    </AuthLayout>
   );
 }
 

@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { formatCents, formatSurge, isHotSurge } from "@groundtruth/shared";
+import { Tabs } from "@/components/ds/controls";
+import { MapPanel } from "@/components/ds/MapFrame";
+import { PanelHeader, ReadoutGrid } from "@/components/ds/primitives";
 import { HexMap, MapLegend, type MapPoint } from "@/components/map";
 import { Empty, ErrorBox, Loading, PageHeader, Stat } from "@/components/page";
 import { BriefingVideo } from "@/components/BriefingVideo";
@@ -136,22 +139,22 @@ export default function BountyPage() {
           </>
         }
       />
-      <ErrorBox message={actionError ?? coverage.error} className="mx-6 mt-3" />
+      <ErrorBox message={actionError ?? coverage.error} className="mx-6 my-3" />
 
-      <div className="grid grid-cols-2 gap-4 border-b bg-card px-6 py-3 sm:grid-cols-5">
+      <ReadoutGrid>
         <Stat label="Coverage" value={`${summary.accepted} / ${summary.target}`} sub={`${Math.round(summary.ratio * 100)}% of target`} />
         <Stat label="Cells" value={summary.cells} sub={summary.paused ? `${summary.paused} paused` : "none paused"} />
         <Stat
           label="Top surge"
-          value={<span className={cn(isHotSurge(summary.maxSurge) && "text-amber-600")}>{formatSurge(summary.maxSurge || 1)}</span>}
+          value={<span className={cn(isHotSurge(summary.maxSurge) && "text-warning")}>{formatSurge(summary.maxSurge || 1)}</span>}
           sub={`base ${formatCents(b.base_price_cents)} · max ${formatCents(b.max_price_cents)}`}
         />
         <Stat label="Spent" value={formatCents(b.spent_cents)} sub={`of ${formatCents(b.budget_cents)}`} />
         <Stat label="Submissions" value={stream.submissions.length} sub={`${acceptedCount} accepted`} />
-      </div>
+      </ReadoutGrid>
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_460px]">
-        <div className="relative min-h-[420px]">
+        <div className="relative min-h-[420px] bg-[#0c0c0c]">
           <HexMap
             center={{ lat: b.center_lat, lng: b.center_lng }}
             zoom={14}
@@ -160,11 +163,11 @@ export default function BountyPage() {
             flyKey={id}
             className="absolute inset-0"
           />
-          <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-wrap items-end justify-between gap-2">
+          <div className="pointer-events-none absolute inset-x-3 bottom-8 flex flex-wrap items-end justify-between gap-2">
             <div className="pointer-events-auto space-y-2">
               {summary.pausedReasons.length ? (
-                <div className="max-w-sm rounded-md border border-amber-300 bg-amber-50/95 px-3 py-2 text-xs text-amber-900 shadow-sm">
-                  <div className="flex items-center gap-1.5 font-semibold">
+                <MapPanel className="max-w-sm border-warning/50 px-3 py-2 text-xs">
+                  <div className="caps flex items-center gap-1.5 font-semibold text-warning">
                     <TriangleAlert className="size-3.5" aria-hidden /> {summary.paused} cell{summary.paused === 1 ? "" : "s"} paused —
                     capture disabled
                   </div>
@@ -173,7 +176,7 @@ export default function BountyPage() {
                       <li key={r}>{r}</li>
                     ))}
                   </ul>
-                </div>
+                </MapPanel>
               ) : null}
               <MapLegend />
             </div>
@@ -183,14 +186,14 @@ export default function BountyPage() {
                 videoUrl={b.briefing_video_url}
                 canManage={canManage}
                 refresh={bounty.refresh}
-                className="pointer-events-auto w-36"
+                className="pointer-events-auto w-52"
               />
               {b.example_image_url ? (
                 <SyntheticImage
                   src={b.example_image_url}
                   label="Example — AI-generated"
                   alt="Protocol example image"
-                  className="pointer-events-auto w-44 shadow-md"
+                  className="pointer-events-auto w-44"
                 />
               ) : null}
             </div>
@@ -198,31 +201,17 @@ export default function BountyPage() {
         </div>
 
         <aside className="flex min-h-0 flex-col border-l bg-background">
-          <div className="flex items-center justify-between gap-2 border-b bg-card px-4 py-2.5">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Radio className="size-4 text-red-500" aria-hidden /> Live submissions
-            </div>
-            <span className="text-[11px] text-muted-foreground">
-              {stream.mode === "realtime" ? "realtime" : "polling every 2 s"}
-            </span>
-          </div>
-          <div className="flex gap-1 border-b bg-card px-3 py-2" role="tablist" aria-label="Filter submissions">
-            {FILTERS.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                role="tab"
-                aria-selected={filter === f.id}
-                onClick={() => setFilter(f.id)}
-                className={cn(
-                  "h-8 cursor-pointer rounded-md px-2.5 text-xs font-medium",
-                  filter === f.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+          <PanelHeader
+            title="Live submissions"
+            icon={Radio}
+            actions={
+              <span className="caps flex items-center gap-1.5 text-[10px]">
+                <span className="size-1.5 animate-pulse rounded-full bg-success" aria-hidden />
+                {stream.mode === "realtime" ? "Realtime" : "Polling 2 s"}
+              </span>
+            }
+          />
+          <Tabs label="Filter submissions" size="sm" className="w-full overflow-x-auto px-2" items={FILTERS} value={filter} onChange={setFilter} />
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
             <ErrorBox message={stream.error} />
             {stream.loading ? <Loading label="Loading stream…" /> : null}

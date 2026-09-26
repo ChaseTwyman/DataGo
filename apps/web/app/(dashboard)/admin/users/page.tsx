@@ -2,6 +2,9 @@
 import { Check, Copy, KeyRound, LoaderCircle, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AdminUser } from "@groundtruth/shared";
+import { Switch } from "@/components/ds/controls";
+import { useConfirm } from "@/components/ds/Dialog";
+import { RelativeTime } from "@/components/ds/RelativeTime";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
 import { toast } from "@/components/Toaster";
 import { Badge } from "@/components/ui/badge";
@@ -29,13 +32,35 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [temp, setTemp] = useState<{ user: AdminUser; password: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const confirm = useConfirm();
 
   if (me && !me.is_admin) return <ErrorBox className="m-6" message="Only administrators can manage users." />;
 
   const toggle = async (u: AdminUser, flag: Flag) => {
     const next = !u[flag];
-    if (flag === "suspended" && next && !window.confirm(`Suspend ${u.email ?? u.id}? They lose access immediately.`)) return;
-    if (flag === "is_admin" && next && !window.confirm(`Make ${u.email ?? u.id} an admin? Admins can manage every account.`)) return;
+    if (
+      flag === "suspended" &&
+      next &&
+      !(await confirm({
+        title: "Suspend account",
+        body: `Suspend ${u.email ?? u.id}? They lose access immediately.`,
+        confirmLabel: "Suspend",
+        tone: "danger",
+        typed: "SUSPEND",
+      }))
+    )
+      return;
+    if (
+      flag === "is_admin" &&
+      next &&
+      !(await confirm({
+        title: "Grant admin",
+        body: `Make ${u.email ?? u.id} an admin? Admins can manage every account.`,
+        confirmLabel: "Make admin",
+        tone: "danger",
+      }))
+    )
+      return;
     setBusy(`${u.id}:${flag}`);
     setError(null);
     try {
@@ -49,7 +74,15 @@ export default function AdminUsersPage() {
   };
 
   const reset = async (u: AdminUser) => {
-    if (!window.confirm(`Reset the password of ${u.email ?? u.id}? Their current password stops working.`)) return;
+    if (
+      !(await confirm({
+        title: "Reset password",
+        body: `Reset the password of ${u.email ?? u.id}? Their current password stops working.`,
+        confirmLabel: "Reset password",
+        tone: "danger",
+      }))
+    )
+      return;
     setBusy(`${u.id}:reset`);
     setError(null);
     setCopied(false);
@@ -89,13 +122,13 @@ export default function AdminUsersPage() {
         </div>
 
         {temp ? (
-          <div role="status" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+          <div role="status" className="space-y-3 border border-l-2 border-warning bg-card p-4 text-sm">
             <p>
               Temporary password for <span className="font-medium">{temp.user.email ?? temp.user.id}</span>. It is shown only once: hand
               it over now and ask them to change it under Account.
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <code className="rounded border border-amber-300 bg-white px-2 py-1 font-mono text-base select-all">{temp.password}</code>
+              <code className="rounded-sm border border-input bg-background px-3 py-1.5 font-mono text-base tracking-wider text-primary select-all">{temp.password}</code>
               <Button size="sm" variant="outline" onClick={() => void copy()}>
                 {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
                 {copied ? "Copied" : "Copy"}
@@ -111,7 +144,7 @@ export default function AdminUsersPage() {
         {users.loading && !rows ? <Loading /> : null}
         {rows && rows.length === 0 ? <Empty title="No accounts match">Try part of an email address or an organization.</Empty> : null}
         {rows && rows.length > 0 ? (
-          <div className="rounded-lg border bg-card">
+          <div className="rounded-sm border bg-card">
             <Table>
               <THead>
                 <TR>
@@ -142,7 +175,9 @@ export default function AdminUsersPage() {
                       </TD>
                       <TD className="text-right tabular-nums">{u.submissions}</TD>
                       <TD className="text-right tabular-nums">{u.trust_score.toFixed(2)}</TD>
-                      <TD className="whitespace-nowrap text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</TD>
+                      <TD className="whitespace-nowrap text-muted-foreground">
+                        <RelativeTime iso={u.created_at} />
+                      </TD>
                       {(["is_researcher", "is_admin", "suspended"] as const).map((flag) => (
                         <TD key={flag}>
                           <FlagSwitch
@@ -174,20 +209,5 @@ export default function AdminUsersPage() {
 }
 
 function FlagSwitch(p: { label: string; on: boolean; danger?: boolean; busy: boolean; disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={p.on}
-      aria-label={p.label}
-      disabled={p.disabled}
-      onClick={p.onClick}
-      className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-        p.on ? (p.danger ? "bg-red-600" : "bg-sky-600") : "bg-zinc-300"
-      }`}
-    >
-      <span className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${p.on ? "translate-x-4.5" : "translate-x-0.5"}`} />
-      {p.busy ? <LoaderCircle className="absolute -right-5 size-3.5 animate-spin text-muted-foreground" aria-hidden /> : null}
-    </button>
-  );
+  return <Switch checked={p.on} onChange={p.onClick} label={p.label} tone={p.danger ? "danger" : "default"} busy={p.busy} disabled={p.disabled} />;
 }

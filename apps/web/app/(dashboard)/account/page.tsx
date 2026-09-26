@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { formatCents, PasswordSchema } from "@groundtruth/shared";
 import { BecomeResearcher } from "@/components/account/BecomeResearcher";
+import { useConfirm } from "@/components/ds/Dialog";
+import { Notice } from "@/components/ds/primitives";
 import { ErrorBox, Loading, PageHeader, Stat } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,7 @@ export default function AccountPage() {
   return (
     <>
       <PageHeader title="Account" description="Your profile, password, researcher access, and your data." />
-      <div className="grid max-w-5xl gap-4 p-6 lg:grid-cols-2">
+      <div className="grid max-w-5xl items-start gap-4 p-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -35,7 +37,7 @@ export default function AccountPage() {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <Stat label="Name" value={me.display_name ?? "—"} />
-              <Stat label="Balance" value={formatCents(me.balance_cents)} />
+              <Stat label="Balance" value={<span className="text-primary">{formatCents(me.balance_cents)}</span>} />
               <Stat label="Trust" value={me.trust_score.toFixed(2)} />
             </div>
             <p className="text-xs text-muted-foreground">Member since {new Date(me.created_at).toLocaleDateString()}.</p>
@@ -106,7 +108,7 @@ function ChangePassword() {
             <Input id="new2" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
           </Field>
           <ErrorBox message={error} />
-          {done ? <p className="text-sm text-emerald-700">Password changed.</p> : null}
+          {done ? <Notice tone="info">Password changed.</Notice> : null}
           <Button type="submit" disabled={busy}>
             {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
             Change password
@@ -121,9 +123,17 @@ function ResearcherStatus() {
   const { me, setMe } = useMe();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   if (!me) return null;
   const off = async () => {
-    if (!window.confirm("Turn off researcher access? Your bounties keep running; you can turn it back on later.")) return;
+    if (
+      !(await confirm({
+        title: "Turn off researcher access",
+        body: "Turn off researcher access? Your bounties keep running; you can turn it back on later.",
+        confirmLabel: "Turn off",
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -144,11 +154,11 @@ function ResearcherStatus() {
         {me.researcher_profile ? (
           <dl className="space-y-1">
             <div>
-              <dt className="text-xs text-muted-foreground">Organization</dt>
+              <dt className="caps text-[10px] text-muted-foreground">Organization</dt>
               <dd>{me.researcher_profile.organization}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Purpose</dt>
+              <dt className="caps mt-2 text-[10px] text-muted-foreground">Purpose</dt>
               <dd className="whitespace-pre-wrap">{me.researcher_profile.purpose}</dd>
             </div>
           </dl>
@@ -211,9 +221,9 @@ function YourData() {
             Download my data
           </Button>
         </div>
-        <div className="space-y-2 rounded-lg border border-red-200 p-3">
+        <div className="space-y-3 border border-l-2 border-destructive/60 p-4">
           <p className="text-sm">
-            <span className="font-medium text-red-800">Delete my account.</span>{" "}
+            <span className="caps font-semibold text-destructive">Delete my account.</span>{" "}
             <span className="text-muted-foreground">
               Your photos, profile, wallet and sessions are deleted. Accepted observations already released as open data stay in the public
               dataset without your name or id. This can&apos;t be undone.

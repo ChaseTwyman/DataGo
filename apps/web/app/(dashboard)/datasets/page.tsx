@@ -2,6 +2,7 @@
 import { BookOpen, Download, FileJson, FileSpreadsheet, LoaderCircle } from "lucide-react";
 import { Suspense, useMemo, useState } from "react";
 import { formatCents } from "@groundtruth/shared";
+import { RelativeTime } from "@/components/ds/RelativeTime";
 import { BountySelect, useSelectedBounty } from "@/components/BountyPicker";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
 import { toast } from "@/components/Toaster";
@@ -10,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { api, errorMessage, type ExportFormat } from "@/lib/client/api";
 import { formatScore, formatValue } from "@/lib/client/checkFormat";
-import { formatTime, shortId } from "@/lib/client/cn";
+import { shortId } from "@/lib/client/cn";
 import { useSubmissionStream } from "@/lib/client/realtime";
 import { useApi } from "@/lib/client/useApi";
 
@@ -74,7 +75,9 @@ function Datasets() {
               <TBody>
                 {stream.submissions.map((s) => (
                   <TR key={s.id} className={stream.freshIds.includes(s.id) ? "gt-arrive" : undefined}>
-                    <TD className="text-xs whitespace-nowrap">{formatTime(s.captured_at)}</TD>
+                    <TD className="text-xs whitespace-nowrap">
+                      <RelativeTime iso={s.captured_at} />
+                    </TD>
                     {fields.map((f) => (
                       <TD key={f} className="max-w-56 truncate text-xs" title={formatValue(s.extracted?.[f])}>
                         {formatValue(s.extracted?.[f])}
@@ -121,8 +124,9 @@ function ExportBar({ bountyId, count }: { bountyId: string; count: number }) {
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="mr-2 text-sm text-muted-foreground">
-        <span className="font-semibold text-foreground tabular-nums">{count}</span> accepted observation{count === 1 ? "" : "s"}
+      <span className="mr-3 flex items-baseline gap-2 text-muted-foreground">
+        <span className="numeral text-2xl text-foreground">{count}</span>
+        <span className="caps text-[11px]">accepted observation{count === 1 ? "" : "s"}</span>
       </span>
       {EXPORTS.map((x) => (
         <Button key={x.format} variant="outline" size="sm" disabled={busy !== null} onClick={() => void run(x.format)}>
