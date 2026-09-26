@@ -1,6 +1,8 @@
 import type { BountySummary } from "@groundtruth/shared";
 import { formatCents } from "@groundtruth/shared";
 import { Text, View } from "react-native";
+import { MatchReason } from "../grokbot/MatchReason";
+import { matchReasonText } from "../grokbot/messageView";
 import { safetyLabel } from "../lib/feed";
 import { Card, Divider, Icon, Label, Money, Readout, SponsorLine, StatusPill, SurgeBadge } from "./components";
 import { distanceReadout, timeLeftReadout } from "./telemetry";
@@ -13,8 +15,13 @@ import { C, F, S, T } from "./theme";
 export function BountyCard({ b, onPress }: { b: BountySummary; onPress: () => void }) {
   const safety = safetyLabel(b.safety_level);
   const dist = distanceReadout(b.distance_m);
+  const match = matchReasonText(b.match_reason);
   return (
-    <Card onPress={onPress} label={`${b.title}, ${formatCents(b.price_cents)}, ${dist.value} ${dist.unit}. Open briefing.`} style={{ gap: S.md }}>
+    <Card
+      onPress={onPress}
+      label={`${b.title}, ${formatCents(b.price_cents)}, ${dist.value} ${dist.unit}.${match ? ` ${match}.` : ""} Open briefing.`}
+      style={{ gap: S.md }}
+    >
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: S.sm }}>
         <Label style={{ flex: 1 }}>{b.protocol_name}</Label>
         <SurgeBadge surge={b.surge} />
@@ -41,12 +48,7 @@ export function BountyCard({ b, onPress }: { b: BountySummary; onPress: () => vo
         <StatusPill tone={safety.tone} text={safety.text} icon="shield" />
         {b.paused_cells > 0 ? <StatusPill tone="bad" text={`${b.paused_cells} cells paused`} /> : null}
       </View>
-      {b.match_reason ? (
-        <View style={{ flexDirection: "row", gap: S.sm, alignItems: "flex-start" }}>
-          <Icon name="user-check" size={15} color={C.muted} style={{ marginTop: 3 }} />
-          <Text style={{ color: C.muted, fontFamily: F.body, fontSize: T.bodySmall, lineHeight: 21, flex: 1 }}>{b.match_reason}</Text>
-        </View>
-      ) : null}
+      <MatchReason reason={b.match_reason} />
       <SponsorLine name={b.sponsor_name} />
     </Card>
   );

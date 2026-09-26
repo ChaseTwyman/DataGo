@@ -2,7 +2,7 @@
  * Account: who you are, trust + balance, researcher tools (web dashboard), change password,
  * download my data, delete my account, sign out. Reached from the Wallet tab header.
  */
-import { ChangePasswordRequestSchema } from "@groundtruth/shared";
+import { ChangePasswordRequestSchema, type ProfileRequest } from "@groundtruth/shared";
 import { File, Paths } from "expo-file-system";
 import { useState } from "react";
 import { Linking, Platform, ScrollView, Share, Text, TextInput, View } from "react-native";
@@ -10,10 +10,14 @@ import { api, endSession, signOut } from "../src/api";
 import { dashboardUrl, deleteConfirmed } from "../src/api/authFlow";
 import { toUserMessage } from "../src/api/errors";
 import { useMe } from "../src/api/queries";
+import { areasFromText, joinList, splitList } from "../src/grokbot/profile";
+import { saveProfile } from "../src/grokbot/saveProfile";
 import { ENV } from "../src/lib/env";
 import { log } from "../src/lib/log";
 import { Body, Button, Divider, ErrorBox, Label, LoadingState, Money, Muted, Readout, Section, StatusPill } from "../src/ui/components";
-import { FieldError, PasswordField } from "../src/ui/forms";
+import { FieldError, PasswordField, TextField } from "../src/ui/forms";
+
+type Me = Awaited<ReturnType<typeof api.me>>;
 import { C, F, S, T, TOUCH } from "../src/ui/theme";
 
 export { RouteErrorBoundary as ErrorBoundary } from "../src/ui/ErrorFallback";
@@ -50,6 +54,8 @@ export default function Account() {
         </Section>
       ) : null}
 
+      {d ? <AboutYou key={d.id} me={d} /> : null}
+
       <Section title="Researcher tools">
         <Body color={C.muted}>Researcher tools are on the web dashboard. Sign in there with this same email and password.</Body>
         <Text selectable style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: T.bodySmall }}>{DASHBOARD}</Text>
@@ -68,6 +74,55 @@ export default function Account() {
         <SignOut />
       </Section>
     </ScrollView>
+  );
+}
+
+/**
+ * Matching profile (occupation, skills, interests, regular areas). Saving refreshes the For-you
+ * matches in the background. Blank fields are left unchanged on the server (partial update).
+ * Prefilled only when /api/me returns these fields.
+ */
+function AboutYou({ me }: { me: Me }) {
+  const [occupation, setOccupation] = useState(me.occupation ?? "");
+  const [skills, setSkills] = useState(joinList(me.skills));
+  const [interests, setInterests] = useState(joinList(me.interests));
+  const [areas, setAreas] = useState(joinList(me.regular_areas?.map((a) => a.label)));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    setDone(false);
+    const body: ProfileRequest = {};
+    if (occupation.trim()) body.occupation = occupation.trim().slice(0, 120);
+    if (skills.trim()) body.skills = splitList(skills);
+    if (interests.trim()) body.interests = splitList(interests);
+    if (areas.trim()) body.regular_areas = areasFromText(areas);
+    try {
+      await saveProfile(body);
+      setDone(true);
+    } catch (e) {
+      log.handled("save-profile", e);
+      setErr(toUserMessage(e).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const empty = !occupation.trim() && !skills.trim() && !interests.trim() && !areas.trim();
+  return (
+    <Section title="About you" right={<Label>For-you matching</Label>}>
+      <Muted>Grokbot uses this to put bounties that fit you first, and to say why.</Muted>
+      <TextField label="Occupation" value={occupation} onChange={setOccupation} placeholder="e.g. civil engineer" />
+      <TextField label="Skills" value={skills} onChange={setSkills} placeholder="Comma separated, e.g. surveying, GIS" />
+      <TextField label="Interests" value={interests} onChange={setInterests} placeholder="Comma separated, e.g. flooding, birds" />
+      <TextField label="Regular areas" value={areas} onChange={setAreas} placeholder="Comma separated, e.g. Midtown, Piedmont Park" />
+      {err ? <StatusPill tone="bad" text={err} /> : null}
+      {done ? <StatusPill tone="ok" text="Saved. Your For-you list will update shortly." /> : null}
+      <Button title="Save profile" kind="secondary" icon="save" onPress={() => void save()} loading={busy} disabled={empty} />
+    </Section>
   );
 }
 

@@ -24,8 +24,12 @@
     "../src/ui/contrast.ts",
     "../src/ui/telemetry.ts",
     "../scripts/*.ts",
-    "../src/grokbot/*.ts",
-    "../src/api/errors.ts"
+    "../src/api/errors.ts",
+    "../src/grokbot/schemas.ts",
+    "../src/grokbot/narrationPoller.ts",
+    "../src/grokbot/narrationSpeaker.ts",
+    "../src/grokbot/messageView.ts",
+    "../src/grokbot/profile.ts"
   ],
   "exclude": []
 }

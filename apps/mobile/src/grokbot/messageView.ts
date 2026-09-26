@@ -78,6 +78,18 @@ export function priceWhyView(result: { ok: true; message: LenientGrokbotMessage 
   return { kind: "none", text: "The price follows how many readings this area still needs, how recent the event is, and how much budget is left." };
 }
 
+/**
+ * For-you match reason as shown: "Good fit: your civil-engineering background…". Null when there's
+ * nothing to say. The server's sentence is kept verbatim apart from the lead-in.
+ */
+export function matchReasonText(reason: string | null | undefined): string | null {
+  const r = tidy(reason);
+  if (!r) return null;
+  if (/^good fit\b/i.test(r)) return r;
+  // Lower-case only a leading "You/Your" (never names or acronyms like "GIS", "Atlanta").
+  return `Good fit: ${/^(You|Your)\b/.test(r) ? r.charAt(0).toLowerCase() + r.slice(1) : r}`;
+}
+
 /** Explain failed: friendly copy only. 404/501 = not deployed yet (or nothing to explain). */
 export function explainErrorText(e: unknown): string {
   if (isUnsupported(e)) return "An explanation isn't available for this capture yet. Check back later.";

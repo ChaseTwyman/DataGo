@@ -87,6 +87,9 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [voiceOn, setVoiceOn] = useState(true);
+  /** Read by submit: the result screen's companion stays quiet if the guide was turned off here. */
+  const voiceOnRef = useRef(voiceOn);
+  voiceOnRef.current = voiceOn;
   const markSubmitted = useCaptureStore((s) => s.markSubmitted);
 
   // ---------------- submit (upload frames → POST /api/submissions → result)
@@ -130,7 +133,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
       });
       markSubmitted(session.session_id, res.submission_id, frames.length);
       send({ type: "UPLOAD_DONE" });
-      router.replace(`/result/${res.submission_id}`);
+      router.replace(`/result/${res.submission_id}${voiceOnRef.current ? "" : "?voice=0"}`);
     } catch (e) {
       // Frames stay in framesRef (and uploaded ones in uploadedRef): Submit retries without re-shooting.
       log.handled("submit", e);

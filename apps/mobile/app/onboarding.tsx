@@ -10,8 +10,9 @@ import { Image, Linking, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AudioManager } from "react-native-audio-api";
 import { useCameraPermission } from "react-native-vision-camera";
-import { api } from "../src/api";
 import { toUserMessage } from "../src/api/errors";
+import { splitList } from "../src/grokbot/profile";
+import { saveProfile } from "../src/grokbot/saveProfile";
 import { log } from "../src/lib/log";
 import { useApp } from "../src/state/appStore";
 import { useMe } from "../src/api/queries";
@@ -32,6 +33,7 @@ export default function Onboarding() {
   const [loc, setLoc] = useState<Perm>("unknown");
   const [occupation, setOccupation] = useState("");
   const [skills, setSkills] = useState("");
+  const [interests, setInterests] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const setOnboarded = useApp((s) => s.setOnboarded);
@@ -64,11 +66,13 @@ export default function Onboarding() {
     setErr(null);
     try {
       // 18+ and the license were confirmed when the account was created (sign-up requires both).
-      await api.profile({
+      // Saving also refreshes the For-you matches in the background (errors there are ignored).
+      await saveProfile({
         is_adult: true,
         consent_license: true,
-        ...(occupation.trim() ? { occupation: occupation.trim() } : {}),
-        ...(skills.trim() ? { skills: skills.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 30) } : {}),
+        ...(occupation.trim() ? { occupation: occupation.trim().slice(0, 120) } : {}),
+        ...(skills.trim() ? { skills: splitList(skills) } : {}),
+        ...(interests.trim() ? { interests: splitList(interests) } : {}),
       });
       setOnboarded(true);
       router.replace("/map");
@@ -109,7 +113,8 @@ export default function Onboarding() {
         <Section index={1} title="About you" right={<Label>Optional</Label>}>
           <TextField label="Occupation" value={occupation} onChange={setOccupation} placeholder="e.g. civil engineer" />
           <TextField label="Skills" value={skills} onChange={setSkills} placeholder="Comma separated" />
-          <Muted>Used to match you with bounties. Voice interview coming soon.</Muted>
+          <TextField label="Interests" value={interests} onChange={setInterests} placeholder="Comma separated, e.g. flooding, birds" />
+          <Muted>Used to put bounties that fit you first. You can change this later in Account.</Muted>
         </Section>
 
         <View style={{ gap: S.md }}>

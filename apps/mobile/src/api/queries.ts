@@ -1,5 +1,5 @@
-import { DEMO } from "@groundtruth/shared";
-import { useQuery } from "@tanstack/react-query";
+import { DEMO, type BountySummary } from "@groundtruth/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UserLocation } from "../lib/useUserLocation";
 import { api } from "./index";
 
@@ -18,6 +18,21 @@ export function useNearby(loc: UserLocation | null, denied: boolean) {
 
 export function useBounty(id: string | undefined) {
   return useQuery({ queryKey: ["bounty", id], enabled: !!id, queryFn: () => api.bounty(id!), refetchInterval: 30_000 });
+}
+
+/**
+ * The For-you summary of a bounty, if the nearby list has it cached: the briefing reads the
+ * personal `match_reason` (and the nearest cell's `price_reasons`) from it — the detail endpoint
+ * doesn't carry them.
+ */
+export function useCachedSummary(id: string | undefined): BountySummary | null {
+  const qc = useQueryClient();
+  if (!id) return null;
+  for (const [, data] of qc.getQueriesData<{ bounties: BountySummary[] }>({ queryKey: ["nearby"] })) {
+    const hit = data?.bounties.find((b) => b.id === id);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 export function useWallet() {

@@ -2,17 +2,19 @@
 import { formatCents, formatSurge, type CellPrice } from "@groundtruth/shared";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Image, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../src/api";
 import { toUserMessage } from "../../src/api/errors";
-import { useBounty } from "../../src/api/queries";
+import { useBounty, useCachedSummary } from "../../src/api/queries";
+import { MatchReason } from "../../src/grokbot/MatchReason";
+import { PriceWhySheet } from "../../src/grokbot/PriceWhySheet";
 import { log } from "../../src/lib/log";
-import { LocationPermissionError, preciseFix } from "../../src/lib/useUserLocation";
+import { LocationPermissionError, preciseFix, useUserLocation } from "../../src/lib/useUserLocation";
 import { useCaptureStore } from "../../src/state/captureStore";
 import { Badge, Body, Button, Divider, ErrorBox, Heading, Icon, Label, LoadingState, Money, Muted, Readout, Section, SponsorLine, StatusPill, SurgeBadge } from "../../src/ui/components";
 import { indexLabel, timeLeftReadout } from "../../src/ui/telemetry";
-import { C, F, S, T } from "../../src/ui/theme";
+import { C, F, S, T, TOUCH, TRACK } from "../../src/ui/theme";
 
 function bestCell(cov: CellPrice[]): CellPrice | null {
   return [...cov].filter((c) => !c.paused).sort((a, b) => b.price_cents - a.price_cents)[0] ?? null;
@@ -27,6 +29,9 @@ export default function BountyBriefing() {
   const put = useCaptureStore((s) => s.put);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<{ text: string; settings: boolean } | null>(null);
+  const [whyOpen, setWhyOpen] = useState(false);
+  const summary = useCachedSummary(id);
+  const { loc } = useUserLocation();
 
   if (q.error && !q.data)
     return (
@@ -46,6 +51,10 @@ export default function BountyBriefing() {
   const top = bestCell(b.coverage);
   const allPaused = b.coverage.length > 0 && b.coverage.every((c) => c.paused);
   const openCells = b.coverage.filter((c) => !c.paused).length;
+  // Economy: a request waiting for sponsor funding can't pay for captures yet.
+  const awaitingFunding = b.status === "pending_funding";
+  // Reasons behind the price shown here (the best open cell); else the For-you card's cell.
+  const priceReasons = (top?.price_reasons?.length ? top.price_reasons : summary?.price_reasons) ?? [];
 
   const start = async () => {
     setStarting(true);
@@ -76,7 +85,27 @@ export default function BountyBriefing() {
               <SurgeBadge surge={top.surge} />
             </View>
           ) : null}
+          {priceReasons.length ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: S.sm }} accessible accessibilityLabel={`Price reasons: ${priceReasons.join(", ")}`}>
+              {priceReasons.slice(0, 4).map((r) => (
+                <Badge key={r} text={r} bg="transparent" color={C.text} icon="trending-up" style={{ borderWidth: 1, borderColor: C.hairline }} />
+              ))}
+            </View>
+          ) : null}
+          {top ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Why this price?"
+              onPress={() => setWhyOpen(true)}
+              style={{ minHeight: TOUCH, flexDirection: "row", alignItems: "center", gap: S.sm, alignSelf: "flex-start" }}
+            >
+              <Icon name="help-circle" size={18} color={C.accent} />
+              <Text style={{ color: C.accent, fontFamily: F.display, fontSize: 15, letterSpacing: TRACK.label, textTransform: "uppercase" }}>Why this price?</Text>
+            </Pressable>
+          ) : null}
+          <MatchReason reason={summary?.match_reason} emphasis />
           {allPaused ? <StatusPill tone="bad" text="Paused · hazard warning" /> : null}
+          {awaitingFunding ? <StatusPill tone="warn" icon="clock" text="Waiting for sponsor funding · captures open once it's funded" /> : null}
           <Divider />
           <View style={{ flexDirection: "row", gap: S.lg }}>
             <Readout label="Time left" value={timeLeftReadout(b.ends_at)} size={24} style={{ flex: 1 }} />
@@ -148,13 +177,21 @@ export default function BountyBriefing() {
           <Button title="Open Settings" kind="secondary" icon="settings" onPress={() => void Linking.openSettings().catch(() => undefined)} />
         ) : null}
         <Button
-          title={allPaused ? "Captures paused" : "Start capture"}
-          icon={allPaused ? "pause-circle" : "aperture"}
+          title={allPaused ? "Captures paused" : awaitingFunding ? "Waiting for funding" : "Start capture"}
+          icon={allPaused ? "pause-circle" : awaitingFunding ? "clock" : "aperture"}
           onPress={() => void start()}
           loading={starting}
-          disabled={allPaused}
+          disabled={allPaused || awaitingFunding}
         />
       </View>
+      <PriceWhySheet
+        visible={whyOpen}
+        onClose={() => setWhyOpen(false)}
+        bountyId={b.id}
+        // ~100 m rounding: GPS jitter mustn't refetch the explanation while the sheet is open.
+        at={loc ? { lat: Math.round(loc.lat * 1000) / 1000, lng: Math.round(loc.lng * 1000) / 1000 } : null}
+        localReasons={priceReasons}
+      />
     </View>
   );
 }

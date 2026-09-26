@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/http";
 import { toUserMessage } from "../src/api/errors";
-import { citationText, explainErrorText, grokbotCardView, priceWhyView } from "../src/grokbot/messageView";
+import { citationText, explainErrorText, grokbotCardView, matchReasonText, priceWhyView } from "../src/grokbot/messageView";
 import { pollNarration, type NarrationStopReason } from "../src/grokbot/narrationPoller";
 import { NarrationSpeaker, speakable } from "../src/grokbot/narrationSpeaker";
 import { areasFromText, saveProfileAndRefresh, splitList } from "../src/grokbot/profile";
@@ -269,6 +269,18 @@ describe("Grokbot message view", () => {
     expect(explainErrorText(new ApiError(404, "HTTP_404", "GET /x failed (404)"))).toMatch(/isn't available/);
     expect(explainErrorText(new ApiError(0, "NETWORK", "Network error: /x"))).toBe(toUserMessage(new ApiError(0, "NETWORK", "")).message);
     expect(explainErrorText(new Error("TypeError: undefined is not a function"))).not.toMatch(/TypeError/);
+  });
+});
+
+describe("For-you match reason", () => {
+  it("prefixes 'Good fit' and keeps the server's sentence", () => {
+    expect(matchReasonText("Your civil-engineering background fits this survey.")).toBe("Good fit: your civil-engineering background fits this survey.");
+    expect(matchReasonText("GIS skills help here.")).toBe("Good fit: GIS skills help here.");
+    expect(matchReasonText("Good fit: you live nearby.")).toBe("Good fit: you live nearby.");
+  });
+  it("nothing to show → null (card renders no line)", () => {
+    expect(matchReasonText(null)).toBeNull();
+    expect(matchReasonText("   ")).toBeNull();
   });
 });
 

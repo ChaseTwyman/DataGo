@@ -26,10 +26,21 @@ import { getSupabase } from "../../src/lib/supabase";
 import { preciseFix } from "../../src/lib/useUserLocation";
 import { useApp } from "../../src/state/appStore";
 import { canRetryInSession, findCaptureBySubmission, useCaptureStore } from "../../src/state/captureStore";
-import { Body, Button, Divider, Heading, Icon, Label, Money, Section, StatusPill, toneColor, type IconName, type Tone } from "../../src/ui/components";
+import { GrokbotCard, NarrationCaptions } from "../../src/grokbot/GrokbotCard";
+import { explainErrorText, grokbotCardView } from "../../src/grokbot/messageView";
+import type { LenientGrokbotMessage } from "../../src/grokbot/schemas";
+import { useVerificationCompanion, type CompanionVoice } from "../../src/grokbot/useVerificationCompanion";
+import { Body, Button, Divider, Heading, Icon, IconButton, Label, Money, Section, StatusPill, toneColor, type IconName, type Tone } from "../../src/ui/components";
 import { indexLabel } from "../../src/ui/telemetry";
 import { C, F, S, T } from "../../src/ui/theme";
 import { useCountUp } from "../../src/ui/useCountUp";
+
+const VOICE_PILL: Record<Exclude<CompanionVoice, "off">, { tone: Tone; icon: IconName; text: string }> = {
+  connecting: { tone: "neutral", icon: "radio", text: "Voice connecting" },
+  speaking: { tone: "info", icon: "volume-2", text: "Grokbot speaking" },
+  ready: { tone: "ok", icon: "volume-1", text: "Voice on" },
+  unavailable: { tone: "neutral", icon: "volume-x", text: "Voice unavailable · captions only" },
+};
 
 /**
  * The subset of a submission row the phone renders. Lenient on purpose (API responses AND realtime
@@ -72,8 +83,13 @@ const HEADER: Record<ResultKind, { tone: Tone; icon: IconName }> = {
 export { RouteErrorBoundary as ErrorBoundary } from "../../src/ui/ErrorFallback";
 
 export default function ResultScreen() {
-  const { submissionId } = useLocalSearchParams<{ submissionId: string }>();
+  const { submissionId, voice: voiceParam } = useLocalSearchParams<{ submissionId: string; voice?: string }>();
   const insets = useSafeAreaInsets();
+  // Voice follows the capture screen's toggle (?voice=0 when the guide was turned off there).
+  const companion = useVerificationCompanion(submissionId, { voice: voiceParam !== "0" });
+  const [explained, setExplained] = useState<LenientGrokbotMessage | null>(null);
+  const [explaining, setExplaining] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
   const realtime = useApp((s) => s.health?.realtime === true && s.authMode === "supabase");
   const [row, setRow] = useState<ViewRow | null>(null);
   /** Background fetch trouble: shown as a subtle "reconnecting" line while retries continue. */
@@ -163,10 +179,29 @@ export default function ResultScreen() {
     }
   };
 
+  const explain = async () => {
+    if (!submissionId) return;
+    setExplaining(true);
+    setExplainError(null);
+    try {
+      setExplained(await api.explain(submissionId));
+    } catch (e) {
+      log.handled("result-explain", e);
+      setExplainError(explainErrorText(e));
+    } finally {
+      setExplaining(false);
+    }
+  };
+
   const head = HEADER[view.kind];
   const color = toneColor(head.tone);
   const hideDetail = view.kind === "integrity_reject";
   const done = checks.filter((c) => c.status !== "pending" && c.status !== "running").length;
+  const terminal = view.kind !== "verifying";
+  // The final narration if there is one, else an on-demand explanation.
+  const message = companion.final ?? explained;
+  const card = message && terminal ? grokbotCardView(message, { integrityReject: hideDetail }) : null;
+  const pill = companion.voiceState === "off" ? null : VOICE_PILL[companion.voiceState];
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -174,9 +209,19 @@ export default function ResultScreen() {
         <View style={{ gap: S.md, paddingTop: S.md }} accessibilityLiveRegion="polite">
           <View style={{ flexDirection: "row", alignItems: "center", gap: S.sm }}>
             {view.kind === "verifying" ? <ActivityIndicator color={color} /> : <Icon name={head.icon} size={22} color={color} />}
-            <Heading size={T.heading} color={color}>
+            <Heading size={T.heading} color={color} style={{ flex: 1 }}>
               {view.title}
             </Heading>
+            {companion.live ? (
+              <IconButton
+                icon={companion.muted ? "volume-x" : "volume-2"}
+                label={companion.muted ? "Turn Grokbot voice on" : "Mute Grokbot voice"}
+                role="switch"
+                checked={!companion.muted}
+                color={companion.muted ? C.amber : C.text}
+                onPress={() => companion.setMuted(!companion.muted)}
+              />
+            ) : null}
           </View>
           {row?.bounty_title ? <Label>{row.bounty_title}</Label> : null}
           {view.kind === "accepted" && payout !== null ? (
@@ -189,6 +234,19 @@ export default function ResultScreen() {
             <Body key={m}>{m}</Body>
           ))}
         </View>
+
+        {companion.lines.length || card || terminal ? (
+          <Section title="Grokbot" right={pill ? <StatusPill tone={pill.tone} icon={pill.icon} text={pill.text} /> : undefined}>
+            <NarrationCaptions lines={companion.lines} />
+            {card ? <GrokbotCard view={card} label={companion.final ? "Grokbot · result" : "Grokbot · explanation"} /> : null}
+            {terminal && !card ? (
+              <View style={{ gap: S.sm }}>
+                {explainError ? <StatusPill tone="neutral" icon="info" text={explainError} /> : null}
+                <Button title="Explain this result" kind="secondary" icon="help-circle" onPress={() => void explain()} loading={explaining} />
+              </View>
+            ) : null}
+          </Section>
+        ) : null}
 
         <Section title="Verification" right={<Label>{hideDetail ? "" : `${done}/${checks.length}`}</Label>}>
           <View>
