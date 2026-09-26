@@ -323,6 +323,18 @@ describe("RealtimeVoiceSession: camera status injection", () => {
     expect(sock.types()).toEqual(["session.update", "conversation.item.create", "response.create"]);
   });
 
+  it("a rejected response.create (server error, no response.created) does not wedge injection", () => {
+    const { s, sock, timers } = setup();
+    sock.open();
+    s.setCameraStatus(status);
+    timers.advance(1000);
+    expect(sock.types().filter((t) => t === "response.create")).toHaveLength(1);
+    sock.server({ type: "error", error: { message: "Conversation already has an active response" } });
+    s.setCameraStatus({ ...status, ready: true, missing: [], hint: "Hold still." });
+    timers.advance(1000);
+    expect(sock.types().filter((t) => t === "response.create")).toHaveLength(2);
+  });
+
   it("skips duplicates of the last injected status", () => {
     const { s, sock, timers } = setup();
     sock.open();

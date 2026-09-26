@@ -360,6 +360,9 @@ export class RealtimeVoiceSession {
         void this.handleFunctionCall(ev.name, ev.callId, ev.arguments);
         break;
       case "error":
+        // A rejected response.create (e.g. "active response in progress") never gets
+        // response.created/done; don't let the optimistic busy flag wedge the session.
+        if (!this.currentResponseId) this.responseInProgress = false;
         this.opts.onError?.(ev.message);
         this.opts.log?.("[voice] server error", ev.code, ev.message);
         break;

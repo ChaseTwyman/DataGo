@@ -7,10 +7,21 @@ const MIC =
 const LOCATION =
   "GroundTruth uses your location while the app is open to show nearby bounties and confirm a capture is inside the bounty area.";
 
+/**
+ * EAS: run `eas init` in apps/mobile. Because this config is dynamic, eas init prints the project
+ * id instead of writing it: paste it (and your Expo account name as owner) into the two constants
+ * below and commit. The id is not a secret. Left undefined on purpose; never invent one.
+ */
+const PASTED_EAS_PROJECT_ID: string | undefined = undefined;
+const PASTED_EAS_OWNER: string | undefined = undefined;
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID || PASTED_EAS_PROJECT_ID;
+const EAS_OWNER = process.env.EAS_OWNER || PASTED_EAS_OWNER;
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "GroundTruth",
   slug: "groundtruth",
+  ...(EAS_OWNER ? { owner: EAS_OWNER } : {}),
   scheme: "groundtruth",
   version: "0.1.0",
   orientation: "default",
@@ -65,6 +76,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   experiments: { typedRoutes: false },
   extra: {
+    ...config.extra,
     apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? null,
+    ...(EAS_PROJECT_ID ? { eas: { ...(config.extra?.eas as object | undefined), projectId: EAS_PROJECT_ID } } : {}),
   },
 });
