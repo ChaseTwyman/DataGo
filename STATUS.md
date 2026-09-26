@@ -8,6 +8,12 @@ _Last updated: production on Vercel (https://groundtruth-two-snowy.vercel.app), 
 - **Deploy:** always from a clean `git worktree` of origin/main (never the working copy): `VERCEL_TOKEN=… npx vercel deploy --prod --yes --scope panoptic-pigskin`. Env vars live in the Vercel project (LOCAL_BACKEND=0, MOCK_GROK=0, DEMO_MODE=1).
 - **Measured on Vercel (real Grok):** voice token 1.2 s; frame check 1.3–1.4 s; Imagine ~16 s; grok-4.7 verification 41 s at `reasoning_effort: medium` (was 89 s at default "high", and 120 s → error before removing the SDK's hidden retry); full red-team run 58 s, caught (`CHALLENGE_FAILED` + `C2PA_AI_GENERATED`).
 
+## Verification hardening (after the vitamin-water incident)
+- Incident: a bottle on carpet reached needs_review on a flood bounty — phone gate unlocked in "degraded" mode with 0 real frame checks, grok-4.7 timed out, a human rejected it. Separately 40 seed rows + 1 MOCK_GROK row had reached the public dataset; all deleted.
+- **Decision (supersedes BUILD_PROMPT M2's degraded fallback):** no degraded unlock. Shutter unlocks only on the server's `gate_passed` (2 consecutive real all-green checks); otherwise "CAN'T VERIFY SCENE" + retry. Server rejects/reviews sessions that never passed (`GATE_NOT_PASSED`), never pays them.
+- New fast `relevance` stage (grok-4.20, ~2 s) → `OFF_TOPIC` reject independent of grok-4.7; extraction sanity rules; `submissions.verifier` (model|mock|human|none) with mock/seed rows never exported/published; MOCK_GROK refused on a real DB; public rows only if human-approved or model conf ≥ 0.75 (`quality_tier`).
+- Real-Grok eval: `negative/vitamin-water-bottle` → rejected `OFF_TOPIC` in 2.1 s (confidence 0.90). Positives still needed (tub + ruler, real puddles) before claiming accept rates.
+
 ## Bugs found by going to production (all fixed)
 - `.gitignore` `coverage/` hid `app/api/bounties/[id]/coverage/route.ts` from git: every clone lacked the endpoint while local checks passed (b2cd456).
 - postgres.js double-encoded jsonb params (PGlite doesn't) → "media must be an array" on hosted DB (d9c27f4).
