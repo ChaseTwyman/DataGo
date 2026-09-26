@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { toUserMessage } from "../../src/api/errors";
 import { useNearby } from "../../src/api/queries";
 import { sortForYou } from "../../src/lib/feed";
+import { MissionCard, useMissions, useNow } from "../../src/missions/MissionCard";
 import { useUserLocation } from "../../src/lib/useUserLocation";
 import { Icon, IconButton, Label, LoadingState, Money, StatusPill, SurgeBadge } from "../../src/ui/components";
 import { distanceReadout, timeLeftReadout } from "../../src/ui/telemetry";
@@ -35,6 +36,9 @@ export default function MapTab() {
   const cells = useMemo(() => bounties.map((b) => ({ b, hexes: hexes(b) })), [bounties]);
   const top = useMemo(() => sortForYou(bounties)[0] ?? null, [bounties]);
   const mapRef = useRef<MapView>(null);
+  const now = useNow(15_000);
+  const missions = (useMissions(loc, denied).data ?? []).filter((m) => Date.parse(m.closes_at) > now.getTime());
+  const nextMission = missions[0] ?? null;
 
   const first = bounties[0];
   const initial: Region | undefined = loc
@@ -79,6 +83,18 @@ export default function MapTab() {
               );
             }),
           )}
+          {missions.map((m) => (
+            <Marker
+              key={`mission:${m.id}`}
+              coordinate={{ latitude: m.lat, longitude: m.lng }}
+              onPress={() => router.push(`/bounty/${m.bounty_id}`)}
+              accessibilityLabel={`Revisit mission, ${m.bounty_title}`}
+            >
+              <View style={[styles.marker, { borderColor: C.accent }]}>
+                <Icon name="repeat" size={13} color={C.accent} />
+              </View>
+            </Marker>
+          ))}
           {bounties.map((b) => {
             const hot = isHotSurge(b.surge);
             return (
@@ -131,6 +147,7 @@ export default function MapTab() {
             />
           </Pressable>
         ) : null}
+        {nextMission ? <MissionCard m={nextMission} now={now} /> : null}
       </View>
 
       {/* Primary action: the best bounty for you, one tap to its briefing. */}

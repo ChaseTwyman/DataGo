@@ -4,6 +4,7 @@ import { useCallback, useEffect } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { toUserMessage } from "../../src/api/errors";
 import { useWallet } from "../../src/api/queries";
+import { QueuedCaptures } from "../../src/offline/QueuedCaptures";
 import { useApp } from "../../src/state/appStore";
 import { Divider, EmptyState, ErrorBox, Icon, Label, LoadingState, Money, Muted, Readout, Section, StatusPill } from "../../src/ui/components";
 import { C, F, R, S, T, TOUCH } from "../../src/ui/theme";
@@ -56,6 +57,7 @@ export default function Wallet() {
           ) : null}
           {q.error && !q.data ? <ErrorBox title="Couldn't load wallet" message={toUserMessage(q.error).message} onRetry={() => void q.refetch()} /> : null}
           {q.error && q.data ? <StatusPill tone="neutral" icon="wifi-off" text="Showing last balance · reconnecting…" /> : null}
+          <QueuedCaptures />
           <Section title="History" />
         </View>
       }

@@ -21,6 +21,7 @@ import { z } from "zod";
 import { api, ApiError } from "../../src/api";
 import { isTransient, toUserMessage } from "../../src/api/errors";
 import { resultView, watchSubmission, type ResultKind } from "../../src/api/submissionWatch";
+import { ShareImpactCard } from "../../src/impact/ShareImpactCard";
 import { log } from "../../src/lib/log";
 import { getSupabase } from "../../src/lib/supabase";
 import { preciseFix } from "../../src/lib/useUserLocation";
@@ -232,6 +233,7 @@ export default function ResultScreen() {
               <Label>Locked price × quality · credited to your wallet</Label>
             </View>
           ) : null}
+          {view.kind === "accepted" && submissionId ? <ShareImpactCard submissionId={submissionId} /> : null}
           {view.messages.map((m) => (
             <Body key={m}>{m}</Body>
           ))}

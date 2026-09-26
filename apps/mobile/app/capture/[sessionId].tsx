@@ -3,7 +3,7 @@
  * single most important missing item, voice guide with captions always visible. The shutter button
  * and the voice `trigger_capture` tool go through the same `gate.trigger()`.
  */
-import type { FieldQuestion } from "@groundtruth/shared";
+import type { CreateSubmissionRequest, FieldQuestion } from "@groundtruth/shared";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +19,8 @@ import { isPreCapture } from "../../src/capture/gateMachine";
 import { uploadFrames } from "../../src/capture/upload";
 import { useCaptureGate } from "../../src/capture/useCaptureGate";
 import { log } from "../../src/lib/log";
+import { shouldQueue } from "../../src/offline/queue";
+import { queueChanged, uploadQueue } from "../../src/offline/runtime";
 import { useCaptureStore, type ActiveCapture } from "../../src/state/captureStore";
 import { Body, Button, Heading, Icon, IconButton, Label, PermissionNeeded, StatusPill } from "../../src/ui/components";
 import { countdownLabel, indexLabel, tPlus } from "../../src/ui/telemetry";
@@ -86,6 +88,8 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
   const [burstError, setBurstError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  /** The capture was saved to the upload queue (no signal); it sends itself later. */
+  const [queued, setQueued] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   /** Read by submit: the result screen's companion stays quiet if the guide was turned off here. */
   const voiceOnRef = useRef(voiceOn);
@@ -106,12 +110,10 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
       const slots = session.uploads.slice(active.usedUploads, active.usedUploads + frames.length);
       if (slots.length < frames.length)
         throw new UserFacingError("This session has no photo slots left. Go back to the briefing and start a new capture.", "Session used up", false);
-      // Per-frame retries with backoff; frames already uploaded are skipped on "Try again".
-      await uploadFrames(frames, slots, uploadedRef.current, (f, slot) => uploadJpeg(f.uri, slot));
       const raw = gate.device.raw.current;
       if (raw.lat === null || raw.lng === null)
         throw new UserFacingError("Waiting for a GPS fix. Stay where you took the photos and tap Submit again.", "No GPS fix");
-      const res = await api.createSubmission({
+      const request: CreateSubmissionRequest = {
         session_id: session.session_id,
         nonce: session.nonce,
         media: toMediaItems(frames, slots.map((u) => u.path)),
@@ -130,7 +132,30 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
           consecutive_green: s.greenStreak,
           last_hint: s.lastHint,
         },
-      });
+      };
+      let res: { submission_id: string };
+      try {
+        // Per-frame retries with backoff; frames already uploaded are skipped on "Try again".
+        await uploadFrames(frames, slots, uploadedRef.current, (f, slot) => uploadJpeg(f.uri, slot));
+        res = await api.createSubmission(request);
+      } catch (e) {
+        // Signal dropped AFTER a gate-passed burst: keep the capture on the phone and send it when
+        // signal returns (the server accepts it within its grace). Never for a session whose gate
+        // didn't pass, and never for a refusal — those surface as errors as before.
+        if (!s.serverGatePassed || !shouldQueue(e)) throw e;
+        await uploadQueue.enqueue({
+          sessionId: session.session_id,
+          bountyTitle: bounty.title,
+          sessionExpiresAt: session.expires_at,
+          frames: frames.map((f, i) => ({ uri: f.uri, slot: slots[i]! })),
+          uploaded: [...uploadedRef.current],
+          request,
+        });
+        queueChanged();
+        send({ type: "UPLOAD_DONE" });
+        setQueued(true);
+        return;
+      }
       markSubmitted(session.session_id, res.submission_id, frames.length);
       send({ type: "UPLOAD_DONE" });
       router.replace(`/result/${res.submission_id}${voiceOnRef.current ? "" : "?voice=0"}`);
@@ -142,7 +167,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
     } finally {
       submitting.current = false;
     }
-  }, [active.usedUploads, gate.device.raw, gate.stateRef, markSubmitted, send, session]);
+  }, [active.usedUploads, bounty.title, gate.device.raw, gate.stateRef, markSubmitted, send, session]);
 
   // ---------------- voice guide
   const toolContext: ToolContext = useMemo(
@@ -319,7 +344,13 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
 
       {/* bottom sheet */}
       <View style={[styles.sheet, { paddingBottom: insets.bottom + S.md }]}>
-        {ended ? (
+        {queued ? (
+          <View style={{ gap: S.md }} accessibilityLiveRegion="polite">
+            <StatusPill tone="info" icon="wifi-off" text="Waiting for signal — your capture is saved" />
+            <Body>We'll send it automatically when you're back online (keep the app installed; it retries when you open it). Track it in your wallet.</Body>
+            <Button title="Back to bounties" icon="arrow-left" onPress={() => router.replace("/foryou")} />
+          </View>
+        ) : ended ? (
           <View style={{ gap: S.md }}>
             <StatusPill
               tone={state.endReason === "unsafe" ? "warn" : "neutral"}

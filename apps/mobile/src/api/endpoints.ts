@@ -10,6 +10,8 @@ import {
   LenientCreateSubmissionResponseSchema,
   LenientDevSessionResponseSchema,
   LenientHealthResponseSchema,
+  LenientImpactCardResponseSchema,
+  LenientNearbyMissionsResponseSchema,
   LenientNearbyResponseSchema,
   LenientSubmissionWithMediaSchema,
   LenientWalletResponseSchema,
@@ -74,6 +76,16 @@ export function endpoints(http: Http) {
     submission: (id: string) =>
       http.request("GET", `/api/submissions/${encodeURIComponent(id)}`, { schema: LenientSubmissionWithMediaSchema }),
     wallet: () => http.request("GET", "/api/me/wallet", { schema: LenientWalletResponseSchema }),
+    /** Revisit missions near me (open + upcoming). Older servers 404: callers treat that as none. */
+    missions: (lat: number, lng: number, radiusKm = 25) =>
+      http.request("GET", "/api/missions", { schema: LenientNearbyMissionsResponseSchema, query: { lat, lng, radius_km: radiusKm } }),
+    /** Shareable impact card for my accepted observation (image URL; no photo, no precise place). */
+    impactCard: (submissionId: string, aiBackground = false) =>
+      http.request("POST", `/api/me/submissions/${encodeURIComponent(submissionId)}/impact-card`, {
+        schema: LenientImpactCardResponseSchema,
+        body: { ai_background: aiBackground },
+        timeoutMs: aiBackground ? 90_000 : 30_000,
+      }),
     voiceToken: () => http.request("POST", "/api/voice/token", { schema: VoiceTokenResponseSchema, body: {} }),
     profile: (body: ProfileRequest) => http.request("POST", "/api/profile", { schema: ProfileResponseSchema, body }),
 

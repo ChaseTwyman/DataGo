@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { boot } from "../src/api";
 import { queryClient } from "../src/api/queryClient";
 import { AccountGate } from "../src/auth/AccountGate";
+import { startUploadQueue } from "../src/offline/runtime";
 import { useApp } from "../src/state/appStore";
 import { ErrorBox, Label, Muted } from "../src/ui/components";
 import { RouteErrorBoundary } from "../src/ui/ErrorFallback";
@@ -30,6 +31,8 @@ function BootGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void boot();
   }, []);
+  // Saved (queued) captures resume on launch and whenever the app comes back to the foreground.
+  useEffect(() => startUploadQueue(), []);
   if (ready) return <>{children}</>;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg, justifyContent: "center", padding: S.xl, gap: S.xl }}>
