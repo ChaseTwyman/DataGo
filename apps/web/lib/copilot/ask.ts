@@ -21,6 +21,8 @@ import { isMockGrok } from "../grok/config";
 import { cacheGet, cachePut } from "../grokbot/cache";
 import type { Generate } from "../grokbot/compose";
 import { injectionReasons } from "../grokbot/injection";
+import type { ProtocolRow } from "../db/repos/protocols";
+import type { ExportRow } from "../export";
 import { loadPublishedProtocol, publicRows, publishedSlugs } from "../openData";
 import { answerCaseFile, composeAnswer, describePlan, methodsNote, type PlanContext } from "./answer";
 import { buildCatalogue, validatePlan } from "./grammar";
@@ -52,6 +54,26 @@ export async function copilotBounties(db: Db, slug: string): Promise<DatasetBoun
     target_per_cell: Number(r.target_per_cell),
     created_by: (r.created_by as string | null) ?? null,
   }));
+}
+
+/**
+ * Coarsened rows per (dataset version, bounty), reused for ROWS_TTL_MS on this instance (review
+ * finding: every public ask re-read and re-coarsened the whole dataset). The open-data API itself is
+ * CDN-cached for 60 s, so 30 s of staleness is within what the public already sees.
+ */
+const ROWS_TTL_MS = 30_000;
+const rowCache = new WeakMap<Db, Map<string, { at: number; rows: Promise<ExportRow[]> }>>();
+async function cachedPublicRows(db: Db, protocol: ProtocolRow, bountyId: string | null): Promise<ExportRow[]> {
+  let m = rowCache.get(db);
+  if (!m) rowCache.set(db, (m = new Map()));
+  const key = `${protocol.id}:${bountyId ?? "all"}`;
+  const hit = m.get(key);
+  if (hit && Date.now() - hit.at < ROWS_TTL_MS) return hit.rows;
+  const rows = publicRows(db, protocol, bountyId ? { bountyId } : {});
+  if (m.size > 50) m.clear();
+  m.set(key, { at: Date.now(), rows });
+  rows.catch(() => m.delete(key));
+  return rows;
 }
 
 export interface AskOptions {
@@ -120,11 +142,14 @@ export async function askData(db: Db, req: CopilotAskRequest, o: AskOptions): Pr
     bounties,
     scopedBountyId: scoped,
     allowCoverage,
+    ownedBountyIds: owned,
     now,
   };
   const key = {
     kind: "copilot_plan",
-    subjectId: `${protocol.slug}:v${protocol.version}:${scoped ?? "all"}:${allowCoverage ? "cov" : "nocov"}`,
+    // Unscoped coverage plans name one of the caller's bounties, so they are shared only between
+    // callers who own the same set (review finding: a plan naming A's bounty was reused for B).
+    subjectId: `${protocol.slug}:v${protocol.version}:${scoped ?? "all"}:${allowCoverage ? `cov-${scoped ? "s" : createHash("sha256").update(owned.join(",")).digest("hex").slice(0, 16)}` : "nocov"}`,
     audience: o.audience,
     version: createHash("sha256").update(normalizeQuestion(question)).digest("hex").slice(0, 32),
   } as const;
@@ -156,7 +181,7 @@ export async function askData(db: Db, req: CopilotAskRequest, o: AskOptions): Pr
   const bounty = plan.bounty_id ? bounties.find((b) => b.id === plan.bounty_id) ?? null : null;
 
   // ---- execute over the coarsened public rows (the exact rows /api/public/datasets serves)
-  const rows = await publicRows(db, protocol, plan.bounty_id ? { bountyId: plan.bounty_id } : {});
+  const rows = await cachedPublicRows(db, protocol, plan.bounty_id);
   const payload = JSON.stringify(recordsetRows(rows, catalogue));
   const coverage = plan.coverage !== "none" && bounty ? { cells: bounty.cells, target: bounty.target_per_cell } : undefined;
   const compiled = compilePlan(plan, catalogue, payload, now, coverage);

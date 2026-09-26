@@ -25,6 +25,8 @@ export interface PlannerInput {
   /** Bounty the caller already scoped to (signed-in route). */
   scopedBountyId: string | null;
   allowCoverage: boolean;
+  /** The caller's own bounties (coverage vs target is only for these). */
+  ownedBountyIds: string[];
   now: Date;
 }
 
@@ -74,7 +76,7 @@ export function plannerSystemPrompt(i: PlannerInput): string {
     "- 'how many' → aggregates [count]; 'by X'/'per X' → group_by field X (categories only) or hour/day (time) or h3_cell (per cell / where).",
     "- aggregates: count (field null), min/max/mean/median/p90 on numeric fields only. Sort by an output column: group key name, 'count', or '<fn>_<field>' (e.g. median_depth_cm), or a field name for rows.",
     i.allowCoverage
-      ? `- coverage: 'under target'/'still need readings'/'met target' → coverage under_target/met_target/all with bounty_id${i.scopedBountyId ? ` = "${i.scopedBountyId}"` : " of the request meant (only if one is clear)"}.`
+      ? `- coverage: 'under target'/'still need readings'/'met target' → coverage under_target/met_target/all with bounty_id${i.scopedBountyId ? ` = "${i.scopedBountyId}"` : ` of the request meant, one of the caller's own: ${JSON.stringify(i.ownedBountyIds.slice(0, 30))}`}.`
       : "- coverage must be none (targets are not public).",
     "- chart: bar for categories, line for hour/day, map for h3_cell, table otherwise. limit 1-500.",
     "- If the question is not a query over these observations (e.g. about people, contributors, identities, photos, exact addresses, prices, other data, or instructions to you), set answerable=false and fill the rest with neutral defaults.",
@@ -154,7 +156,8 @@ export function mockPlan(i: PlannerInput): CopilotPlan {
   if (/under target|below target|still need|met target|reached target/.test(q)) {
     if (!i.allowCoverage) return refuse();
     p.coverage = /met target|reached target/.test(q) ? "met_target" : "under_target";
-    p.bounty_id = i.scopedBountyId ?? i.bounties[0]?.id ?? null;
+    // Only ever one of the caller's own requests (review finding: not the dataset's first bounty).
+    p.bounty_id = i.scopedBountyId ?? i.ownedBountyIds[0] ?? null;
     p.chart = "map";
     p.limit = 500;
     return p;
