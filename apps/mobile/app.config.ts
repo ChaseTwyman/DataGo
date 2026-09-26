@@ -60,6 +60,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     blockedPermissions: ["android.permission.READ_MEDIA_IMAGES", "android.permission.READ_EXTERNAL_STORAGE"],
   },
   plugins: [
+    // iOS 27 SDK requires the UIScene life cycle; see plugins/withSceneLifecycle.js.
+    "./plugins/withSceneLifecycle",
     "expo-router",
     "expo-dev-client",
     "expo-status-bar",
