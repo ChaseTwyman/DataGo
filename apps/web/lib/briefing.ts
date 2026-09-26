@@ -52,7 +52,10 @@ export async function completeBriefingVideo(
       if (!r.url) return "no_url";
       const res = await fetchImpl(r.url);
       if (!res.ok) throw new Error(`video download HTTP ${res.status}`);
-      const path = `synthetic/briefings/${args.bountyId}.mp4`;
+      // One object per request: the synthetic bucket is public (CDN-cached), so overwriting a fixed
+      // path would keep serving the previous clip after a regenerate, and the dashboard polls for a
+      // changed briefing_video_url to know the new clip is ready.
+      const path = `synthetic/briefings/${args.bountyId}-${args.requestId.replace(/[^A-Za-z0-9_-]/g, "") || "clip"}.mp4`;
       await storage.put(path, Buffer.from(await res.arrayBuffer()), "video/mp4");
       await insertSyntheticMedia(db, { kind: "briefing", path, prompt: args.prompt, model: grokEnv.videoModel });
       await setBriefingVideoPath(db, args.bountyId, path);

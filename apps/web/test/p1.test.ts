@@ -85,9 +85,21 @@ describe("briefing video", () => {
       fetchImpl: async () => new Response(new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112])),
     });
     expect(out).toBe("stored");
-    const row = await env.db.query<{ briefing_video_path: string }>("select briefing_video_path from public.bounties where id = $1", [DEMO.bountyId]);
-    expect(row[0]!.briefing_video_path).toBe(`synthetic/briefings/${DEMO.bountyId}.mp4`);
-    expect(await env.storage.exists(`synthetic/briefings/${DEMO.bountyId}.mp4`)).toBe(true);
+    const pathNow = async () =>
+      (await env.db.query<{ briefing_video_path: string }>("select briefing_video_path from public.bounties where id = $1", [DEMO.bountyId]))[0]!
+        .briefing_video_path;
+    const first = await pathNow();
+    expect(first).toBe(`synthetic/briefings/${DEMO.bountyId}-x.mp4`);
+    expect(await env.storage.exists(first)).toBe(true);
+    // A regenerated clip gets its own object: the synthetic bucket is public + CDN-cached, so reusing
+    // one path would keep serving the old clip, and the dashboard could not tell the new one arrived.
+    await completeBriefingVideo(env.db, env.storage, {
+      bountyId: DEMO.bountyId,
+      requestId: "req/2..",
+      prompt: "p2",
+      fetchImpl: async () => new Response(new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112])),
+    });
+    expect(await pathNow()).toBe(`synthetic/briefings/${DEMO.bountyId}-req2.mp4`);
     // the route's own background task tries the (unreachable) mock URL; it must fail quietly
     await drainBackground();
   });
