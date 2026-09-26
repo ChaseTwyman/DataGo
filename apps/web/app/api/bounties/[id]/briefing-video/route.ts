@@ -9,7 +9,9 @@ import { getDb } from "@/lib/db";
 import { GrokError } from "@/lib/grok/config";
 import { getStorage } from "@/lib/storage";
 
-export const maxDuration = 800;
+// Vercel Hobby caps functions at 300 s (Pro: 800). A clip that takes longer is cut off; retry
+// the route, or pre-generate clips before the demo.
+export const maxDuration = 300;
 
 /** Starts a Grok Imagine briefing clip; polling + storage continue after the response (can take minutes). */
 export const POST = route<IdParams>(async (req, { params }) => {
