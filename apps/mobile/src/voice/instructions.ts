@@ -75,5 +75,13 @@ export const CAMERA_STATUS_RESPONSE_INSTRUCTIONS =
 export const CAPTURE_DONE_RESPONSE_INSTRUCTIONS =
   "The burst was captured. Ask the first unanswered field question now, in one short sentence.";
 
+/**
+ * Verification companion (speak-only). Every line it says arrives as a force_message and is read
+ * verbatim; there is no mic and no response.create, so the model never generates anything. The
+ * instructions are a backstop in case a response is ever requested anyway.
+ */
+export const NARRATOR_INSTRUCTIONS =
+  "You read status lines about a photo being verified. Say only the exact text you are given. Never add, explain, guess, or answer questions.";
+
 export const VOICE_TEST_INSTRUCTIONS =
   "You are a friendly voice assistant being latency-tested. Reply in one short sentence. Reply in the user's language.";

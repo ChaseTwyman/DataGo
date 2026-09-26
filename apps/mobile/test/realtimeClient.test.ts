@@ -411,3 +411,85 @@ describe("RealtimeVoiceSession: captions", () => {
     ]);
   });
 });
+
+describe("RealtimeVoiceSession: scripted lines (verification companion)", () => {
+  const forced = (sock: FakeSocket) =>
+    sock.sent
+      .filter((e) => (e.item as { type?: string } | undefined)?.type === "force_message")
+      .map((e) => ((e.item as { content: { text: string }[] }).content[0] as { text: string }).text);
+
+  it("queues lines before open and speaks them verbatim after session.updated, one at a time", async () => {
+    const { s, sock, sink } = setup({ session: { instructions: "narrate", tools: [] } });
+    s.speak("Checking the photo.");
+    s.speak("Reading the ruler.");
+    sock.open();
+    expect(forced(sock)).toEqual([]); // not before the session is configured
+    sock.server({ type: "session.updated" });
+    expect(forced(sock)).toEqual(["Checking the photo."]);
+    sock.server({ type: "response.created", response: { id: "r1" } });
+    sock.server({ type: "response.output_audio.delta", response_id: "r1", delta: AUDIO });
+    sock.server({ type: "response.done", response: { id: "r1" } });
+    await flush();
+    expect(forced(sock)).toEqual(["Checking the photo."]); // still playing
+    sink.finish();
+    await flush();
+    await flush();
+    expect(forced(sock)).toEqual(["Checking the photo.", "Reading the ruler."]);
+    // Never asks the model to generate anything.
+    expect(sock.types()).not.toContain("response.create");
+  });
+
+  it("falls back to speaking if session.updated never arrives", () => {
+    const { s, sock, timers } = setup({ session: { instructions: "narrate", tools: [] } });
+    sock.open();
+    s.speak("Hello.");
+    expect(forced(sock)).toEqual([]);
+    timers.advance(1500);
+    expect(forced(sock)).toEqual(["Hello."]);
+  });
+
+  it("keeps only the latest few queued lines", () => {
+    const { s, sock } = setup({ session: { instructions: "narrate", tools: [] } });
+    for (let i = 1; i <= 6; i++) s.speak(`line ${i}`);
+    sock.open();
+    sock.server({ type: "session.updated" });
+    expect(forced(sock)).toEqual(["line 4"]);
+  });
+
+  it("endAfterSpeech hangs up once the last scripted line has played", async () => {
+    const { s, sock, sink, ends } = setup({ session: { instructions: "narrate", tools: [] } });
+    sock.open();
+    sock.server({ type: "session.updated" });
+    s.speak("Accepted. Nice work.");
+    s.endAfterSpeech();
+    expect(ends).toEqual([]);
+    sock.server({ type: "response.created", response: { id: "r1" } });
+    sock.server({ type: "response.output_audio.delta", response_id: "r1", delta: AUDIO });
+    sock.server({ type: "response.done", response: { id: "r1" } });
+    await flush();
+    expect(ends).toEqual([]);
+    sink.finish();
+    await flush();
+    await flush();
+    expect(ends).toEqual(["narration finished"]);
+  });
+
+  it("a rejected force_message doesn't strand the next line", () => {
+    const { s, sock } = setup({ session: { instructions: "narrate", tools: [] } });
+    sock.open();
+    sock.server({ type: "session.updated" });
+    s.speak("one");
+    s.speak("two");
+    sock.server({ type: "error", error: { message: "busy" } });
+    expect(forced(sock)).toEqual(["one", "two"]);
+  });
+
+  it("guide mode: scripted lines wait for the safety opener", () => {
+    const { s, sock } = setup({ opener: "Safety first." });
+    sock.open();
+    s.speak("later");
+    expect(forced(sock)).toEqual([]);
+    sock.server({ type: "session.updated" });
+    expect(forced(sock)).toEqual(["Safety first."]);
+  });
+});

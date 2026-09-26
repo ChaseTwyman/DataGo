@@ -9,7 +9,7 @@ import { api } from "../api";
 import { ENV } from "../lib/env";
 import { log } from "../lib/log";
 import { activateVoiceAudioSession, deactivateVoiceAudioSession, ensureMicPermission, MicStream, QueuePlayer } from "./audioEngine";
-import { buildInstructions, CAMERA_STATUS_RESPONSE_INSTRUCTIONS, safetyOpener, VOICE_TEST_INSTRUCTIONS } from "./instructions";
+import { buildInstructions, CAMERA_STATUS_RESPONSE_INSTRUCTIONS, NARRATOR_INSTRUCTIONS, safetyOpener, VOICE_TEST_INSTRUCTIONS } from "./instructions";
 import {
   RealtimeVoiceSession,
   type Caption,
@@ -19,7 +19,11 @@ import {
 } from "./realtimeClient";
 import { buildTools, runTool, type ToolContext } from "./tools";
 
-export type VoiceMode = { kind: "test" } | { kind: "guide"; protocol: Protocol; bountyTitle?: string; bountySummary?: string };
+/**
+ * test: latency spike screen. guide: the capture field guide (mic, tools, opener).
+ * narrator: speak-only verification companion — no mic, no tools, scripted lines via `speak()`.
+ */
+export type VoiceMode = { kind: "test" } | { kind: "guide"; protocol: Protocol; bountyTitle?: string; bountySummary?: string } | { kind: "narrator" };
 
 export interface UseGrokVoiceOptions {
   mode: VoiceMode;
@@ -55,6 +59,11 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
   onEndRef.current = opts.onEnd;
   const modeRef = useRef(opts.mode);
   modeRef.current = opts.mode;
+  const statusRef = useRef<VoiceStatus>(status);
+  statusRef.current = status;
+  /** Narrator lines asked for before the session existed. */
+  const pendingScriptRef = useRef<string[]>([]);
+  const endAfterSpeechRef = useRef(false);
 
   const teardown = useCallback(async () => {
     const mic = micRef.current;
@@ -80,6 +89,7 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
     async (reason = "closed by user") => {
       genRef.current++;
       connectingRef.current = false;
+      pendingScriptRef.current = [];
       sessionRef.current?.close(reason);
       await teardown();
     },
@@ -98,7 +108,9 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
     setCaptions([]);
     setStatus("connecting");
     try {
-      if (!(await ensureMicPermission())) {
+      const narrator = modeRef.current.kind === "narrator";
+      // The narrator only talks (scripted lines): no mic, so no permission prompt and no turns.
+      if (!narrator && !(await ensureMicPermission())) {
         setMicDenied(true);
         throw new Error("Microphone permission denied");
       }
@@ -120,7 +132,9 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
                 reasoningEffort: ENV.voiceReasoningEffort,
                 transcribeInput: true,
               }
-            : { instructions: VOICE_TEST_INSTRUCTIONS, tools: [], reasoningEffort: ENV.voiceReasoningEffort, transcribeInput: true },
+            : mode.kind === "narrator"
+              ? { instructions: NARRATOR_INSTRUCTIONS, tools: [], reasoningEffort: "none" }
+              : { instructions: VOICE_TEST_INSTRUCTIONS, tools: [], reasoningEffort: ENV.voiceReasoningEffort, transcribeInput: true },
         opener: mode.kind === "guide" ? safetyOpener(mode.protocol) : undefined,
         cameraStatusInstructions: CAMERA_STATUS_RESPONSE_INSTRUCTIONS,
         toolHandler: (name, args) => {
@@ -144,14 +158,19 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
         log: (...a) => log.debug("voice", ...a),
       });
       sessionRef.current = session;
+      // Lines asked for before the session existed are spoken once it is up.
+      for (const line of pendingScriptRef.current.splice(0)) session.speak(line);
+      if (endAfterSpeechRef.current) session.endAfterSpeech();
 
       // Mic and token in parallel; mic chunks buffer inside the session until the socket opens.
-      const mic = new MicStream();
-      micRef.current = mic;
-      const [token] = await Promise.all([
-        api.voiceToken(),
-        mic.start((chunk) => sessionRef.current?.appendAudio(chunk)),
-      ]);
+      let token: Awaited<ReturnType<typeof api.voiceToken>>;
+      if (narrator) {
+        token = await api.voiceToken();
+      } else {
+        const mic = new MicStream();
+        micRef.current = mic;
+        [token] = await Promise.all([api.voiceToken(), mic.start((chunk) => sessionRef.current?.appendAudio(chunk))]);
+      }
       if (stale() || sessionRef.current !== session) return; // disconnected meanwhile
       const url = token.url?.startsWith("wss://") ? token.url : undefined;
       session.connect(token.token, url);
@@ -168,6 +187,28 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
   }, [teardown]);
 
   useEffect(() => () => void disconnect("unmounted"), [disconnect]);
+
+  /**
+   * Narrator: speak one scripted line verbatim (force_message). Connects on first use; while a
+   * connect is in flight the line waits in a small queue. After a failed connect nothing retries
+   * on its own (no token spam) — `reconnect()` is the explicit way back.
+   */
+  const speak = useCallback(
+    (text: string) => {
+      const s = sessionRef.current;
+      if (s) return s.speak(text);
+      if (statusRef.current === "error") throw new Error("voice unavailable");
+      pendingScriptRef.current.push(text);
+      if (pendingScriptRef.current.length > 3) pendingScriptRef.current.shift();
+      void connect();
+    },
+    [connect],
+  );
+  /** Narrator: hang up after the queued lines have been spoken. */
+  const endAfterSpeech = useCallback(() => {
+    endAfterSpeechRef.current = true;
+    sessionRef.current?.endAfterSpeech();
+  }, []);
 
   const setCameraStatus = useCallback((s: CameraStatusPayload) => sessionRef.current?.setCameraStatus(s), []);
   const injectContext = useCallback((text: string, instructions?: string) => sessionRef.current?.injectContext(text, instructions), []);
@@ -189,5 +230,22 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
       ? "Voice guide unavailable — tap to capture."
       : null;
 
-  return { status, captions, latencies, lastLatency, agentSpeaking, error, notice, micDenied, unknownEvents, connect, disconnect, reconnect, setCameraStatus, injectContext };
+  return {
+    status,
+    captions,
+    latencies,
+    lastLatency,
+    agentSpeaking,
+    error,
+    notice,
+    micDenied,
+    unknownEvents,
+    connect,
+    disconnect,
+    reconnect,
+    setCameraStatus,
+    injectContext,
+    speak,
+    endAfterSpeech,
+  };
 }

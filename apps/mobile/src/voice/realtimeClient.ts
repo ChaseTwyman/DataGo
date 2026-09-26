@@ -16,6 +16,9 @@ import type { RealtimeFunctionTool, ToolResult } from "./tools";
 
 export const WS_OPEN = 1;
 
+/** Scripted lines waiting to be spoken; older ones are dropped beyond this (captions keep them). */
+export const MAX_SCRIPT_QUEUE = 3;
+
 export interface SocketLike {
   readonly readyState: number;
   send(data: string): void;
@@ -169,6 +172,13 @@ export class RealtimeVoiceSession {
 
   private captions: Caption[] = [];
 
+  // scripted lines (verification companion): spoken verbatim via force_message, one at a time
+  private readonly script: string[] = [];
+  /** session.updated arrived (or the fallback timer fired): safe to speak. */
+  private sessionReady = false;
+  private scriptTimer: unknown = null;
+  private closeAfterScript = false;
+
   constructor(private readonly opts: RealtimeSessionOptions) {
     this.now = opts.now ?? (() => Date.now());
     this.timers = opts.timers ?? defaultTimers;
@@ -244,6 +254,24 @@ export class RealtimeVoiceSession {
     this.requestResponse(instructions);
   }
 
+  /**
+   * Speak `text` verbatim (force_message) as soon as the floor is free. Lines queue in order; the
+   * queue keeps only the latest few so a slow/late voice link doesn't read stale lines. Nothing is
+   * ever generated from `text`.
+   */
+  speak(text: string): void {
+    if (this.closed || !text.trim()) return;
+    this.script.push(text);
+    while (this.script.length > MAX_SCRIPT_QUEUE) this.script.shift();
+    this.flushScript();
+  }
+
+  /** Hang up once every queued scripted line has been spoken and played (now, if none). */
+  endAfterSpeech(): void {
+    this.closeAfterScript = true;
+    this.flushScript();
+  }
+
   close(reason = "closed by app"): void {
     if (this.closed) return;
     this.closed = true;
@@ -279,8 +307,10 @@ export class RealtimeVoiceSession {
   private clearTimers(): void {
     if (this.cameraTimer !== null) this.timers.clearTimeout(this.cameraTimer);
     if (this.openerTimer !== null) this.timers.clearTimeout(this.openerTimer);
+    if (this.scriptTimer !== null) this.timers.clearTimeout(this.scriptTimer);
     this.cameraTimer = null;
     this.openerTimer = null;
+    this.scriptTimer = null;
   }
 
   private handleOpen(): void {
@@ -293,12 +323,19 @@ export class RealtimeVoiceSession {
         this.openerTimer = null;
         this.sendOpener();
       }, this.opts.openerFallbackMs ?? 1500);
+    } else {
+      this.scriptTimer = this.timers.setTimeout(() => {
+        this.scriptTimer = null;
+        this.sessionReady = true;
+        this.flushScript();
+      }, this.opts.openerFallbackMs ?? 1500);
     }
   }
 
   private sendOpener(): void {
     if (this.openerSent || !this.opts.opener) return;
     this.openerSent = true;
+    this.sessionReady = true;
     if (this.openerTimer !== null) this.timers.clearTimeout(this.openerTimer);
     this.openerTimer = null;
     // The server runs a full response lifecycle for it; mark busy now so nothing interleaves.
@@ -317,6 +354,12 @@ export class RealtimeVoiceSession {
     switch (ev.kind) {
       case "session_updated":
         if (this.opts.opener && !this.openerSent) this.sendOpener();
+        else {
+          this.sessionReady = true;
+          if (this.scriptTimer !== null) this.timers.clearTimeout(this.scriptTimer);
+          this.scriptTimer = null;
+          this.flushScript();
+        }
         break;
       case "response_created":
         this.responseInProgress = true;
@@ -378,6 +421,8 @@ export class RealtimeVoiceSession {
           this.dropNextResponse = false;
         }
         this.opts.onError?.(ev.message);
+        // A rejected force_message must not strand the lines queued behind it.
+        if (!this.responseInProgress) this.flushScript();
         this.opts.log?.("[voice] server error", ev.code, ev.message);
         break;
       case "unknown":
@@ -433,8 +478,29 @@ export class RealtimeVoiceSession {
     if (!this.followUpScheduled && !this.needFollowUp && this.pendingCalls === 0) {
       await this.opts.sink.whenIdle();
       if (!this.responseInProgress) this.opts.onAgentSpeaking?.(false);
+      this.flushScript(); // scripted lines first; camera coaching waits for the next idle
       this.maybeFlushCamera();
     }
+  }
+
+  private canSpeakScript(): boolean {
+    if (!this.isOpen() || !this.configured || !this.sessionReady) return false;
+    if (this.opts.opener && !this.openerSent) return false;
+    return !this.agentSpeaking && !this.userSpeaking && this.pendingCalls === 0 && !this.followUpScheduled && !this.needFollowUp;
+  }
+
+  private flushScript(): void {
+    if (this.closed) return;
+    if (!this.script.length) {
+      if (this.closeAfterScript && !this.agentSpeaking && this.pendingCalls === 0 && !this.followUpScheduled) this.close("narration finished");
+      return;
+    }
+    if (!this.canSpeakScript()) return; // retried after the next response_done + idle
+    const text = this.script.shift() as string;
+    // force_message runs its own response lifecycle; mark busy now so nothing interleaves.
+    this.responseInProgress = true;
+    this.awaitingResponseId = true;
+    this.send(forceMessageEvent(text, true));
   }
 
   /**

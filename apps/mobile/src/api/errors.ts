@@ -38,9 +38,22 @@ const BY_CODE: Record<string, UserMessage> = {
   FORBIDDEN: m("FORBIDDEN", "Not available", "Your account can't do that.", false),
   NOT_FOUND: m("NOT_FOUND", "Not found", "This is no longer available. It may have ended or been removed.", false),
   OUTSIDE_AREA: m("OUTSIDE_AREA", "Outside the bounty area", "You're outside the bounty area. Move inside the highlighted hexes and try again."),
-  BOUNTY_NOT_ACTIVE: m("BOUNTY_NOT_ACTIVE", "Bounty not open", "This bounty isn't accepting captures right now.", false),
+  BOUNTY_NOT_ACTIVE: m("BOUNTY_NOT_ACTIVE", "Bounty not open", "This bounty isn't accepting captures right now. It may be waiting for funding or have ended — try another bounty nearby.", false),
   HAZARD_PAUSED: m("HAZARD_PAUSED", "Paused for safety", "Captures are paused here because of an active hazard warning.", false),
-  BUDGET_EXHAUSTED: m("BUDGET_EXHAUSTED", "Bounty is full", "This bounty has run out of budget.", false),
+  // Economy: the sponsor pool behind this bounty is spent (or not yet funded). Not the contributor's
+  // fault and not permanent — pools get topped up.
+  BUDGET_EXHAUSTED: m(
+    "BUDGET_EXHAUSTED",
+    "Fully funded for now",
+    "This bounty's budget is used up for the moment, so it can't pay for new captures. Sponsors top up pools regularly — check back later, or pick another bounty nearby.",
+    false,
+  ),
+  PENDING_FUNDING: m(
+    "PENDING_FUNDING",
+    "Waiting for funding",
+    "This bounty is waiting for sponsor funding before it can pay for captures. Check back later, or pick another bounty nearby.",
+    false,
+  ),
   SESSION_CLOSED: m("SESSION_CLOSED", "Session ended", "This capture session has ended. Start a new capture from the briefing.", false),
   SESSION_ALREADY_SUBMITTED: m("SESSION_ALREADY_SUBMITTED", "Already submitted", "This capture was already submitted. Start a new capture from the briefing.", false),
   FRAME_CHECK_LIMIT: m("FRAME_CHECK_LIMIT", "Scene-check limit reached", "End this session and start a new one.", false),
@@ -61,6 +74,11 @@ const BY_CODE: Record<string, UserMessage> = {
   SERVER: m("SERVER", "Something went wrong", "That's on our side, not yours. Try again in a moment."),
   UNKNOWN: m("UNKNOWN", "Something went wrong", "Please try again."),
 };
+
+// Spellings a newer economy server might use for the same refusals.
+BY_CODE.NOT_FUNDED = BY_CODE.PENDING_FUNDING!;
+BY_CODE.BOUNTY_PENDING_FUNDING = BY_CODE.PENDING_FUNDING!;
+BY_CODE.POOL_EXHAUSTED = BY_CODE.BUDGET_EXHAUSTED!;
 
 function byStatus(status: number): UserMessage | null {
   if (status === 401) return BY_CODE.UNAUTHORIZED!;

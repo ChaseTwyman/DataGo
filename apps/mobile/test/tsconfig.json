@@ -23,7 +23,9 @@
     "../src/ui/theme.ts",
     "../src/ui/contrast.ts",
     "../src/ui/telemetry.ts",
-    "../scripts/*.ts"
+    "../scripts/*.ts",
+    "../src/grokbot/*.ts",
+    "../src/api/errors.ts"
   ],
   "exclude": []
 }

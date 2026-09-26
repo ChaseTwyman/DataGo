@@ -26,7 +26,24 @@ import {
   type ProfileRequest,
 } from "@groundtruth/shared";
 import { z } from "zod";
+import { LenientGrokbotMessageSchema, LenientMatchRefreshSchema, LenientNarrationResponseSchema } from "../grokbot/schemas";
 import type { Http } from "./http";
+
+const optionalStrings = z.array(z.string()).optional().catch(undefined);
+
+/**
+ * /api/me plus the matching-profile fields, if (and only if) a server sends them — today it
+ * doesn't, so Account can't prefill them; they stay undefined and nothing breaks.
+ */
+export const MeWithProfileSchema = MeSchema.extend({
+  occupation: z.string().nullable().optional().catch(undefined),
+  skills: optionalStrings,
+  interests: optionalStrings,
+  regular_areas: z
+    .array(z.object({ label: z.string(), description: z.string().catch("") }))
+    .optional()
+    .catch(undefined),
+});
 
 type ChangePasswordRequest = z.infer<typeof ChangePasswordRequestSchema>;
 type DeleteAccountRequest = z.infer<typeof DeleteAccountRequestSchema>;
@@ -72,13 +89,34 @@ export function endpoints(http: Http) {
         body,
         auth: false,
       }),
-    me: () => http.request("GET", "/api/me", { schema: MeSchema }),
+    me: () => http.request("GET", "/api/me", { schema: MeWithProfileSchema }),
     changePassword: (body: ChangePasswordRequest) =>
       http.request("POST", "/api/me/password", { schema: z.object({ ok: z.boolean() }).loose(), body }),
     /** The whole export as parsed JSON (shape owned by the server; the phone only saves/shares it). */
     exportData: () => http.request("GET", "/api/me/export", { schema: z.unknown(), timeoutMs: 60_000 }),
     /** 204 on success. Body must be exactly { confirm: "DELETE" }. */
     deleteAccount: (body: DeleteAccountRequest) => http.request("DELETE", "/api/me", { schema: z.unknown(), body }),
+
+    // Grokbot (contracts/grokbot.ts). Lenient parsing; callers treat 404/501 as "not shipped yet".
+    /** Omit `after` on the first call; afterwards the highest seq seen (the phone also dedupes). */
+    narration: (submissionId: string, after?: number) =>
+      http.request("GET", `/api/grokbot/submissions/${encodeURIComponent(submissionId)}/narration`, {
+        schema: LenientNarrationResponseSchema,
+        query: { after },
+        timeoutMs: 10_000,
+      }),
+    explain: (submissionId: string) =>
+      http.request("GET", `/api/grokbot/submissions/${encodeURIComponent(submissionId)}/explain`, {
+        schema: LenientGrokbotMessageSchema,
+        timeoutMs: 30_000,
+      }),
+    priceWhy: (bountyId: string, at?: { lat: number; lng: number } | null) =>
+      http.request("GET", `/api/grokbot/bounties/${encodeURIComponent(bountyId)}/price-why`, {
+        schema: LenientGrokbotMessageSchema,
+        query: at ? { lat: at.lat, lng: at.lng } : undefined,
+        timeoutMs: 20_000,
+      }),
+    matchRefresh: () => http.request("POST", "/api/grokbot/match/refresh", { schema: LenientMatchRefreshSchema, body: {}, timeoutMs: 30_000 }),
   };
 }
 
