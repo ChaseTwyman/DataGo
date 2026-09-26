@@ -2,7 +2,11 @@ node_modules/
 .next/
 out/
 dist/
-coverage/
+# Test-coverage reports only. Anchored: a bare `coverage/` also matched the API route
+# apps/web/app/api/bounties/[id]/coverage/ and kept it out of git.
+/coverage/
+/apps/*/coverage/
+/packages/*/coverage/
 .env
 .env.*
 !.env.example
@@ -17,9 +21,6 @@ next-env.d.ts
 .vercel
 # eval outputs
 apps/web/test/fixtures/generated/
-.claude-flow/
-.swarm/
-.hive-mind/
 .claude-flow/
 .swarm/
 .hive-mind/
