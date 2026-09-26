@@ -1,90 +1,76 @@
 # GroundTruth — Status
 
-_Last updated: production on Vercel (https://groundtruth-two-snowy.vercel.app), open data live, mobile redesign landed. Next: Release build on the iPhone pointed at Vercel._
+_Last updated 2026-09-26: feature-complete for the hackathon and deployed. Accounts, password reset, verification hardening, open data, error handling all live. Remaining: device run on the iPhone (Release build), Resend DNS for reset emails, positive eval fixtures, Radar/briefing-video dashboard UI (in progress)._
+
+See `README.md` (setup, architecture, operations, security) and `DEMO.md` (checklists, 3-minute script, recovery).
 
 ## Production
-- **Web + API:** https://groundtruth-two-snowy.vercel.app (Vercel project `groundtruth`, team `panoptic-pigskin`, Hobby, region iad1). Supabase = hosted DB/Auth/Storage/Realtime. Nothing needs to run on a laptop.
-- **Open data (no login):** https://groundtruth-two-snowy.vercel.app/data · API `/api/public/datasets[/street-flood-depth?format=csv|geojson|json|dictionary]`. CC BY 4.0, privacy-coarsened (cell centers, 5-min time, per-dataset pseudonyms, no photos). 41 rows now (40 flagged `is_demo_seed`; remove with `LOCAL_BACKEND=0 DEMO_MODE=1 npx tsx --env-file=.env scripts/seed-open-data.ts --reset` in apps/web).
-- **Deploy:** always from a clean `git worktree` of origin/main (never the working copy): `VERCEL_TOKEN=… npx vercel deploy --prod --yes --scope panoptic-pigskin`. Env vars live in the Vercel project (LOCAL_BACKEND=0, MOCK_GROK=0, DEMO_MODE=1).
-- **Measured on Vercel (real Grok):** voice token 1.2 s; frame check 1.3–1.4 s; Imagine ~16 s; grok-4.7 verification 41 s at `reasoning_effort: medium` (was 89 s at default "high", and 120 s → error before removing the SDK's hidden retry); full red-team run 58 s, caught (`CHALLENGE_FAILED` + `C2PA_AI_GENERATED`).
+- **Web + API:** https://groundtruth-two-snowy.vercel.app — Vercel project `groundtruth` (team `panoptic-pigskin`, Hobby, iad1). Hosted Supabase for DB/Auth/Storage/Realtime. Nothing runs on a laptop.
+- **Open data (no login):** `/data`, `/api/public/datasets[/<slug>?format=csv|geojson|json|dictionary]`. CC BY 4.0, privacy-coarsened, no photos. Only human-approved or model-accepted (confidence ≥ 0.75) rows (`quality_tier`). Currently **0 rows** — all earlier seed/mock rows were deleted; real captures will populate it.
+- **Accounts:** required for everyone (email + password). Sign-up is server-side and pre-confirmed (no verification email). One account can be contributor and researcher; researcher is self-serve, admins can revoke/suspend/issue temporary passwords (Admin → Users). Anonymous sign-ins are disabled in Supabase and refused by the API (`ACCOUNT_REQUIRED`).
+- **Password reset:** "Forgot password?" on web and phone → emailed 6-digit code (15 min) or a `token_hash` link → new password → all sessions revoked. Supabase custom SMTP = Resend, sender `no-reply@panopticpigskin.tech`. **Blocked on DNS:** Resend domain `panopticpigskin.tech` needs CNAMEs `send → send.forge.rmta.net` and `rsend → rsend.forge.rmta.net` (DKIM already present). Until verified, reset emails don't send (the API still returns 202).
+- **Admin:** `researcher@groundtruth.dev`; password rotated, never in the repo (was committed earlier — the old one is dead). Rotate with `apps/web/scripts/rotate-admin-password.ts`.
+- **Deploy:** from a clean `git worktree` of origin/main only; apply migrations to hosted Supabase first. Vercel env includes CRON_SECRET, NEXT_PUBLIC_SITE_URL, REJECTED_MEDIA_RETENTION_DAYS=30, GROK_* models, LOCAL_BACKEND=0, MOCK_GROK=0, DEMO_MODE=1. Daily retention cron (`/api/cron/retention`) deletes rejected photos after 30 days.
+- **Measured on Vercel (real Grok):** voice token ~1.2 s; frame check ~1.3 s; relevance ~2 s; Imagine ~16 s; grok-4.7 verification ~41 s (reasoning_effort medium); red-team run ~58 s.
 
-## Verification hardening (after the vitamin-water incident)
-- Incident: a bottle on carpet reached needs_review on a flood bounty — phone gate unlocked in "degraded" mode with 0 real frame checks, grok-4.7 timed out, a human rejected it. Separately 40 seed rows + 1 MOCK_GROK row had reached the public dataset; all deleted.
-- **Decision (supersedes BUILD_PROMPT M2's degraded fallback):** no degraded unlock. Shutter unlocks only on the server's `gate_passed` (2 consecutive real all-green checks); otherwise "CAN'T VERIFY SCENE" + retry. Server rejects/reviews sessions that never passed (`GATE_NOT_PASSED`), never pays them.
-- New fast `relevance` stage (grok-4.20, ~2 s) → `OFF_TOPIC` reject independent of grok-4.7; extraction sanity rules; `submissions.verifier` (model|mock|human|none) with mock/seed rows never exported/published; MOCK_GROK refused on a real DB; public rows only if human-approved or model conf ≥ 0.75 (`quality_tier`).
-- Real-Grok eval: `negative/vitamin-water-bottle` → rejected `OFF_TOPIC` in 2.1 s (confidence 0.90). Positives still needed (tub + ruler, real puddles) before claiming accept rates.
-
-## Bugs found by going to production (all fixed)
-- `.gitignore` `coverage/` hid `app/api/bounties/[id]/coverage/route.ts` from git: every clone lacked the endpoint while local checks passed (b2cd456).
-- postgres.js double-encoded jsonb params (PGlite doesn't) → "media must be an array" on hosted DB (d9c27f4).
-- Hobby maxDuration cap (300 s) rejected the deploy (f65bdb0); red-team 120 s limit too low (4d29cf5).
-- Verification: 12 MP frames + 60 s timeout × SDK retry → 120 s error (4615e96); reasoning effort high → 89 s (e31985f).
-- iOS 27 SDK requires UIScene life cycle (1092a35); Hermes/Expo TextDecoder lacks UTF-16 so h3-js broke every route (50bbc95); ATS ignored NSAllowsArbitraryLoads next to NSAllowsLocalNetworking (8013794).
+## Verification design (after the vitamin-water incident)
+- Incident: a bottle on carpet reached needs_review on a flood bounty (phone gate unlocked in a "degraded" fallback with 0 real frame checks; grok-4.7 timed out; a human rejected it). Separately, seed/mock rows had reached the public dataset — deleted.
+- **Decisions (supersede BUILD_PROMPT M2's degraded fallback):** the shutter unlocks only on the server's `gate_passed` (2 consecutive real all-green frame checks); otherwise "CAN'T VERIFY SCENE" + backoff retry. Sessions that never passed → `GATE_NOT_PASSED` → review, never paid.
+- Pipeline: session integrity → **relevance** (fast model, `OFF_TOPIC`) → challenge → protocol (+ extraction sanity rules) → authenticity (+ C2PA/IPTC AI-provenance hard fail) → context → duplicates → corroboration → `decide()`. `submissions.verifier` = model|mock|human|none; MOCK_GROK refused on a real DB; mock/seed rows never exported or published.
+- Real-Grok eval: `negative/vitamin-water-bottle` → rejected `OFF_TOPIC` in 2.1 s (0.90). A Grok Imagine fake → `CHALLENGE_FAILED` + `C2PA_AI_GENERATED`. **Not yet proven:** real positive captures being accepted — add tub+ruler / puddle fixtures and run `pnpm eval:verification`.
+- Honest limit: model-only AI-image detection is weak (grok-4.7 did not flag an Imagine fake); C2PA labels vanish when a fake is re-photographed, so the gate's screen/print check and burst parallax cover that case.
 
 ## Milestones
 | # | Milestone | State |
 |---|---|---|
-| M0 | Foundations and contracts | ✅ done |
-| M0.5 | Voice spike | ✅ code done · ⏳ device acceptance (latency, barge-in) |
-| M1 | Skeleton loop (mock AI) | ✅ done — e2e script 19/19 in local mode |
-| M2 | Capture gate + challenge | ✅ code done · ⏳ device |
-| M3 | Verification pipeline | ✅ done — real Grok verified on Vercel |
-| M4 | Voice field guide | ✅ code done · ⏳ device |
-| M5 | Economy + data | ✅ done |
-| M6 | Imagine + red team | ✅ done — real Grok on Vercel, C2PA check |
-| M7 | P1 | ◑ backend for Radar, Protocol Studio, briefing video done; voice onboarding interview not built (form fallback exists); no UI for Radar/Studio |
-| M8 | Demo readiness | ◑ spawn-event, demo-reset, e2e, eval done · README.md + DEMO.md not written |
+| M0 | Foundations and contracts | ✅ |
+| M0.5 | Voice spike | ✅ code · ⏳ device acceptance (latency, barge-in) |
+| M1 | Skeleton loop | ✅ |
+| M2 | Capture gate + challenge | ✅ code (server-authoritative gate) · ⏳ device |
+| M3 | Verification pipeline | ✅ real Grok on Vercel |
+| M4 | Voice field guide | ✅ code · ⏳ device |
+| M5 | Economy + data | ✅ |
+| M6 | Imagine + red team | ✅ real Grok, C2PA check |
+| M7 | P1 | ◑ Protocol Studio UI ✅ (`/studio`; cashew-box protocol drafted/published live); Radar + briefing-video dashboard UI in progress (backends done; phone doesn't play briefing clips); voice onboarding interview not built (form onboarding exists) |
+| M8 | Demo readiness | ✅ README.md, DEMO.md, spawn-event, eval, e2e |
+| — | Accounts, roles, admin, data rights, rate limits, retention | ✅ live; 21/21 live account checks |
+| — | Password reset by email code | ✅ code + Supabase config live · ⏳ Resend DNS |
+| — | "No random errors" pass | ✅ forward-compatible parsing, friendly errors, error boundaries |
 
 ## Verification evidence
-- `pnpm check` (root): typecheck + lint + tests green — shared 51, supabase 13, web 95, mobile 99 = **258 tests**.
-- Web e2e (`LOCAL_BACKEND=1 MOCK_GROK=1 DEMO_MODE=1`, `next dev`): 19/19 steps — accepted (conf 0.831), $11.60 paid + wallet credited, `screen_recapture` flagged, coverage 19 cells, CSV (31 cols) + GeoJSON, red-team `ai_generated` and `recycled` both caught. Same loop runs in vitest (`test/api.loop.test.ts`).
-- Mobile smoke (`pnpm --filter @groundtruth/mobile smoke`): app's own API client + gate reducer against the local API → accepted, 1160¢, wallet credited.
-- `next build` compiles all 27 routes + dashboard pages. Mobile: expo-doctor 21/21, Android prebuild OK, `expo export` bundles iOS + Android.
-- Dashboard pages browser-checked against the local API.
-- Independent reviewers per track; all confirmed findings fixed (web: review race, CSV formula injection, hard-coded dev signing secret, error-text leak, example-image ownership; mobile: degraded gate could unlock over a flagged screen, voice session stalls).
-- Hosted Supabase: migrations + seed applied, researcher login, anonymous sign-in and RLS reads verified via REST.
-
-## Real vs mocked / unverified
-- **Hosted Supabase end to end** (auth, Storage signed uploads, DB, pipeline, wallet, export, red team): e2e **19/19** with MOCK_GROK=1 after fixing a postgres.js jsonb double-encoding bug that PGlite hid (d9c27f4).
-- **Real Grok, verified once each** (Supabase mode):
-  - voice token: 129 ms; `client_secrets` returns `{ value, expires_at }`; phone gets a wss URL.
-  - frame check (grok-4.20): 1.3 s; a blank grey frame correctly returned no elements visible, not green.
-  - Imagine image: 13.6 s. Verification (grok-4.7): **31.6 s** (6.4k in / 2.2k out tokens) — over the PRD's 25 s target.
-- **AI-fake detection:** the real grok-4.7 did **not** flag a Grok Imagine fake as AI-generated. Fix (ea9ae70): Grok Imagine embeds a C2PA manifest (`softwareAgent: Grok Imagine`, `trainedAlgorithmicMedia`); the authenticity stage now reads C2PA/IPTC labels and hard-fails with `C2PA_AI_GENERATED`, independent of the model. Live red-team run now: `CHALLENGE_FAILED` + `C2PA_AI_GENERATED` (28 s). Labels vanish on re-encode or when a fake is photographed off a screen, so for that attack the capture gate (screen/print flag) and burst parallax remain the defense; model-only AI detection stays weak — don't claim it in the demo.
-- **Still unverified:** realtime from the apps; everything device-only (audio echo/latency, camera, DeviceMotion, upload from the phone, pod install on macOS).
-
-## Running it
-- Local, no Supabase: PowerShell `$env:LOCAL_BACKEND="1"; pnpm dev:web` (add `$env:MOCK_GROK="1"` for no xAI calls). Dashboard login: "Continue as demo researcher". Clients poll instead of realtime.
-- Supabase mode: `pnpm dev:web` with `LOCAL_BACKEND=0` and a working `DATABASE_URL`. Admin login `researcher@groundtruth.dev`; its password is not in the repo (seed.sql holds a bcrypt hash of a random one). Hosted: rotate with `apps/web/scripts/rotate-admin-password.ts`; new accounts via Create account / `POST /api/auth/signup`.
-- E2E: `BASE_URL=http://localhost:3000 pnpm --filter @groundtruth/web e2e:mock`.
-- Stop `next dev` before `demo:reset` / `generate:examples` in local mode (PGlite is single-process). Never run `demo:reset` against the hosted DB without meaning to — it wipes data.
+- Clean-checkout `pnpm check` at f203328: shared 86, mobile 219, supabase 33, web 241 (+1 skipped) = **579 tests**; `next build` OK; `expo export --platform ios` OK (main tree).
+- Live production checks: accounts smoke 21/21 on first run (sign-up, duplicate email, sign-in, /me, researcher self-serve, admin list/revoke/reset, revoked user can't re-enable, anonymous refused, export, delete, open data, cron auth). Re-runs now hit the sign-up rate limit (5/hour/IP) — expected.
+- Independent reviewers on every track; notable fixes: degraded gate unlocking over a flagged screen, account deletion could remove another user's photos, reset sign-out failure swallowed, error-text leaks.
+- Going-to-production bugs fixed: `.gitignore` hid the coverage route; postgres.js double-encoded jsonb; Vercel Hobby maxDuration; verification timeouts (frame downscaling, no SDK retry, reasoning medium); iOS 27 UIScene; Hermes UTF-16 TextDecoder for h3-js; ATS local-networking key.
 
 ## Known issues / decisions
-- Decision rules beyond the PRD: weak (<0.8) authenticity suspicion, edited/composited, velocity, impossible travel → capped at `needs_review`; missing element / protocol score below minimum → retryable reject; `OUTSIDE_WINDOW` is a hard fail; identical burst frames → `CHALLENGE_FAILED` even if the model is fooled.
-- Protocol-reject retry opens a new capture session (one upload slot set + one submission per session).
-- VisionCamera v5 (v4 incompatible with SDK 57): EXIF is not exposed to JS; it stays in the JPEG bytes.
-- expo-notifications removed (unused; it adds a push entitlement a free Apple ID can't sign). Local notifications (P1) would need it back with the entitlement stripped.
-- Ephemeral voice token response shape is undocumented; parser accepts common variants and logs keys once.
-- Commit `06f2f23` also contains some web-API files swept in from a shared git index; content intact, history left as-is.
+- `supabase/config.toml` (local CLI) still enables anonymous sign-ins; hosted has them off and the API refuses them anyway.
+- The per-IP rate limits trust Vercel's `x-forwarded-for` / `x-real-ip` (Vercel overwrites them); per-email/per-user limits don't depend on it.
+- VisionCamera v5 (SDK 57): EXIF not exposed to JS. expo-notifications removed (push entitlement unsignable with a free Apple ID).
+- Something in the local Claude tooling (a ruflo hook) has written stray files named `$L`/`$WT` and once truncated three source files in the working copy; committed history was intact. Deploys use clean worktrees.
 
 ## Human TODOs
-- [x] Hosted Supabase project; anonymous sign-ins on; schema + seed applied.
-- [x] `XAI_API_KEY` added and verified.
-- [x] `apps/mobile/.env` filled (API URL `http://10.90.48.161:3000`, Supabase URL + anon key).
-- [x] `DATABASE_URL` password fixed; API connects to hosted DB.
-- [x] Mac: Xcode 27 + Apple ID, Node, pnpm, CocoaPods, clone, iPhone Developer Mode. App runs on the iOS 27 simulator.
-- [x] ~~Same Wi-Fi / tunnels~~ — obsolete: API is on Vercel.
-- [ ] Mac: set EXPO_PUBLIC_API_BASE_URL=https://groundtruth-two-snowy.vercel.app, then Release build to the iPhone.
-- [ ] ~20 real test photos in `apps/web/test/fixtures` (see its README).
+- [ ] Add the two Resend CNAMEs above at the `panopticpigskin.tech` registrar; tell Claude which inbox to send a test reset to.
+- [ ] Mac: `git pull`, `.env` API URL = Vercel, Release build to the iPhone (see "Phone build"). The previously installed build no longer works (anonymous sign-in removed).
+- [ ] Take real test photos with the app (positives: tub + ruler, puddles; negatives: random objects, a screen) → fixtures → eval.
+- [ ] Revoke the Supabase access token and Vercel token after the hackathon; move the admin password into a password manager and delete `C:\Users\sumedh\.groundtruth-admin.txt`.
+- [ ] Delete leftover folders `$WT` (repo root, apps/web) and `C:\Users\sumedh\AppData\Local\Temp\{gtm,gtx,gta,gtd,gtr}` when OneDrive/path limits allow.
+
+## Phone build (Mac)
+```
+cd ~/DataGo && git restore pnpm-lock.yaml apps/mobile/tsconfig.json 2>/dev/null; git pull && pnpm install
+cd apps/mobile   # .env: EXPO_PUBLIC_API_BASE_URL=https://groundtruth-two-snowy.vercel.app (+ Supabase URL, anon key)
+IOS_BUNDLE_ID=com.<name>.groundtruth npx expo prebuild --platform ios --clean
+IOS_BUNDLE_ID=com.<name>.groundtruth npx expo run:ios --device "<iPhone name>" --configuration Release
+```
 
 ## Device test steps
-Build on the Mac: `git pull && pnpm install && cd apps/mobile && IOS_BUNDLE_ID=com.<yourname>.groundtruth npx expo run:ios --device` (Personal Team in Xcode if asked; trust the profile on the phone). If pod install fails on module resolution: `nodeLinker: hoisted` in `pnpm-workspace.yaml`, `pnpm install`, retry. Web server runs on the Windows laptop (`pnpm dev:web`).
-
-1. **Voice spike**: Map → "🎙 Voice test" → Connect. Say "hello" → reply ≲1.5 s (latency readout green < 1500 ms). Talk over the reply → playback stops immediately. Note any unknown event types shown.
-2. **Capture gate**: in the bounty area (or after spawn-event at your location) → For you → bounty → Start capture. Guide asks the safety question → "yes". Checklist rows go green with a haptic tick; shutter shows a lock + the top missing item until 2 consecutive all-green checks.
-3. **Screen flagging**: point at a laptop showing a flood photo → "Real scene" row red, shutter stays locked, warning haptic. (Also via Wallet → Developer → `screen_recapture` mock variant.)
-4. **Full loop**: say "capture" → challenge shown, 1.8 s countdown, 3-photo burst → answer both field questions by voice or tap → Submit → result checklist animates → accepted amount counts up → wallet credit. Dashboard shows it live on the map + dataset.
-5. **Unsafe path**: say "I don't feel safe" → guide thanks you, session ends, "no penalty".
-6. **Degraded mode**: stop the API during framing → after 10 s the gate unlocks on device checks only, shows a degraded note, submits with `gate.degraded = true`.
-
-Record latency and any issues here after the first run.
+1. **Accounts:** Create account → onboarding (permissions) → map. Sign out/in. Forgot password (once DNS is verified).
+2. **Voice (dev builds only; hidden in Release):** voice test screen → "hello" → reply ≲1.5 s; talk over it → stops.
+3. **Capture gate:** For you → bounty → Start capture → safety question → checklist rows go green; shutter unlocks only after the server confirms 2 all-green checks ("Scene verified 2/2").
+4. **Screen flagging:** a laptop showing a flood photo → "Real scene" red, shutter stays locked.
+5. **Can't verify:** turn off Wi-Fi/cellular during framing → "CAN'T VERIFY SCENE", shutter stays locked, recovers when back online.
+6. **Off-topic:** capture something unrelated (if it gets through) → rejected `OFF_TOPIC` with "Point the camera at: …".
+7. **Full loop:** challenge → 3-photo burst → field notes → verification checklist (~45 s) → accepted → wallet; dashboard shows it live; `/data` shows it once accepted with confidence ≥ 0.75.
+8. **Cashew test:** "Cashew package label test" bounty (3 km around Georgia Tech) — box + label + weight + a pen/phone for scale.
+9. **Account data:** Account → Download my data (share sheet); Delete account (type DELETE).
