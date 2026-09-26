@@ -11,7 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "eslint src test",
+    "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {

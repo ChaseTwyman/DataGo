@@ -7,3 +7,4 @@ export * from "./h3";
 export * from "./checks";
 export * from "./verificationSchema";
 export * from "./contracts";
+export * from "./demo";

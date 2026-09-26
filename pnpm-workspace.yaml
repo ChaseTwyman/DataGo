@@ -2,7 +2,17 @@ packages:
   - "apps/*"
   - "packages/*"
   - "supabase"
+allowBuilds:
+  esbuild: true
+  sharp: true
 minimumReleaseAgeExclude:
   - '@vitest/mocker@5.0.2'
   - '@vitest/spy@5.0.2'
   - vitest@5.0.2
+  - '@types/node@24.19.0'
+  - '@supabase/auth-js@2.117.2'
+  - '@supabase/functions-js@2.117.2'
+  - '@supabase/postgrest-js@2.117.2'
+  - '@supabase/realtime-js@2.117.2'
+  - '@supabase/storage-js@2.117.2'
+  - '@supabase/supabase-js@2.117.2'

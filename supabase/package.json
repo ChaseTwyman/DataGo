@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "eslint test",
-    "test": "vitest run"
+    "lint": "eslint .",
+    "test": "vitest run",
+    "seed:gen": "tsx scripts/generate-seed.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@groundtruth/shared": "workspace:*",
     "typescript": "~6.0.3",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.2",
+    "tsx": "^4.23.15",
+    "@types/node": "^24.19.0"
   }
 }
