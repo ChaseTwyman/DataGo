@@ -55,7 +55,7 @@ _Last updated: production on Vercel (https://groundtruth-two-snowy.vercel.app), 
 
 ## Running it
 - Local, no Supabase: PowerShell `$env:LOCAL_BACKEND="1"; pnpm dev:web` (add `$env:MOCK_GROK="1"` for no xAI calls). Dashboard login: "Continue as demo researcher". Clients poll instead of realtime.
-- Supabase mode: `pnpm dev:web` with `LOCAL_BACKEND=0` and a working `DATABASE_URL`. Researcher login `researcher@groundtruth.dev` / `groundtruth-demo` (change before any public demo — it is in the repo).
+- Supabase mode: `pnpm dev:web` with `LOCAL_BACKEND=0` and a working `DATABASE_URL`. Admin login `researcher@groundtruth.dev`; its password is not in the repo (seed.sql holds a bcrypt hash of a random one). Hosted: rotate with `apps/web/scripts/rotate-admin-password.ts`; new accounts via Create account / `POST /api/auth/signup`.
 - E2E: `BASE_URL=http://localhost:3000 pnpm --filter @groundtruth/web e2e:mock`.
 - Stop `next dev` before `demo:reset` / `generate:examples` in local mode (PGlite is single-process). Never run `demo:reset` against the hosted DB without meaning to — it wipes data.
 

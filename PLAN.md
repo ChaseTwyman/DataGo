@@ -43,7 +43,7 @@ Root:
 
 `supabase/`:
 - `config.toml`, `migrations/0001_init.sql` (tables PRD §15, enums, indexes), `migrations/0002_rls.sql`, `migrations/0003_storage_realtime.sql` (buckets, publication, `observations_export` view)
-- `seed.sql` — researcher/admin `researcher@groundtruth.dev` / `groundtruth-demo`, flood protocol published, one active demo bounty
+- `seed.sql` — researcher/admin `researcher@groundtruth.dev` (random password; never committed), flood protocol published, one active demo bounty
 - `test/migrations.test.ts` — PGlite applies all migrations + seed
 
 `apps/web/lib/grok/` (web app shell created minimally so the wrapper compiles):
