@@ -469,6 +469,39 @@ describe("reviewer brief", () => {
     }
   });
 
+  it("stage evidence is labelled from the stored stage status, not the model (timeouts are not fraud evidence)", () => {
+    // Regression from the live production run: grok-4.20 labelled timed-out stages "inauthentic / strong".
+    const c = withStageSummary(
+      researcherSubmissionCase(
+        {
+          submission: { id: randomUUID(), status: "rejected", reason_codes: ["STAGE_ERROR"], checks: checks({ authenticity: ["error", [], ["verification failed: Request timed out."]], challenge: ["error"], protocol: ["pass"] }), payout_cents: null, extracted: null, field_notes: {}, gate: {}, verifier: "human", confidence: null, protocol_score: null, authenticity_score: null } as never,
+          protocol: streetFloodDepth,
+          bountyTitle: "t",
+        },
+        "researcher",
+      ),
+    );
+    const claim = (id: string) => c.facts.find((f) => f.id === id)!.text;
+    const g = groundBrief(
+      {
+        summary: { text: claim("stages.summary"), cites: ["stages.summary"] },
+        evidence: [
+          { claim: claim("stage.authenticity"), supports: "inauthentic", strength: "strong", fact_id: "stage.authenticity" },
+          { claim: claim("stage.challenge"), supports: "inauthentic", strength: "strong", fact_id: "stage.challenge" },
+          { claim: claim("stage.protocol"), supports: "protocol_issue", strength: "strong", fact_id: "stage.protocol" },
+        ],
+        uncertainties: [],
+        suggested_checks: [],
+      },
+      c,
+    );
+    const by = Object.fromEntries((g?.evidence ?? []).map((e) => [e.fact_id, [e.supports, e.strength]]));
+    expect(by["stage.authenticity"]).toEqual(["neutral", "weak"]);
+    expect(by["stage.challenge"]).toEqual(["neutral", "weak"]);
+    // a passing protocol stage cannot be spun as a protocol issue either
+    expect(by["stage.protocol"]).toEqual(["protocol_ok", "moderate"]);
+  });
+
   it("authz: contributors (even the owner) 403, researchers who don't own the bounty 404", async () => {
     const c = await user("contributor");
     const r = await user("researcher");

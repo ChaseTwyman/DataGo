@@ -112,9 +112,16 @@ export function groundBrief(m: BriefModel, c: CaseFile): BriefModel | null {
     const g = groundDraft({ headline: { text: "", cites: [] }, paragraphs: arr.filter((l) => noVerdict(l.text)), next_steps: [] }, c);
     return g.draft?.paragraphs ?? [];
   };
-  const evidence = m.evidence.filter(
-    (e) => ids.has(e.fact_id) && noVerdict(e.claim) && lines([{ text: e.claim, cites: [e.fact_id] }]).length === 1,
-  );
+  const facts = new Map(c.facts.map((f) => [f.id, f]));
+  const evidence = m.evidence
+    .filter((e) => ids.has(e.fact_id) && noVerdict(e.claim) && lines([{ text: e.claim, cites: [e.fact_id] }]).length === 1)
+    // Evidence about a pipeline stage is labelled from that stage's STORED status, never by the model.
+    // Live on production the model labelled timed-out stages "inauthentic / strong"; an errored or
+    // skipped stage judged nothing, and calling it evidence of fraud nudges reviewers to reject.
+    .map((e) => {
+      const f = facts.get(e.fact_id);
+      return f && f.id.startsWith("stage.") ? { ...e, ...stageSupport(f.citation.ref, f.citation.detail ?? "") } : e;
+    });
   if (evidence.length === 0) return null;
   const summary = lines([m.summary])[0] ?? briefTemplate(c).summary;
   return { summary, evidence, uncertainties: lines(m.uncertainties), suggested_checks: lines(m.suggested_checks) };
