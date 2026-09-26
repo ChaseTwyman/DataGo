@@ -23,6 +23,8 @@ export const FIXED_REASON_CODES = [
   "LOW_CONFIDENCE",
   "STAGE_ERROR",
   "SYNTHETIC_MEDIA",
+  // Provenance metadata (C2PA / IPTC) declares the image AI-generated.
+  "C2PA_AI_GENERATED",
   "DEMO_WAIVER",
   "GATE_DEGRADED",
   "HAZARD_PAUSED",
@@ -58,6 +60,7 @@ const KIND: Record<FixedReasonCode, ReasonKind> = {
   VELOCITY_LIMIT: "integrity",
   IMPOSSIBLE_TRAVEL: "integrity",
   SYNTHETIC_MEDIA: "integrity",
+  C2PA_AI_GENERATED: "integrity",
   BLURRY: "protocol",
   TOO_DARK: "protocol",
   BAD_FRAMING: "protocol",

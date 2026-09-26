@@ -39,6 +39,8 @@ describe("decide — hard fails", () => {
     ["duplicates", "DUPLICATE", "integrity"],
     ["challenge", "CHALLENGE_FAILED", "integrity"],
     ["session_integrity", "SYNTHETIC_MEDIA", "integrity"],
+    ["authenticity", "C2PA_AI_GENERATED", "integrity"],
+    ["authenticity", "C2PA_AI_GENERATED", "integrity"],
   ];
   for (const [st, code, kind] of cases) {
     it(`${code} rejects regardless of scores`, () => {

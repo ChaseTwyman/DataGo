@@ -56,6 +56,7 @@ const HARD_FAIL: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
   "DUPLICATE",
   "CHALLENGE_FAILED",
   "SYNTHETIC_MEDIA",
+  "C2PA_AI_GENERATED",
 ]);
 
 /** Codes that can never be auto-accepted; they cap the result at needs_review. */

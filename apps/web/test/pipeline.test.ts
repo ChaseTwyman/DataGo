@@ -1,4 +1,6 @@
 /** Unit tests for the verification stages and runner, with fake deps (no DB, no network). */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { cellForPoint, cellsForCircle, circlePolygon, DEMO, streetFloodDepth, type VerificationOutput } from "@groundtruth/shared";
 import { mockVerification } from "@/lib/grok/mocks/fixtures";
@@ -12,6 +14,7 @@ import { sumPrecipitation } from "@/lib/context/openMeteo";
 import { parseNwsAlerts, pointInAlert } from "@/lib/context/nws";
 import { randomJpeg } from "./helpers";
 
+const grokImagineJpeg = readFileSync(fileURLToPath(new URL("./data/grok-imagine-c2pa.jpg", import.meta.url)));
 const cells = cellsForCircle(DEMO.lat, DEMO.lng, DEMO.radiusM);
 // Noon-ish local time in Atlanta (16:00Z) so daylight is "day" regardless of when tests run.
 const NOON = "2026-09-26T16:00:00.000Z";
@@ -96,6 +99,32 @@ describe("runPipeline", () => {
     const r = await runPipeline(await baseInput(), deps({ verify: async () => mockVerification(streetFloodDepth, "screen_recapture") }), memorySink());
     expect(r.decision.status).toBe("rejected");
     expect(r.decision.reasonCodes).toContain("SCREEN_RECAPTURE");
+  });
+
+  it("C2PA 'AI-generated' label → rejected even when the model is fooled", async () => {
+    const input = await baseInput();
+    input.frames[1] = { path: "observations/u/s/1.jpg", bytes: grokImagineJpeg };
+    const r = await runPipeline(input, deps(), memorySink()); // model says genuine
+    expect(r.decision.status).toBe("rejected");
+    expect(r.decision.rejectionKind).toBe("integrity");
+    const a = stage(r, "authenticity");
+    expect(a.status).toBe("fail");
+    expect(a.reasonCodes).toContain("C2PA_AI_GENERATED");
+    expect(a.subchecks?.find((s) => s.id === "c2pa")).toMatchObject({ status: "fail" });
+    expect(a.evidence.join(" ")).toMatch(/Grok Imagine/);
+  });
+
+  it("C2PA label still rejects when the verification model errors", async () => {
+    const input = await baseInput();
+    input.frames[0] = { path: "observations/u/s/0.jpg", bytes: grokImagineJpeg };
+    const r = await runPipeline(input, deps({ verify: async () => { throw new Error("grok down"); } }), memorySink());
+    expect(stage(r, "authenticity").status).toBe("fail");
+    expect(r.decision.status).toBe("rejected");
+  });
+
+  it("frames without provenance labels pass the C2PA subcheck", async () => {
+    const r = await runPipeline(await baseInput(), deps(), memorySink());
+    expect(stage(r, "authenticity").subchecks?.find((s) => s.id === "c2pa")).toMatchObject({ status: "pass" });
   });
 
   it("stage exception → error → needs_review", async () => {
