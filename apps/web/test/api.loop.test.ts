@@ -26,7 +26,7 @@ import { POST as createSubmission } from "@/app/api/submissions/route";
 import { GET as getSubmission } from "@/app/api/submissions/[id]/route";
 import { GET as walletGet } from "@/app/api/me/wallet/route";
 import { GET as health } from "@/app/api/health/route";
-import { idCtx, randomJpeg, req, setupTestEnv, type TestEnv } from "./helpers";
+import { idCtx, passGate, randomJpeg, req, setupTestEnv, type TestEnv } from "./helpers";
 
 let env: TestEnv;
 const noCtx = undefined as unknown;
@@ -52,13 +52,16 @@ async function contributor(): Promise<string> {
   return ((await r.json()) as { access_token: string }).access_token;
 }
 
-async function openSession(token: string): Promise<CreateSessionResponse> {
+/** Opens a session; by default also passes the server-side capture gate (2 green frame checks). */
+async function openSession(token: string, gate = true): Promise<CreateSessionResponse> {
   const r = await createSession(
     req("POST", "/api/capture/sessions", { token, body: { bounty_id: DEMO.bountyId, lat: DEMO.lat, lng: DEMO.lng, accuracy_m: 5 } }),
     noCtx,
   );
   expect(r.status).toBe(201);
-  return CreateSessionResponseSchema.parse(await r.json());
+  const s = CreateSessionResponseSchema.parse(await r.json());
+  if (gate) await passGate(token, s.session_id);
+  return s;
 }
 
 async function uploadFrames(s: CreateSessionResponse, frames?: Buffer[]): Promise<void> {
@@ -117,7 +120,7 @@ describe("contributor loop (mock mode, local backend)", () => {
     expect(detail.status).toBe(200);
     expect(((await detail.json()) as { coverage: unknown[] }).coverage.length).toBeGreaterThan(5);
 
-    const s = await openSession(token);
+    const s = await openSession(token, false);
     expect(s.uploads).toHaveLength(3);
     expect(s.uploads[0]!.path).toMatch(/^observations\/[0-9a-f-]+\/[0-9a-f-]+\/0\.jpg$/);
     await uploadFrames(s);
@@ -127,6 +130,11 @@ describe("contributor loop (mock mode, local backend)", () => {
     const fcBody = FrameCheckResponseSchema.parse(await fc.json());
     expect(fcBody.all_green).toBe(true);
     expect(fcBody.checks_used).toBe(1);
+    expect(fcBody).toMatchObject({ green_streak: 1, gate_passed: false });
+    const fcPass = FrameCheckResponseSchema.parse(
+      await (await frameCheck(req("POST", "/api/capture/frame-check", { token, body: { session_id: s.session_id, image_base64: img } }), noCtx)).json(),
+    );
+    expect(fcPass).toMatchObject({ all_green: true, green_streak: 2, gate_passed: true });
     const fc2 = await frameCheck(
       req("POST", "/api/capture/frame-check", { token, body: { session_id: s.session_id, image_base64: img }, headers: { "x-mock-variant": "screen_recapture" } }),
       noCtx,
@@ -134,6 +142,9 @@ describe("contributor loop (mock mode, local backend)", () => {
     const fc2Body = FrameCheckResponseSchema.parse(await fc2.json());
     expect(fc2Body.all_green).toBe(false);
     expect(fc2Body.result.suspected_screen_or_print.value).toBe(true);
+    // A flagged check resets the streak and reports the gate closed (the phone locks again); the
+    // server-side pass already recorded for the session sticks, so the submission is judged on it.
+    expect(fc2Body).toMatchObject({ green_streak: 0, gate_passed: false });
 
     const sub = await submitAndSettle(token, s);
     expect(sub.status).toBe("accepted");

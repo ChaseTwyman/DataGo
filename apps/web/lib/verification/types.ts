@@ -7,6 +7,7 @@ import type {
   MockVariant,
   Protocol,
   ReasonCode,
+  RelevanceResult,
   SensorSnapshot,
   StageId,
   StageResult,
@@ -69,6 +70,10 @@ export interface PipelineDeps {
     intervalMs: number;
     variant?: MockVariant;
   }): Promise<VerificationOutput>;
+  /** Fast one-frame "right subject?" screen (fast vision model), independent of verify(). */
+  relevance(args: { protocol: Protocol; frameBase64: string; variant?: MockVariant }): Promise<RelevanceResult>;
+  /** Who decides in this environment: "mock" whenever MOCK_GROK is on (fixtures approve anything). */
+  verifier: "model" | "mock";
   precipitationMm(lat: number, lng: number, at: Date, lookbackHours: number): Promise<number>;
   alertsAt(lat: number, lng: number): Promise<NwsAlert[]>;
   priorHashes(excludeId: string | null): Promise<{ id: string; phashes: string[] }[]>;
@@ -105,4 +110,12 @@ export interface StageContext {
   hashes(): Promise<string[]>;
 }
 
-export type Stage = { id: StageId; run(ctx: StageContext): Promise<StageOutcome> };
+export type Stage = {
+  id: StageId;
+  /**
+   * Stage is judged by the reasoning model. When the relevance stage rejects a capture as off-topic,
+   * these are skipped and the (slow, costly) model is never called.
+   */
+  usesModel?: boolean;
+  run(ctx: StageContext): Promise<StageOutcome>;
+};

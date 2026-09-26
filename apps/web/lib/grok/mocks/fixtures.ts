@@ -2,7 +2,7 @@
  * Deterministic fixtures for MOCK_GROK=1. Variants are selected by the `x-mock-variant` request
  * header (see MOCK_VARIANT_HEADER) so tests and the UI can exercise failure paths offline.
  */
-import type { FrameCheckResult, MockVariant, Protocol, VerificationOutput } from "@groundtruth/shared";
+import type { FrameCheckResult, MockVariant, Protocol, RelevanceResult, VerificationOutput } from "@groundtruth/shared";
 
 export function mockFrameCheck(protocol: Protocol, variant: MockVariant = "default"): FrameCheckResult {
   const els = protocol.capture.required_elements;
@@ -29,11 +29,44 @@ export function mockFrameCheck(protocol: Protocol, variant: MockVariant = "defau
         hint: `Show the ${last?.label.toLowerCase() ?? "missing element"}.`.slice(0, 80),
       };
     }
+    case "off_topic":
+      return {
+        ...base,
+        elements: els.map((e) => ({ id: e.id, visible: false, confidence: 0.95 })),
+        framing_ok: false,
+        hint: "Point the camera at the scene described in the briefing.",
+      };
     case "error":
       throw new Error("mock frame-check error");
     default:
       return base;
   }
+}
+
+/**
+ * Relevance fixture. `off_topic` replays the vitamin-water incident. Note the `error` variant is the
+ * reasoning model failing; the relevance mock stays healthy for it (tests inject relevance errors via
+ * PipelineDeps.relevance).
+ */
+export function mockRelevance(protocol: Protocol, variant: MockVariant = "default"): RelevanceResult {
+  const els = protocol.capture.required_elements;
+  if (variant === "off_topic") {
+    return {
+      subject_match: { value: false, confidence: 0.96 },
+      elements: els.map((e) => ({ id: e.id, visible: false, confidence: 0.95 })),
+      off_topic: { value: true, confidence: 0.95, what_it_is: "A plastic bottle of vitamin water on a table indoors." },
+    };
+  }
+  const last = els[els.length - 1];
+  return {
+    subject_match: { value: true, confidence: 0.93 },
+    elements: els.map((e) => ({
+      id: e.id,
+      visible: !(variant === "missing_element" && e.id === last?.id),
+      confidence: variant === "missing_element" && e.id === last?.id ? 0.3 : 0.9,
+    })),
+    off_topic: { value: false, confidence: 0.04, what_it_is: "Mock: shallow water on a street against a curb." },
+  };
 }
 
 const noSuspicion = (evidence: string) => ({ suspected: false, confidence: 0.05, evidence });

@@ -155,7 +155,17 @@
     "corroboration_radius_m": 300,
     "corroboration_window_min": 60,
     "corroboration_field": "depth_cm",
-    "corroboration_tolerance": 10
+    "corroboration_tolerance": 10,
+    "extraction_rules": [
+      { "kind": "required_number", "field": "depth_cm", "min": 0 },
+      {
+        "kind": "max_relative",
+        "field": "depth_cm",
+        "reference_field": "reference_object_assumed_height_cm",
+        "factor": 1.1
+      },
+      { "kind": "min_confidence", "field": "depth_confidence", "min": 0.4 }
+    ]
   },
   "pricing": {
     "urgency_tau_hours": 3

@@ -4,7 +4,7 @@
  * Cached on globalThis so Next dev HMR never opens a second PGlite on the same directory.
  */
 import { join, resolve } from "node:path";
-import { isLocalBackend } from "../env";
+import { assertMockGrokAllowed, isLocalBackend } from "../env";
 import type { Db } from "./types";
 
 export type { Db } from "./types";
@@ -27,6 +27,7 @@ async function open(): Promise<Db> {
     const dir = process.env.PGLITE_DIR === "memory" ? undefined : resolve(/*turbopackIgnore: true*/ process.env.PGLITE_DIR || join(localDataRoot(), "pglite"));
     return (await openPglite(dir)).db;
   }
+  assertMockGrokAllowed();
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set (or set LOCAL_BACKEND=1 for the local PGlite backend)");
   const { openPostgres } = await import("./postgres");

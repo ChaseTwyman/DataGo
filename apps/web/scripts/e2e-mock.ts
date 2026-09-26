@@ -159,12 +159,21 @@ async function main(): Promise<void> {
     return [r, `all_green=${r.all_green} hint="${r.result.hint}" used=${r.checks_used}/${r.checks_used + r.checks_remaining}`];
   });
 
+  await step("frame-check (default, 2nd): server gate passes", async () => {
+    const img = (await frame(seed + 9, 640, 360)).toString("base64");
+    const r = FrameCheckResponseSchema.parse((await api("POST", "/api/capture/frame-check", { token: c.access_token, body: { session_id: session.session_id, image_base64: img } })).json);
+    // Mock results count toward the server gate only on the local backend.
+    if (health.backend === "local" || !health.mock_grok) expect(r.gate_passed, `gate should pass (streak ${r.green_streak})`);
+    return [r, `green_streak=${r.green_streak} gate_passed=${r.gate_passed}`];
+  });
+
   await step("frame-check (screen_recapture)", async () => {
     const img = (await frame(seed + 8, 640, 360)).toString("base64");
     const r = FrameCheckResponseSchema.parse(
       (await api("POST", "/api/capture/frame-check", { token: c.access_token, body: { session_id: session.session_id, image_base64: img }, headers: { "x-mock-variant": "screen_recapture" } })).json,
     );
     expect(!r.all_green && r.result.suspected_screen_or_print.value, "screen should be flagged");
+    expect(!r.gate_passed && r.green_streak === 0, "a flagged frame must close the gate");
     return [r, `flagged screen (confidence ${r.result.suspected_screen_or_print.confidence})`];
   });
 
@@ -205,14 +214,22 @@ async function main(): Promise<void> {
       await new Promise((r) => setTimeout(r, 500));
     }
   });
-  await step("expect accepted", async () => {
-    expect(final.status === "accepted", `expected accepted, got ${final.status}`);
-    return [null, `payout $${((final.payout_cents ?? 0) / 100).toFixed(2)}`];
+  // Mock frame checks do not count toward the server gate on a non-local DB (ALLOW_MOCK_ON_REAL_DB
+  // runs), so there the capture is capped at review with GATE_NOT_PASSED and nothing is paid.
+  const gateUncountable = health.mock_grok && health.backend !== "local";
+  await step(gateUncountable ? "expect needs_review (mock gate on a real DB)" : "expect accepted", async () => {
+    if (gateUncountable) {
+      expect(final.status === "needs_review" && final.reason_codes.includes("GATE_NOT_PASSED"), `expected needs_review/GATE_NOT_PASSED, got ${final.status}`);
+    } else {
+      expect(final.status === "accepted", `expected accepted, got ${final.status}`);
+    }
+    return [null, `payout ${((final.payout_cents ?? 0) / 100).toFixed(2)}`];
   });
 
   await step("wallet credited", async () => {
     const w = WalletResponseSchema.parse((await api("GET", "/api/me/wallet", { token: c.access_token })).json);
-    expect(w.balance_cents === final.payout_cents && w.balance_cents > 0, `balance ${w.balance_cents} != payout ${final.payout_cents}`);
+    const want = gateUncountable ? 0 : final.payout_cents;
+    expect(w.balance_cents === want && (gateUncountable || w.balance_cents > 0), `balance ${w.balance_cents} != payout ${final.payout_cents}`);
     return [w, `balance $${(w.balance_cents / 100).toFixed(2)}, trust ${w.trust_score}`];
   });
 
@@ -239,13 +256,15 @@ async function main(): Promise<void> {
     const lines = text.trim().split(/\r?\n/);
     expect(res.headers.get("content-type")?.includes("text/csv"), "not csv");
     expect(lines[0]?.includes("depth_cm"), "no depth_cm column");
-    expect(text.includes(submissionId), "our observation missing from CSV");
+    // Rows decided by MOCK_GROK are verifier=mock and never exported (they approve anything).
+    if (health.mock_grok) expect(!text.includes(submissionId), "a mock-verified observation leaked into the export");
+    else expect(text.includes(submissionId), "our observation missing from CSV");
     return [null, `${lines.length - 1} row(s), ${lines[0]!.split(",").length} columns`];
   });
 
   await step("researcher: export GeoJSON", async () => {
     const fc = (await api("GET", `/api/bounties/${bounty.id}/export?format=geojson`, { token: r.access_token })).json as { type: string; features: unknown[] };
-    expect(fc.type === "FeatureCollection" && fc.features.length > 0, "empty GeoJSON");
+    expect(fc.type === "FeatureCollection" && (health.mock_grok || fc.features.length > 0), "empty GeoJSON");
     return [null, `${fc.features.length} feature(s)`];
   });
 

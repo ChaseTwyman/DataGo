@@ -1,7 +1,8 @@
 /**
  * DEMO/DEV ONLY: fills the demo bounty with ~40 realistic accepted flood observations so the open-data
  * page has something to show. Rows are clearly marked (device.model = "seed-script", gate.seeded = true,
- * reason code DEMO_WAIVER) and appear with is_demo_seed = true in the public dataset.
+ * reason code DEMO_WAIVER, verifier = "none"). They show on the dashboard map, labelled, but are never
+ * exported or published: nothing verified them.
  *
  * No media: fabricating images for "accepted observations" would put generated pixels in the
  * observations bucket (same rule as spawn-event). No payouts, no budget spend, no ledger entries.
@@ -104,10 +105,10 @@ export async function seedOpenData(
       await tx.query(
         `insert into public.submissions (session_id, bounty_id, user_id, media, lat, lng, accuracy_m, h3_cell, captured_at, received_at,
            device, sensors, gate, field_notes, status, checks, reason_codes, confidence, protocol_score, authenticity_score,
-           extracted, phashes, payout_cents, retryable)
+           extracted, phashes, payout_cents, retryable, verifier)
          values (null, $1, $2, '[]'::jsonb, $3, $4, $5, $6, $7::timestamptz, $8::timestamptz,
            $9::jsonb, '{}'::jsonb, $10::jsonb, $11::jsonb, 'accepted', $12::jsonb, $13::text[], $14, $15, $16,
-           $17::jsonb, '{}'::text[], 0, false)`,
+           $17::jsonb, '{}'::text[], 0, false, 'none')`,
         [
           bountyId, SEED_CONTRIBUTORS[i % SEED_CONTRIBUTORS.length]!, lat, lng, Math.round(4 + rand() * 11), h3,
           captured.toISOString(), new Date(captured.getTime() + 2000 + Math.round(rand() * 25_000)).toISOString(),

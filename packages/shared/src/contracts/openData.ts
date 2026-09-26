@@ -72,8 +72,10 @@ export const PublicDatasetSummarySchema = z.object({
   bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
   time_range: z.object({ start: IsoDate, end: IsoDate }).nullable(),
   last_updated: IsoDate.nullable(),
-  /** True when some rows are demo/seed rows (see the is_demo_seed column). */
+  /** Always false since demo/seed rows stopped being published (kept for client compatibility). */
   includes_demo_rows: z.boolean(),
+  /** Rows per quality_tier (human_verified, model_high). */
+  tiers: z.object({ human_verified: z.number().int().min(0), model_high: z.number().int().min(0) }).default({ human_verified: 0, model_high: 0 }),
   sponsors: z.array(PublicSponsorSchema),
   bounties: z.array(PublicDatasetBountySchema),
   cells: z.array(PublicCellCountSchema),

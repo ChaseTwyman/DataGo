@@ -4,15 +4,18 @@ import {
   frameCheckJsonSchema,
   frameCheckZod,
   parseVerification,
+  relevanceJsonSchema,
+  relevanceZod,
   type Challenge,
   type FrameCheckResult,
   type MockVariant,
   type Protocol,
+  type RelevanceResult,
   type VerificationOutput,
 } from "@groundtruth/shared";
 import { grokEnv } from "./config";
 import { grokJSON, imagePart } from "./json";
-import { mockFrameCheck, mockVerification } from "./mocks/fixtures";
+import { mockFrameCheck, mockRelevance, mockVerification } from "./mocks/fixtures";
 
 export function frameCheckSystemPrompt(protocol: Protocol): string {
   const elements = protocol.capture.required_elements.map((e) => `${e.id}: ${e.description}`).join("; ");
@@ -50,6 +53,45 @@ export async function frameCheck(args: {
       if (args.variant === "slow") await new Promise((r) => setTimeout(r, 12_000));
       return mockFrameCheck(args.protocol, args.variant);
     },
+  });
+}
+
+export function relevanceSystemPrompt(protocol: Protocol): string {
+  const elements = protocol.capture.required_elements.map((e) => `${e.id}: ${e.description}`).join("; ");
+  return [
+    `You screen photos submitted to a scientific data-collection protocol called "${protocol.name}".`,
+    `What the protocol collects: ${protocol.why_it_matters}`,
+    `Required elements: ${elements}.`,
+    "You see one frame from the contributor's burst. Decide only whether it shows a real-world scene of this protocol's subject at all; quality and authenticity are judged later by someone else.",
+    "subject_match: does the frame show the kind of scene the protocol is about?",
+    "elements: for each required element, is it visible in this frame?",
+    "off_topic: set value true when the frame clearly shows something unrelated to the protocol (for example an indoor object, a person's face, a product, a pet, a blank wall, a screen showing unrelated content). what_it_is: a short plain description of what the frame actually shows (max 20 words). Judge only what is visible; do not assume.",
+  ].join(" ");
+}
+
+/**
+ * Fast relevance screen (one downscaled frame, fast vision model, strict schema, ~2 s). Runs before
+ * the slow reasoning model and independently of it, so an off-topic capture is rejected even when
+ * the reasoning model times out. No SDK retry: an error surfaces as a stage error (→ review).
+ */
+export async function relevanceCheck(args: {
+  protocol: Protocol;
+  imageBase64: string;
+  variant?: MockVariant;
+  timeoutMs?: number;
+}): Promise<RelevanceResult> {
+  const zod = relevanceZod(args.protocol);
+  return grokJSON({
+    op: "relevance",
+    model: grokEnv.fastVisionModel,
+    system: relevanceSystemPrompt(args.protocol),
+    content: [imagePart(args.imageBase64, "low")],
+    schema: relevanceJsonSchema(args.protocol),
+    name: "relevance",
+    parse: (raw) => zod.parse(raw),
+    timeoutMs: args.timeoutMs ?? 20_000,
+    maxRetries: 0,
+    mock: () => mockRelevance(args.protocol, args.variant),
   });
 }
 

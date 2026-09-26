@@ -1,7 +1,7 @@
 /**
- * DEMO/DEV ONLY: seeds ~40 realistic accepted flood observations into the demo bounty so /data has
- * rows to show. Idempotent (skips if seeded rows exist). Rows are marked device.model = "seed-script"
- * and gate.seeded = true, and are published with is_demo_seed = true.
+ * DEMO/DEV ONLY: seeds ~40 realistic accepted flood observations into the demo bounty so the dashboard
+ * map has rows to show. Idempotent (skips if seeded rows exist). Rows are marked device.model =
+ * "seed-script", gate.seeded = true and verifier = "none", so they are NEVER exported or published.
  *
  *   LOCAL_BACKEND=1 pnpm --filter @groundtruth/web seed:open-data            # local PGlite (stop next dev first)
  *   DEMO_MODE=1 pnpm --filter @groundtruth/web seed:open-data                # Supabase via DATABASE_URL

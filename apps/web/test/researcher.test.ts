@@ -29,7 +29,8 @@ import { GET as redteamRuns } from "@/app/api/redteam/runs/route";
 import { POST as exampleImage } from "@/app/api/protocols/[id]/example-image/route";
 import { POST as spawn } from "@/app/api/demo/spawn-event/route";
 import { streetFloodDepth } from "@groundtruth/shared";
-import { idCtx, randomJpeg, req, setupTestEnv, type TestEnv } from "./helpers";
+import { setPipelineDepsOverrideForTests } from "@/lib/verification/deps";
+import { idCtx, passGate, randomJpeg, req, setupTestEnv, type TestEnv } from "./helpers";
 
 let env: TestEnv;
 let researcher: string;
@@ -66,6 +67,7 @@ async function capture(token: string, bountyId: string = DEMO.bountyId, headers:
     const url = new URL(u.signed_url);
     await devUpload(req("PUT", url.pathname + url.search, { raw: await randomJpeg() }), noCtx);
   }
+  await passGate(token, s.session_id);
   const at = new Date().toISOString();
   const body = {
     session_id: s.session_id,
@@ -142,7 +144,15 @@ describe("review races", () => {
 describe("export", () => {
   it("CSV flattens extraction fields and field notes per the protocol; GeoJSON has points; dictionary lists columns", async () => {
     const c = await contributor();
-    await capture(c.token);
+    // A mock-verified (MOCK_GROK) accepted row must never be exported...
+    const mocked = await capture(c.token);
+    // ...while one the real model decided is. (Everything else stays mocked: only provenance differs.)
+    setPipelineDepsOverrideForTests({ verifier: "model" });
+    try {
+      await capture(c.token);
+    } finally {
+      setPipelineDepsOverrideForTests(null);
+    }
     const csv = await exportGet(req("GET", `/api/bounties/${DEMO.bountyId}/export?format=csv`, { token: researcher }), idCtx(DEMO.bountyId));
     expect(csv.headers.get("content-type")).toContain("text/csv");
     const text = await csv.text();
@@ -154,6 +164,9 @@ describe("export", () => {
     const row = lines.at(-1)!.split(",");
     expect(row[cols.indexOf("depth_cm")]).toBe("12");
     expect(row[cols.indexOf("note_water_state")]).toBe("slow");
+    expect(row[cols.indexOf("verifier")]).toBe("model");
+    expect(row[cols.indexOf("quality_tier")]).toBe("model_high");
+    expect(text).not.toContain(mocked.submission_id!);
 
     const gj = await exportGet(req("GET", `/api/bounties/${DEMO.bountyId}/export?format=geojson`, { token: researcher }), idCtx(DEMO.bountyId));
     const fc = (await gj.json()) as { type: string; features: { geometry: { type: string; coordinates: number[] }; properties: Record<string, unknown> }[] };

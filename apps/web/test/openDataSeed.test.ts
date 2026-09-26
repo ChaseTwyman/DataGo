@@ -41,6 +41,7 @@ beforeAll(async () => {
   await finalizeSubmission(env.db, realId, {
     status: "accepted", checks: pendingChecks(), reason_codes: [], confidence: 0.9, protocol_score: 0.9,
     authenticity_score: 0.9, extracted: { depth_cm: 10 }, phashes: [], payout_cents: 0, retryable: false,
+    verifier: "model",
   });
 }, 60_000);
 afterAll(async () => env.close());
@@ -89,11 +90,14 @@ describe("seedOpenData", () => {
     expect(await count(seededWhere)).toBe(40);
   });
 
-  it("seeded rows show up in the public dataset flagged is_demo_seed", async () => {
+  it("seeded rows are verifier=none and never reach the public dataset (only the real row does)", async () => {
     const protocol = (await getProtocolBySlug(env.db, "street-flood-depth"))!;
+    const v = await env.db.query<{ n: number }>(`select count(*)::int as n from public.submissions where ${seededWhere} and verifier = 'none'`);
+    expect(v[0]!.n).toBe(40);
     const rows = await publicRows(env.db, protocol);
-    expect(rows).toHaveLength(41);
-    expect(rows.filter((r) => r.is_demo_seed === true)).toHaveLength(40);
+    expect(rows).toHaveLength(1);
+    expect(rows.filter((r) => r.is_demo_seed === true)).toHaveLength(0);
+    expect(rows[0]?.quality_tier).toBe("model_high");
   });
 
   it("--reset removes only seeded rows; seeding works again afterwards", async () => {

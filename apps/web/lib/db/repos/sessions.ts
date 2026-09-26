@@ -17,10 +17,14 @@ export interface SessionRow {
   status: "open" | "submitted" | "expired" | "abandoned";
   frame_checks: number;
   upload_paths: string[];
+  /** Consecutive all-green real-model frame checks (server-recorded; the phone cannot write it). */
+  green_streak: number;
+  /** When the server saw the capture gate pass (GATE_REQUIRED_GREEN in a row); null if never. */
+  gate_passed_at: string | null;
 }
 
 const COLS = `id, bounty_id, user_id, nonce, challenge, cell, start_lat, start_lng, price_quote_cents, quote_expires_at,
-  started_at, expires_at, status::text as status, frame_checks, upload_paths`;
+  started_at, expires_at, status::text as status, frame_checks, upload_paths, green_streak, gate_passed_at`;
 
 function map(r: Record<string, unknown>): SessionRow {
   return {
@@ -28,6 +32,8 @@ function map(r: Record<string, unknown>): SessionRow {
     quote_expires_at: toIso(r.quote_expires_at),
     started_at: toIso(r.started_at),
     expires_at: toIso(r.expires_at),
+    green_streak: Number(r.green_streak ?? 0),
+    gate_passed_at: r.gate_passed_at ? toIso(r.gate_passed_at) : null,
   };
 }
 
@@ -96,4 +102,31 @@ export async function frameCheckState(db: Db, sessionId: string): Promise<{ fram
     [sessionId],
   );
   return rows[0] ?? null;
+}
+
+/**
+ * Records one frame-check outcome for the server-side capture gate. `green` true extends the streak,
+ * anything else (not all-green, screen/print suspicion, model error, uncountable mock) resets it to 0.
+ * gate_passed_at is set once, when the streak first reaches `required`, and then sticks (it is what
+ * submissions are judged by). The returned `gate_passed` is the CURRENT state (streak ≥ required):
+ * the phone unlocks only while the latest check keeps the gate green, and any red/flagged/failed
+ * check turns it false. Runs while the frame-check slot is held, so updates are serialised.
+ */
+export async function recordFrameCheck(
+  db: Db,
+  sessionId: string,
+  green: boolean,
+  required: number,
+): Promise<{ green_streak: number; gate_passed: boolean; gate_passed_at: string | null }> {
+  const rows = await db.query<{ green_streak: number; gate_passed_at: unknown }>(
+    `update public.capture_sessions
+        set green_streak = case when $2 then green_streak + 1 else 0 end,
+            gate_passed_at = coalesce(gate_passed_at, case when $2 and green_streak + 1 >= $3 then now() end)
+      where id = $1
+      returning green_streak, gate_passed_at`,
+    [sessionId, green, required],
+  );
+  const r = rows[0];
+  const streak = Number(r?.green_streak ?? 0);
+  return { green_streak: streak, gate_passed: streak >= required, gate_passed_at: r?.gate_passed_at ? toIso(r.gate_passed_at) : null };
 }

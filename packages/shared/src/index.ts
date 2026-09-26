@@ -6,5 +6,7 @@ export * from "./trust";
 export * from "./h3";
 export * from "./checks";
 export * from "./verificationSchema";
+export * from "./extractionSanity";
+export * from "./provenance";
 export * from "./contracts";
 export * from "./demo";

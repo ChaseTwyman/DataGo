@@ -1,7 +1,7 @@
 /** Decision rules, PRD §9.3. Pure: the pipeline gathers signals, this decides. */
 import type { StageResult } from "./checks";
 import { payoutMultiplier } from "./pricing";
-import { reasonKind, type ReasonCode } from "./reasonCodes";
+import { missingElement, reasonKind, type ReasonCode } from "./reasonCodes";
 
 export type SubmissionStatus = "pending" | "verifying" | "accepted" | "rejected" | "needs_review";
 export type DecisionStatus = "accepted" | "rejected" | "needs_review";
@@ -29,6 +29,10 @@ export interface DecisionInput {
     ai_generated?: Suspicion;
     edited_or_composited?: Suspicion;
   };
+  /** Model element verdicts: a confident "absent" is a hard protocol reject (see ELEMENT_ABSENT_CONFIDENCE). */
+  elements?: { id: string; present: boolean; confidence: number }[];
+  /** Protocol override of ELEMENT_ABSENT_CONFIDENCE (acceptance.element_absent_reject_confidence). */
+  elementAbsentConfidence?: number;
 }
 
 export interface Decision {
@@ -46,6 +50,8 @@ export const ACCEPT_AT = 0.75;
 export const REVIEW_AT = 0.5;
 export const LOW_TRUST = 0.3;
 export const AUTH_HARD_FAIL_CONFIDENCE = 0.8;
+/** A required element the model calls absent with at least this confidence rejects (retryable). */
+export const ELEMENT_ABSENT_CONFIDENCE = 0.8;
 
 /** Codes that reject outright, whatever the scores. */
 const HARD_FAIL: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
@@ -64,7 +70,19 @@ const REVIEW_CAP: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
   "VELOCITY_LIMIT",
   "IMPOSSIBLE_TRAVEL",
   "STAGE_ERROR",
+  // The server never saw the capture gate pass: never auto-accepted, never auto-paid (incident fix).
+  "GATE_NOT_PASSED",
+  // The phone says its gate ran on device checks only. A client claim can never unlock payment.
+  "GATE_DEGRADED",
+  "EXTRACTION_IMPLAUSIBLE",
+  "EXTRACTION_LOW_CONFIDENCE",
 ]);
+
+/**
+ * Protocol failures that reject (retryable) even when another stage errored: the capture is
+ * unusable whatever the rest of the pipeline would have said.
+ */
+const HARD_PROTOCOL: ReadonlySet<ReasonCode> = new Set<ReasonCode>(["OFF_TOPIC", "EXTRACTION_MISSING"]);
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
@@ -115,6 +133,24 @@ export function decide(input: DecisionInput): Decision {
       payoutMultiplier: 0,
       retryable: false,
       rejectionKind: onlyContext ? "context" : "integrity",
+    };
+  }
+
+  // Wrong subject, no usable measurement, or a required element confidently absent: reject
+  // (retryable: an honest contributor may have mis-aimed), even if a model stage errored.
+  const absentAt = input.elementAbsentConfidence ?? ELEMENT_ABSENT_CONFIDENCE;
+  for (const e of input.elements ?? []) {
+    if (!e.present && e.confidence >= absentAt) codes.push(missingElement(e.id));
+  }
+  const confidentlyAbsent = (input.elements ?? []).some((e) => !e.present && e.confidence >= absentAt);
+  if (confidentlyAbsent || codes.some((c) => HARD_PROTOCOL.has(c))) {
+    return {
+      status: "rejected",
+      confidence,
+      reasonCodes: uniq(codes),
+      payoutMultiplier: 0,
+      retryable: true,
+      rejectionKind: "protocol",
     };
   }
 

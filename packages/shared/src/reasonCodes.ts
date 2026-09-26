@@ -31,6 +31,15 @@ export const FIXED_REASON_CODES = [
   "REVIEWER_REJECTED",
   "BUDGET_EXHAUSTED",
   "OUTSIDE_WINDOW",
+  // Verification hardening (vitamin-water incident).
+  // Fast relevance check: the frames are not a scene of the protocol subject at all.
+  "OFF_TOPIC",
+  // The server never recorded GATE_REQUIRED_GREEN consecutive all-green frame checks for the session.
+  "GATE_NOT_PASSED",
+  // Extraction sanity (per-protocol plausibility rules).
+  "EXTRACTION_MISSING",
+  "EXTRACTION_IMPLAUSIBLE",
+  "EXTRACTION_LOW_CONFIDENCE",
 ] as const;
 
 export type FixedReasonCode = (typeof FIXED_REASON_CODES)[number];
@@ -65,6 +74,8 @@ const KIND: Record<FixedReasonCode, ReasonKind> = {
   TOO_DARK: "protocol",
   BAD_FRAMING: "protocol",
   LOW_CONFIDENCE: "protocol",
+  OFF_TOPIC: "protocol",
+  EXTRACTION_MISSING: "protocol",
   OUTSIDE_AREA: "context",
   OUTSIDE_WINDOW: "context",
   WEATHER_IMPLAUSIBLE: "context",
@@ -74,6 +85,9 @@ const KIND: Record<FixedReasonCode, ReasonKind> = {
   STAGE_ERROR: "review",
   REVIEWER_REJECTED: "review",
   BUDGET_EXHAUSTED: "review",
+  GATE_NOT_PASSED: "review",
+  EXTRACTION_IMPLAUSIBLE: "review",
+  EXTRACTION_LOW_CONFIDENCE: "review",
   DEMO_WAIVER: "info",
   GATE_DEGRADED: "info",
 };
@@ -105,10 +119,26 @@ const CONTRIBUTOR_TEXT: Partial<Record<FixedReasonCode, string>> = {
   STAGE_ERROR: "A reviewer will take a look.",
   DEMO_WAIVER: "Weather check waived (demo).",
   BUDGET_EXHAUSTED: "This bounty ran out of budget. A reviewer will take a look.",
+  OFF_TOPIC: "This doesn't look like the scene this bounty asks for. Point the camera at the subject in the briefing and try again.",
+  EXTRACTION_MISSING: "We couldn't take a measurement from these photos. Frame the scene as shown in the briefing and try again.",
+  GATE_NOT_PASSED: "A reviewer will take a look.",
+  EXTRACTION_IMPLAUSIBLE: "A reviewer will take a look.",
+  EXTRACTION_LOW_CONFIDENCE: "A reviewer will take a look.",
 };
 
-export function contributorMessage(code: ReasonCode, elementLabel?: string): string {
+/** Subset of a protocol needed to tell a contributor what the bounty expected. */
+export interface ProtocolSubject {
+  name: string;
+  capture: { required_elements: { label: string }[] };
+}
+
+export function contributorMessage(code: ReasonCode, elementLabel?: string, protocol?: ProtocolSubject): string {
   if (isIntegrityCode(code)) return NEUTRAL_INTEGRITY_MESSAGE;
+  if (code === "OFF_TOPIC" && protocol) {
+    // An honest contributor may simply have mis-aimed: say what was expected (not which check fired).
+    const want = protocol.capture.required_elements.map((e) => e.label.toLowerCase()).join(", ");
+    return `This doesn't look like a ${protocol.name.toLowerCase()} scene. Point the camera at: ${want}.`;
+  }
   if (code.startsWith("MISSING_ELEMENT:")) {
     return `Missing from the shot: ${elementLabel ?? code.slice("MISSING_ELEMENT:".length)}.`;
   }

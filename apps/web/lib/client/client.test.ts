@@ -99,6 +99,7 @@ describe("check table formatting", () => {
     const out = orderedChecks([stage({ stage: "duplicates", label: "Dup" }), stage({ stage: "session_integrity", label: "S" })]);
     expect(out.map((c) => c.stage)).toEqual([
       "session_integrity",
+      "relevance",
       "challenge",
       "protocol",
       "authenticity",
@@ -107,7 +108,7 @@ describe("check table formatting", () => {
       "corroboration",
     ]);
     expect(out[1]?.status).toBe("pending");
-    expect(out[5]?.label).toBe("Dup");
+    expect(out[6]?.label).toBe("Dup");
   });
 
   it("parses loose red-team checks, dropping malformed entries", () => {

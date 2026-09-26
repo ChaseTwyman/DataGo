@@ -3,6 +3,7 @@
  * realtime, local dev auth). Shared so web, dashboard, and mobile agree on shapes.
  */
 import { z } from "zod";
+import { VerifierSchema } from "../provenance";
 import { ProtocolSchema } from "../protocols/protocol";
 import { BountyStatusSchema, IsoDate, RoleSchema, SubmissionStatusSchema, Uuid } from "./common";
 import { SubmissionRowSchema } from "./submissions";
@@ -13,6 +14,8 @@ export const SubmissionWithMediaSchema = SubmissionRowSchema.extend({
   media_urls: z.array(z.string()),
   retryable: z.boolean(),
   bounty_title: z.string().nullable(),
+  /** Who decided (model | mock | human | none). Optional: older servers omit it. */
+  verifier: VerifierSchema.optional(),
 });
 export type SubmissionWithMedia = z.infer<typeof SubmissionWithMediaSchema>;
 

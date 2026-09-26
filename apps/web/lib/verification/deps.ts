@@ -8,22 +8,42 @@ import {
   previousUserSubmission,
   priorHashes,
 } from "../db/repos/submissions";
-import { isDemoMode, isOffline } from "../env";
-import { verifyCapture } from "../grok/vision";
+import { isDemoMode, isMockGrok, isOffline } from "../env";
+import { relevanceCheck, verifyCapture } from "../grok/vision";
 import type { PipelineDeps } from "./types";
+
+const g = globalThis as typeof globalThis & { __gtDepsOverride?: Partial<PipelineDeps> | null };
+
+/**
+ * Tests only: overrides merged into every liveDeps() (routes build their own deps, so an
+ * end-to-end test can, e.g., make the reasoning model time out behind POST /api/submissions).
+ */
+export function setPipelineDepsOverrideForTests(o: Partial<PipelineDeps> | null): void {
+  g.__gtDepsOverride = o;
+}
+
+function grokDeps(): Pick<PipelineDeps, "verify" | "relevance" | "verifier"> {
+  return {
+    verify: (a) => verifyCapture(a),
+    relevance: (a) => relevanceCheck({ protocol: a.protocol, imageBase64: a.frameBase64, ...(a.variant ? { variant: a.variant } : {}) }),
+    // Read at construction: whatever decides this run is what gets recorded on the row.
+    verifier: isMockGrok() ? "mock" : "model",
+  };
+}
 
 export function liveDeps(db: Db, overrides: Partial<PipelineDeps> = {}): PipelineDeps {
   return {
     now: () => new Date(),
     demoMode: isDemoMode(),
     offline: isOffline(),
-    verify: (a) => verifyCapture(a),
+    ...grokDeps(),
     precipitationMm: pastPrecipitationMm,
     alertsAt: activeAlertsAt,
     priorHashes: (ex) => priorHashes(db, ex),
     countUserCellSince: (u, c, s, ex) => countUserCellSince(db, u, c, s, ex),
     previousUserSubmission: (u, b, ex) => previousUserSubmission(db, u, b, ex),
     acceptedNear: (b, at, w, ex) => acceptedNear(db, b, at, w, ex),
+    ...(g.__gtDepsOverride ?? {}),
     ...overrides,
   };
 }
@@ -34,7 +54,7 @@ export function isolatedDeps(overrides: Partial<PipelineDeps> = {}): PipelineDep
     now: () => new Date(),
     demoMode: isDemoMode(),
     offline: isOffline(),
-    verify: (a) => verifyCapture(a),
+    ...grokDeps(),
     precipitationMm: pastPrecipitationMm,
     alertsAt: activeAlertsAt,
     priorHashes: async () => [],

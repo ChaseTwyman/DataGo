@@ -2,8 +2,12 @@
  * Layer 1 — session integrity (PRD §9.2): the submission belongs to an open server-issued session,
  * the nonce matches, it was captured within the session window, media are this session's uploads
  * (and never synthetic), and device metadata is present. Skipped for red-team/eval runs.
+ *
+ * Capture gate: only the server's record counts (capture_sessions.gate_passed_at, written by the
+ * frame-check route). A session that never passed gets GATE_NOT_PASSED, and the phone's own
+ * gate.degraded claim gets GATE_DEGRADED; both cap the decision at needs_review (no auto-pay).
  */
-import type { ReasonCode, Subcheck } from "@groundtruth/shared";
+import { GATE_REQUIRED_GREEN, type ReasonCode, type Subcheck } from "@groundtruth/shared";
 import { nonObservationPaths } from "../syntheticGuard";
 import type { Stage, StageOutcome } from "../types";
 
@@ -75,10 +79,27 @@ export const sessionIntegrity: Stage = {
       sub.push({ id: "frames", label: "Burst length", status: "warn", detail: `${input.frames.length} of ${expected} frames` });
       status = "warn";
     }
+    const score = codes.length > 0 ? 0 : 1;
+
+    const phone = `phone reported ${input.gate.degraded ? "a degraded gate" : "gate passed"} after ${input.gate.frame_checks ?? "?"} check(s)`;
+    if (s.gate_passed_at) {
+      sub.push({ id: "gate", label: "Capture gate (server)", status: "pass", detail: `Passed at ${s.gate_passed_at}; ${phone}` });
+    } else {
+      sub.push({
+        id: "gate",
+        label: "Capture gate (server)",
+        status: "warn",
+        detail: `Server never recorded ${GATE_REQUIRED_GREEN} consecutive all-green frame checks (${s.frame_checks} check(s), streak ${s.green_streak}); ${phone}`,
+      });
+      codes.push("GATE_NOT_PASSED");
+      evidence.push("Capture gate never passed on the server: capped at review, no automatic payout");
+      if (status === "pass") status = "warn";
+    }
     if (input.gate.degraded) {
       codes.push("GATE_DEGRADED");
-      evidence.push("Capture gate ran degraded (device checks only)");
+      evidence.push("Phone reports its capture gate ran degraded (device checks only)");
+      if (status === "pass") status = "warn";
     }
-    return { status, score: codes.some((c) => c !== "GATE_DEGRADED") ? 0 : 1, reasonCodes: codes, evidence, subchecks: sub };
+    return { status, score, reasonCodes: codes, evidence, subchecks: sub };
   },
 };

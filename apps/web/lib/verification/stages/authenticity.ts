@@ -34,6 +34,7 @@ function provenanceCheck(frames: { bytes: Buffer | null }[]): { sub: Subcheck; h
 
 export const authenticity: Stage = {
   id: "authenticity",
+  usesModel: true,
   async run(ctx): Promise<StageOutcome> {
     const prov = provenanceCheck(ctx.input.frames);
     let m;

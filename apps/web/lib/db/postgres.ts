@@ -4,6 +4,7 @@
  * Never log the URL (it contains the password).
  */
 import postgres from "postgres";
+import { assertMockGrokAllowed } from "../env";
 import type { Db, SqlParam } from "./types";
 
 type Sql = postgres.Sql | postgres.TransactionSql;
@@ -53,6 +54,8 @@ const JSON_TYPES = {
 };
 
 export function openPostgres(rawUrl: string): { db: Db; close(): Promise<void> } {
+  // Every path to a real database comes through here (API and scripts): no mock verification on it.
+  assertMockGrokAllowed();
   const { url, ssl } = normalizeDatabaseUrl(rawUrl);
   // prepare:false: Supabase's transaction pooler (port 6543) does not support prepared statements.
   const sql = postgres(url, {

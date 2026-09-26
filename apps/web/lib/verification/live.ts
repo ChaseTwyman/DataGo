@@ -51,6 +51,7 @@ export async function processSubmission(db: Db, submissionId: string, opts: Proc
       phashes: [],
       payout_cents: 0,
       retryable: false,
+      verifier: opts.deps.verifier,
     });
     return "needs_review";
   }
@@ -137,6 +138,7 @@ async function process(db: Db, submissionId: string, opts: ProcessOptions): Prom
       phashes: result.phashes,
       payout_cents: payout,
       retryable: status === "rejected" && d.retryable,
+      verifier: opts.deps.verifier,
     });
     if (status === "accepted" && payout > 0) {
       await insertLedger(tx, { user_id: sub.user_id, submission_id: submissionId, amount_cents: payout, kind: "payout" });

@@ -11,6 +11,27 @@ export function isLocalBackend(): boolean {
   return truthy(process.env.LOCAL_BACKEND);
 }
 
+/**
+ * MOCK_GROK approves anything. It once "accepted" a capture against the hosted database and the row
+ * reached the public dataset. So mock mode is refused unless the DB is local PGlite, or someone
+ * explicitly opts in with ALLOW_MOCK_ON_REAL_DB=1 (e.g. an e2e run against a scratch project; the
+ * rows are still marked verifier='mock' and never exported or published).
+ */
+export class MockOnRealDbError extends Error {
+  constructor() {
+    super(
+      "Refusing to run with MOCK_GROK=1 against a non-local database (LOCAL_BACKEND is not 1): mock verification " +
+        "approves anything and would write fake 'accepted' rows. Set MOCK_GROK=0, or LOCAL_BACKEND=1, or " +
+        "ALLOW_MOCK_ON_REAL_DB=1 if you really mean it (mock rows are marked verifier='mock' and never published).",
+    );
+    this.name = "MockOnRealDbError";
+  }
+}
+
+export function assertMockGrokAllowed(): void {
+  if (isMockGrok() && !isLocalBackend() && !truthy(process.env.ALLOW_MOCK_ON_REAL_DB)) throw new MockOnRealDbError();
+}
+
 /** NWS events that pause captures (in addition to severity=Extreme). */
 export function hazardPauseEvents(): string[] {
   const raw = process.env.HAZARD_PAUSE_EVENTS;

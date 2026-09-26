@@ -42,6 +42,14 @@ export function SubmissionCard({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <SubmissionStatusBadge status={s.status} />
+            {s.verifier === "none" || s.verifier === "mock" ? (
+              <span
+                className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                title="Not verified by the real pipeline: never exported or published"
+              >
+                {s.verifier === "none" ? "Demo seed" : "Mock AI"}
+              </span>
+            ) : null}
             {s.payout_cents !== null && s.payout_cents > 0 ? (
               <span className="text-sm font-semibold text-emerald-700 tabular-nums">{formatCents(s.payout_cents)}</span>
             ) : null}

@@ -35,6 +35,26 @@ export const FieldQuestionSchema = z.discriminatedUnion("type", [
   z.object({ id: z.string().min(1), question: z.string().min(1), type: z.literal("text") }),
 ]);
 
+/**
+ * Plausibility rules for the model's extraction (packages/shared/src/extractionSanity.ts), so each
+ * protocol states its own sanity bounds as data:
+ *   required_number — field must be a number (≥ min if given), else EXTRACTION_MISSING (retryable reject)
+ *   max_relative    — field ≤ reference_field × factor, else EXTRACTION_IMPLAUSIBLE (review cap);
+ *                     skipped when the reference value is absent
+ *   min_confidence  — field ≥ min, else EXTRACTION_LOW_CONFIDENCE (review cap)
+ */
+export const ExtractionRuleSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("required_number"), field: z.string().min(1), min: z.number().optional() }),
+  z.object({
+    kind: z.literal("max_relative"),
+    field: z.string().min(1),
+    reference_field: z.string().min(1),
+    factor: z.number().positive(),
+  }),
+  z.object({ kind: z.literal("min_confidence"), field: z.string().min(1), min: z.number().min(0).max(1) }),
+]);
+export type ExtractionRule = z.infer<typeof ExtractionRuleSchema>;
+
 export const ProtocolSchema = z.object({
   slug: z.string().regex(/^[a-z0-9-]+$/),
   version: z.number().int().positive(),
@@ -69,6 +89,13 @@ export const ProtocolSchema = z.object({
     /** Numeric extraction field compared for corroboration (flood: depth_cm). */
     corroboration_field: z.string().optional(),
     corroboration_tolerance: z.number().positive().optional(),
+    /** Extraction plausibility rules (optional; none → no extraction sanity checks). */
+    extraction_rules: z.array(ExtractionRuleSchema).optional(),
+    /**
+     * A required element the model says is absent with at least this confidence is a hard protocol
+     * reject (retryable), even if another stage errored. Default ELEMENT_ABSENT_CONFIDENCE (0.8).
+     */
+    element_absent_reject_confidence: z.number().min(0).max(1).optional(),
   }),
   pricing: z.object({ urgency_tau_hours: z.number().positive() }).optional(),
   example_image_prompt: z.string().min(1),

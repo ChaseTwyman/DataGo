@@ -229,3 +229,94 @@ describe("open data (20260926000004)", () => {
     ).rejects.toThrow(/bounties_sponsor_name_len/);
   });
 });
+
+describe("verification hardening (20260926000005)", () => {
+  const migration = () => readFileSync(join(root, "migrations", "20260926000005_verification_hardening.sql"), "utf8");
+
+  async function sub(opts: { verifier?: string; confidence?: number | null; status?: string; device?: string; reviewed?: boolean }) {
+    const r = await db.query<{ id: string }>(
+      `insert into public.submissions (bounty_id, user_id, media, lat, lng, h3_cell, captured_at, status, confidence, device, reviewed_at, verifier)
+       values ($1, $2, '[]'::jsonb, $3, $4, 'cell', now(), $5, $6, $7::jsonb, $8, $9) returning id`,
+      [
+        DEMO.bountyId, CONTRIB_A, DEMO.lat, DEMO.lng, opts.status ?? "accepted", opts.confidence ?? 0.9,
+        JSON.stringify({ model: opts.device ?? "iPhone", os: "ios" }), opts.reviewed ? new Date().toISOString() : null, opts.verifier ?? "model",
+      ],
+    );
+    return r.rows[0]!.id;
+  }
+
+  it("verifier defaults to 'model' and only accepts model|mock|human|none", async () => {
+    const r = await db.query<{ verifier: string }>(
+      `insert into public.submissions (bounty_id, user_id, media, lat, lng, h3_cell, captured_at)
+       values ($1, $2, '[]'::jsonb, 0, 0, 'c', now()) returning verifier`,
+      [DEMO.bountyId, CONTRIB_A],
+    );
+    expect(r.rows[0]?.verifier).toBe("model");
+    await expect(sub({ verifier: "grok" })).rejects.toThrow(/submissions_verifier_check/);
+  });
+
+  it("the export view drops mock/none rows and tiers the rest", async () => {
+    const ids = {
+      model: await sub({ verifier: "model", confidence: 0.8 }),
+      modelLow: await sub({ verifier: "model", confidence: 0.6 }),
+      human: await sub({ verifier: "human", confidence: 0.55 }),
+      mock: await sub({ verifier: "mock", confidence: 0.99 }),
+      none: await sub({ verifier: "none", confidence: 0.99 }),
+      review: await sub({ verifier: "model", status: "needs_review" }),
+    };
+    const r = await db.query<{ observation_id: string; verifier: string; quality_tier: string | null }>(
+      "select observation_id, verifier, quality_tier from public.observations_export where observation_id = any($1::uuid[])",
+      [Object.values(ids)],
+    );
+    const by = new Map(r.rows.map((x) => [x.observation_id, x]));
+    expect(by.get(ids.model)?.quality_tier).toBe("model_high");
+    expect(by.get(ids.modelLow)?.quality_tier).toBeNull();
+    expect(by.get(ids.human)?.quality_tier).toBe("human_verified");
+    expect(by.has(ids.mock)).toBe(false);
+    expect(by.has(ids.none)).toBe(false);
+    expect(by.has(ids.review)).toBe(false);
+  });
+
+  it("is idempotent and backfills seed rows to 'none' and reviewed rows to 'human'", async () => {
+    const seed = await sub({ verifier: "model", device: "seed-script" });
+    const demo = await sub({ verifier: "model", device: "demo-seed" });
+    const reviewed = await sub({ verifier: "model", reviewed: true });
+    const plain = await sub({ verifier: "model" });
+    await db.exec(migration());
+    const r = await db.query<{ id: string; verifier: string }>("select id, verifier from public.submissions where id = any($1::uuid[])", [
+      [seed, demo, reviewed, plain],
+    ]);
+    const v = new Map(r.rows.map((x) => [x.id, x.verifier]));
+    expect([v.get(seed), v.get(demo), v.get(reviewed), v.get(plain)]).toEqual(["none", "none", "human", "model"]);
+  });
+
+  it("adds server-side gate columns that contributors cannot write", async () => {
+    const r = await db.query<{ id: string; green_streak: number; gate_passed_at: Date | null }>(
+      `insert into public.capture_sessions (bounty_id, user_id, nonce, challenge, cell, price_quote_cents, quote_expires_at, expires_at)
+       values ($1, $2, 'nonce-gate-1', '{}'::jsonb, 'c', 500, now() + interval '15 min', now() + interval '15 min')
+       returning id, green_streak, gate_passed_at`,
+      [DEMO.bountyId, CONTRIB_A],
+    );
+    expect(r.rows[0]).toMatchObject({ green_streak: 0, gate_passed_at: null });
+    const sid = r.rows[0]!.id;
+    const subId = await sub({ verifier: "mock" });
+    await asUser(CONTRIB_A, async () => {
+      await db.query("update public.capture_sessions set gate_passed_at = now(), green_streak = 9 where id = $1", [sid]);
+      await db.query("update public.submissions set verifier = 'human' where id = $1", [subId]);
+    });
+    const after = await db.query<{ green_streak: number; gate_passed_at: Date | null }>(
+      "select green_streak, gate_passed_at from public.capture_sessions where id = $1",
+      [sid],
+    );
+    expect(after.rows[0]).toEqual({ green_streak: 0, gate_passed_at: null });
+    const v = await db.query<{ verifier: string }>("select verifier from public.submissions where id = $1", [subId]);
+    expect(v.rows[0]?.verifier).toBe("mock");
+  });
+
+  it("patches the flood protocol's extraction rules on a database seeded before them", async () => {
+    await db.query("update public.protocols set definition = definition #- '{acceptance,extraction_rules}' where id = $1", [DEMO.protocolId]);
+    await db.exec(migration());
+    const r = await db.query<{ definition: unknown }>("select definition from public.protocols where id = $1", [DEMO.protocolId]);
+    expect(r.rows[0]?.definition).toEqual(streetFloodDepth);
+  });
+});

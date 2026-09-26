@@ -56,5 +56,6 @@ export async function submissionWithMedia(s: SubmissionRecord, origin: string, b
     media_urls: urls.map((u) => u ?? ""),
     retryable: s.retryable,
     bounty_title: bountyTitle,
+    verifier: s.verifier,
   };
 }

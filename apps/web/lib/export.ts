@@ -3,8 +3,10 @@
  * protocol's extraction fields flattened into columns and a data dictionary generated from the
  * extraction schema. No media paths or URLs are exported (raw images stay private), so synthetic
  * media cannot leak here by construction; submissions can't hold synthetic paths anyway (DB trigger).
+ * The view excludes verifier mock/none rows (MOCK_GROK decisions, demo/seed rows): they are never
+ * exported. exportRows re-checks that in code so a stale view definition cannot leak them.
  */
-import type { Protocol } from "@groundtruth/shared";
+import { UNPUBLISHABLE_VERIFIERS, type Protocol } from "@groundtruth/shared";
 import type { Db } from "./db";
 import { toIso } from "./db/types";
 
@@ -37,6 +39,19 @@ const BASE: ColumnDef[] = [
   { name: "device_model", type: "string", description: "Phone model.", source: "provenance" },
   { name: "device_os", type: "string", description: "Phone OS.", source: "provenance" },
   { name: "frame_count", type: "integer", description: "Frames in the challenge burst.", source: "provenance" },
+  {
+    name: "verifier",
+    type: "enum(model|human)",
+    description: "Who accepted it: model = the automated verification pipeline; human = a reviewer from the review queue.",
+    source: "verification",
+  },
+  {
+    name: "quality_tier",
+    type: "enum(human_verified|model_high), nullable",
+    description:
+      "human_verified: a reviewer approved it. model_high: the automated pipeline accepted it with confidence ≥ 0.75. Empty: not publishable (never in the public dataset).",
+    source: "verification",
+  },
 ];
 
 function typeOf(schema: Record<string, unknown>): string {
@@ -74,8 +89,11 @@ export async function exportRows(db: Db, bountyId: string, protocol: Protocol): 
     `select * from public.observations_export where bounty_id = $1 order by captured_at`,
     [bountyId],
   );
-  return rows.map((r) => flattenExportRow(r, protocol));
+  return rows.filter((r) => !isUnpublishable(r.verifier)).map((r) => flattenExportRow(r, protocol));
 }
+
+export const isUnpublishable = (verifier: unknown): boolean =>
+  typeof verifier !== "string" || (UNPUBLISHABLE_VERIFIERS as readonly string[]).includes(verifier);
 
 /** One observations_export row → flat columns (BASE + extraction fields + field notes). Full fidelity. */
 export function flattenExportRow(r: Record<string, unknown>, protocol: Protocol): ExportRow {
@@ -104,6 +122,8 @@ export function flattenExportRow(r: Record<string, unknown>, protocol: Protocol)
     device_model: (r.device_model as string | null) ?? null,
     device_os: (r.device_os as string | null) ?? null,
     frame_count: Number(r.frame_count),
+    verifier: (r.verifier as string | null) ?? null,
+    quality_tier: (r.quality_tier as string | null) ?? null,
   };
   for (const f of extractionFields) out[extractionColumnName(f)] = scalar(extracted[f]);
   for (const q of protocol.capture.field_questions) out[`note_${q.id}`] = scalar(notes[q.id]);

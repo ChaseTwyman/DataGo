@@ -59,10 +59,12 @@ describe("repos on PGlite (real migrations)", () => {
       phashes: ["00ff00ff00ff00ff"],
       payout_cents: 500,
       retryable: false,
+      verifier: "model",
     });
     const s = (await getSubmission(env.db, id))!;
     expect(s.status).toBe("accepted");
-    expect(s.checks).toHaveLength(7);
+    expect(s.verifier).toBe("model");
+    expect(s.checks).toHaveLength(8);
     expect(s.reason_codes).toEqual(["DEMO_WAIVER"]);
     expect(s.extracted).toEqual({ depth_cm: 12 });
     expect(s.captured_at).toBe(at);

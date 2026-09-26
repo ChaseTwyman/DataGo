@@ -7,11 +7,15 @@
  *   - captured_at floored to 5 minutes; received_at, device_model, contributor_trust dropped
  *   - contributor_id → sha256(salt:slug:user) (links within a dataset only); observation_id → pseudonym
  *   - free-text fields withheld (they can name addresses); media never selected (images stay private)
- * Only `accepted` rows exist in observations_export, so nothing else can be published.
+ * Publishing rule (vitamin-water incident follow-up): a row is public only if it is accepted AND
+ * (verifier = human, or verifier = model with confidence ≥ 0.75), i.e. it has a quality_tier.
+ * mock/none rows (MOCK_GROK decisions, demo/seed tooling) are never published. Enforced twice: the
+ * SQL filter below and qualityTier() over every row.
  */
 import { createHash } from "node:crypto";
 import {
   cellCenter,
+  qualityTier,
   OPEN_DATA_COARSENING,
   OPEN_DATA_LICENSE,
   type Protocol,
@@ -20,13 +24,14 @@ import {
 } from "@groundtruth/shared";
 import type { Db } from "./db";
 import { getProtocolBySlug, type ProtocolRow } from "./db/repos/protocols";
-import { dataDictionary, flattenExportRow, type ColumnDef, type ExportRow } from "./export";
+import { dataDictionary, flattenExportRow, isUnpublishable, type ColumnDef, type ExportRow } from "./export";
 
 export const TIME_BIN_MINUTES = 5;
 /** device.model values written by demo/seed tooling (lib/demo.ts, lib/openDataSeed.ts). */
 export const DEMO_DEVICE_MODELS = ["demo-seed", "seed-script"] as const;
 
-const DROPPED = new Set(["accuracy_m", "received_at", "device_model", "contributor_trust"]);
+/** verifier is implied by quality_tier (only model/human rows are public). */
+const DROPPED = new Set(["accuracy_m", "received_at", "device_model", "contributor_trust", "verifier"]);
 
 const OVERRIDES: Record<string, Pick<ColumnDef, "type" | "description">> = {
   observation_id: { type: "string", description: "Pseudonymous observation id (16 hex chars); not the internal submission id." },
@@ -49,7 +54,7 @@ const ADDED_AFTER: Record<string, ColumnDef> = {
   frame_count: {
     name: "is_demo_seed",
     type: "boolean",
-    description: "True for demo/seed rows created by GroundTruth tooling (no real capture). Filter these out for analysis.",
+    description: "Always false: demo/seed rows created by GroundTruth tooling are never published. Kept for schema compatibility.",
     source: "provenance",
   },
 };
@@ -152,13 +157,18 @@ export async function publicRows(db: Db, protocol: ProtocolRow, opts: { bountyId
   const raw = await db.query<Record<string, unknown>>(
     `select observation_id, bounty_id, protocol_slug, protocol_version, lat, lng, accuracy_m, h3_cell, captured_at,
             received_at, confidence, protocol_score, authenticity_score, extracted, field_notes, reason_codes,
-            contributor_id, contributor_trust, device_model, device_os, frame_count, gate_degraded, human_reviewed
-       from public.observations_export where ${where}`,
+            contributor_id, contributor_trust, device_model, device_os, frame_count, gate_degraded, human_reviewed,
+            verifier, quality_tier
+       from public.observations_export
+      where ${where} and quality_tier is not null and verifier not in ('mock', 'none')`,
     params,
   );
   const salt = await publicDatasetSalt(db);
   const columns = publicColumns(protocol.definition);
-  const rows = raw.map((r) => coarsen(flattenExportRow(r, protocol.definition), salt, protocol.slug, columns));
+  const publishable = raw.filter(
+    (r) => !isUnpublishable(r.verifier) && qualityTier("accepted", String(r.verifier), r.confidence === null ? null : Number(r.confidence)) !== null,
+  );
+  const rows = publishable.map((r) => coarsen(flattenExportRow(r, protocol.definition), salt, protocol.slug, columns));
   // Sort on public values only, so row order leaks nothing finer than the 5-minute bin.
   return rows.sort(
     (a, b) => String(a.captured_at).localeCompare(String(b.captured_at)) || String(a.observation_id).localeCompare(String(b.observation_id)),
@@ -211,10 +221,10 @@ export function citation(protocol: ProtocolRow, origin: string, lastUpdated: str
 
 export const PROVENANCE_NOTES = [
   "Each row is one accepted observation: captured in-app under a published protocol, inside a bounty area and time window, with a server-issued nonce and a timed burst challenge.",
-  "Rows passed automated verification (session integrity, capture gate, image quality, authenticity incl. C2PA/AI-generation labels, duplicate and velocity checks, weather/daylight context, protocol compliance). human_reviewed marks rows approved from the review queue.",
+  "Rows passed automated verification (session integrity, server-side capture gate, subject relevance, image quality, authenticity incl. C2PA/AI-generation labels, duplicate and velocity checks, weather/daylight context, protocol compliance, extraction sanity) with confidence ≥ 0.75 (quality_tier = model_high), or were approved by a human reviewer (quality_tier = human_verified).",
   "Extracted values (e.g. depth) are model estimates from the images; see confidence and protocol_score. note_* columns are the contributor's own spoken answers.",
   "Photos are not published (bystander privacy). Synthetic/generated media is stored separately and can never be attached to an observation.",
-  "Rows with is_demo_seed = true were created by GroundTruth demo tooling, not captured in the field.",
+  "Demo/seed rows and rows decided by mock (test) verification are never published.",
 ] as const;
 
 export function dictionaryBody(protocol: ProtocolRow, origin: string) {
@@ -257,6 +267,10 @@ export async function datasetSummary(db: Db, protocol: ProtocolRow, origin: stri
     time_range: rows.length ? { start: times[0]!, end: last! } : null,
     last_updated: last,
     includes_demo_rows: rows.some((r) => r.is_demo_seed === true),
+    tiers: {
+      human_verified: rows.filter((r) => r.quality_tier === "human_verified").length,
+      model_high: rows.filter((r) => r.quality_tier === "model_high").length,
+    },
     sponsors,
     bounties: bounties.map((b) => ({ ...b, rows: perBounty.get(b.id) ?? 0 })),
     cells: [...perCell.entries()].map(([h3_cell, n]) => ({ h3_cell, rows: n })).sort((a, b) => b.rows - a.rows),

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { cellForPoint, cellsForCircle, circlePolygon, DEMO, streetFloodDepth, type VerificationOutput } from "@groundtruth/shared";
-import { mockVerification } from "@/lib/grok/mocks/fixtures";
+import { mockRelevance, mockVerification } from "@/lib/grok/mocks/fixtures";
 import { memorySink, runPipeline } from "@/lib/verification/pipeline";
 import { isolatedDeps } from "@/lib/verification/deps";
 import { assertObservationPaths, SyntheticMediaError } from "@/lib/verification/syntheticGuard";
@@ -52,6 +52,7 @@ function deps(over: Partial<PipelineDeps> = {}): PipelineDeps {
     offline: false,
     now: () => new Date(),
     verify: async () => mockVerification(streetFloodDepth),
+    relevance: async () => mockRelevance(streetFloodDepth),
     precipitationMm: async () => 22,
     alertsAt: async () => [],
     ...over,
@@ -68,7 +69,7 @@ describe("runPipeline", () => {
     expect(stage(r, "session_integrity").status).toBe("skipped");
     expect(r.phashes).toHaveLength(3);
     // pending snapshot + (running, done) per stage
-    expect(sink.history).toHaveLength(1 + 7 * 2);
+    expect(sink.history).toHaveLength(1 + 8 * 2);
     expect(sink.history[1]![0]!.status).toBe("running");
     expect(r.checks.every((c) => c.ms >= 0)).toBe(true);
   });

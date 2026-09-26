@@ -90,3 +90,18 @@ export async function randomJpeg(width = 640, height = 480, seed = Math.random()
   }
   return sharp(raw, { raw: { width, height, channels: 3 } }).jpeg({ quality: 80 }).toBuffer();
 }
+
+/**
+ * Drives the server-side capture gate for a session: GATE_REQUIRED_GREEN all-green frame checks
+ * through the real frame-check route (mock mode counts only on the local backend). Without this,
+ * submissions are capped at needs_review with GATE_NOT_PASSED.
+ */
+export async function passGate(token: string, sessionId: string): Promise<void> {
+  const { POST: frameCheck } = await import("@/app/api/capture/frame-check/route");
+  const { GATE_REQUIRED_GREEN } = await import("@groundtruth/shared");
+  const img = (await randomJpeg(320, 240)).toString("base64");
+  for (let i = 0; i < GATE_REQUIRED_GREEN; i++) {
+    const r = await frameCheck(req("POST", "/api/capture/frame-check", { token, body: { session_id: sessionId, image_base64: img } }), undefined as unknown);
+    if (r.status !== 200) throw new Error(`frame check failed: ${r.status} ${await r.text()}`);
+  }
+}

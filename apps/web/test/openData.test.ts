@@ -45,7 +45,16 @@ const rawCaptured = new Map<string, string>(); // observation id → raw capture
 async function addObs(
   bountyId: string,
   userId: string,
-  o: { status?: "accepted" | "rejected" | "needs_review"; lat?: number; lng?: number; minutesAgo?: number; media?: boolean; depth?: number } = {},
+  o: {
+    status?: "accepted" | "rejected" | "needs_review";
+    lat?: number;
+    lng?: number;
+    minutesAgo?: number;
+    media?: boolean;
+    depth?: number;
+    verifier?: "model" | "mock" | "human" | "none";
+    confidence?: number;
+  } = {},
 ): Promise<string> {
   const lat = o.lat ?? DEMO.lat + 0.0011;
   const lng = o.lng ?? DEMO.lng - 0.0007;
@@ -70,7 +79,7 @@ async function addObs(
     status: o.status ?? "accepted",
     checks: pendingChecks(),
     reason_codes: [],
-    confidence: 0.84,
+    confidence: o.confidence ?? 0.84,
     protocol_score: 0.9,
     authenticity_score: 0.93,
     extracted: {
@@ -86,6 +95,7 @@ async function addObs(
     phashes: [],
     payout_cents: 500,
     retryable: false,
+    verifier: o.verifier ?? "model",
   });
   rawCaptured.set(id, at);
   return id;

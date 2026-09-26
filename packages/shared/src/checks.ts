@@ -1,9 +1,14 @@
 import { z } from "zod";
 import { ReasonCodeSchema } from "./reasonCodes";
 
-/** Pipeline layers, PRD §9.2, in run order. */
+/**
+ * Pipeline layers, PRD §9.2, in run order. `relevance` (added after the vitamin-water incident) is a
+ * cheap fast-vision "is this even the right subject?" check that runs before the slow reasoning
+ * model, independent of it.
+ */
 export const STAGES = [
   { id: "session_integrity", label: "Session integrity" },
+  { id: "relevance", label: "Subject relevance" },
   { id: "challenge", label: "Challenge-response" },
   { id: "protocol", label: "Protocol compliance" },
   { id: "authenticity", label: "Authenticity" },

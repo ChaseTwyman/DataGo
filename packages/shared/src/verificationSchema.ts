@@ -38,6 +38,36 @@ export function frameCheckJsonSchema(protocol: Protocol): JsonSchema {
   return toStrictJsonSchema(frameCheckZod(protocol));
 }
 
+// ---------- Relevance (fast vision, one frame, before the reasoning model) ----------
+
+/** off_topic at or above this confidence rejects the capture (OFF_TOPIC). */
+export const OFF_TOPIC_CONFIDENCE = 0.7;
+
+export function relevanceZod(protocol: Protocol) {
+  const ids = protocol.capture.required_elements.map((e) => e.id) as [string, ...string[]];
+  return z.object({
+    subject_match: z.object({ value: z.boolean(), confidence: conf }),
+    elements: z.array(z.object({ id: z.enum(ids), visible: z.boolean(), confidence: conf })),
+    off_topic: z.object({ value: z.boolean(), confidence: conf, what_it_is: z.string().max(160) }),
+  });
+}
+
+/** Protocol-independent shape of a relevance check. */
+export const RelevanceResultSchema = z.object({
+  subject_match: z.object({ value: z.boolean(), confidence: conf }),
+  elements: z.array(z.object({ id: z.string(), visible: z.boolean(), confidence: conf })),
+  off_topic: z.object({ value: z.boolean(), confidence: conf, what_it_is: z.string() }),
+});
+export type RelevanceResult = z.infer<typeof RelevanceResultSchema>;
+
+export function relevanceJsonSchema(protocol: Protocol): JsonSchema {
+  return toStrictJsonSchema(relevanceZod(protocol));
+}
+
+export function isOffTopic(r: RelevanceResult): boolean {
+  return r.off_topic.value && r.off_topic.confidence >= OFF_TOPIC_CONFIDENCE;
+}
+
 // ---------- Verification (reasoning vision) ----------
 
 const evidenced = z.object({ suspected: z.boolean(), confidence: conf, evidence: z.string() });

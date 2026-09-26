@@ -174,8 +174,16 @@ function DatasetSection({ d }: { d: PublicDatasetSummary }) {
         </p>
       ) : null}
 
+      {d.rows === 0 ? (
+        <p className="mt-10 border-t border-white/15 pt-6 text-white/60">No verified observations yet.</p>
+      ) : null}
+
       <dl className="mt-10 grid grid-cols-2 border-t border-white/15 sm:grid-cols-4">
-        <Figure label="Observations" value={d.rows} sub="accepted only" />
+        <Figure
+          label="Observations"
+          value={d.rows}
+          sub={`${d.tiers.human_verified} human-verified · ${d.tiers.model_high} model ≥ 0.75`}
+        />
         <Figure label="Contributors" value={d.contributors} sub="pseudonymous" />
         <Figure label="Coverage" value={d.cells.length} sub="H3 res-9 cells" />
         <Figure
@@ -338,7 +346,7 @@ function Preview({ slug, total }: { slug: string; total: number }) {
         </span>
       </div>
       {error ? <p className="py-6 text-sm text-red-300">Preview unavailable ({error}).</p> : null}
-      {data && data.rows.length === 0 ? <p className="py-6 text-sm text-white/50">No accepted observations yet.</p> : null}
+      {data && data.rows.length === 0 ? <p className="py-6 text-sm text-white/50">No verified observations yet.</p> : null}
       {data && data.rows.length > 0 ? (
         <div className="mt-2 max-h-[560px] overflow-auto border-x border-b border-white/10">
           <table className="w-max min-w-full border-collapse text-left font-mono text-[11px]">
@@ -372,7 +380,7 @@ function Preview({ slug, total }: { slug: string; total: number }) {
 const STEPS = [
   { n: "01", t: "Protocol", d: "A published protocol defines what to capture, safety rules, and the structured fields to extract." },
   { n: "02", t: "Guided capture", d: "The app guides the contributor live: framing checks, a timed burst challenge, and spoken field notes." },
-  { n: "03", t: "7-layer verification", d: "Session integrity, capture gate, quality, authenticity (incl. C2PA/AI labels), duplicates, context, protocol compliance." },
+  { n: "03", t: "8-layer verification", d: "Session integrity, server-side capture gate, subject relevance, quality, authenticity (incl. C2PA/AI labels), duplicates, context, protocol compliance and extraction sanity. Published only if a human approved it or the pipeline accepted it at confidence ≥ 0.75." },
   { n: "04", t: "Structured extraction", d: "Accepted captures become rows: model-estimated values with confidence, plus the contributor's own answers." },
   { n: "05", t: "Coarsening", d: "Before publishing: H3 cell-centre locations, 5-minute times, per-dataset pseudonyms. Photos never leave the private store." },
 ];

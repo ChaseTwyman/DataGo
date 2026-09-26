@@ -13,6 +13,7 @@ export const FLAT_SCENE_CONFIDENCE = 0.8;
 
 export const challenge: Stage = {
   id: "challenge",
+  usesModel: true,
   async run(ctx): Promise<StageOutcome> {
     const { input } = ctx;
     const sub: Subcheck[] = [];

@@ -4,7 +4,8 @@
  *
  * Seeded observations deliberately carry NO media: fabricating images for "accepted observations"
  * would put generated pixels in the observations bucket and defeat the synthetic-media guarantee.
- * They are marked device.model = "demo-seed" so they are identifiable in exports.
+ * They are marked device.model = "demo-seed" and verifier = "none": they show on the dashboard map
+ * (labelled "Demo seed") but never reach researcher exports or the public dataset.
  */
 import { gridDisk } from "h3-js";
 import {
@@ -112,6 +113,7 @@ export async function spawnDemoEvent(
       phashes: [],
       payout_cents: 0,
       retryable: false,
+      verifier: "none",
     });
   }
 

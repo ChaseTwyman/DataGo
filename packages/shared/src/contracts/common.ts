@@ -30,5 +30,5 @@ export type ApiError = z.infer<typeof ApiErrorSchema>;
 
 /** Test-only header: selects a mock fixture variant when MOCK_GROK=1 (e.g. "screen_recapture"). */
 export const MOCK_VARIANT_HEADER = "x-mock-variant";
-export const MockVariantSchema = z.enum(["default", "screen_recapture", "missing_element", "ai_generated", "error", "slow"]);
+export const MockVariantSchema = z.enum(["default", "screen_recapture", "missing_element", "ai_generated", "error", "slow", "off_topic"]);
 export type MockVariant = z.infer<typeof MockVariantSchema>;
