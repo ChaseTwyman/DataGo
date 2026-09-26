@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ProtocolSchema, type FieldQuestion, type Protocol } from "@groundtruth/shared";
 import { Checkbox } from "@/components/ds/controls";
+import { SelfCheckStep, useSelfCheck } from "@/components/grokbot/SelfCheck";
 import { useConfirm } from "@/components/ds/Dialog";
 import { JobProgress } from "@/components/ds/primitives";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
@@ -13,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/client/cn";
+import { publishDecision } from "@/lib/client/grokbot";
 import {
   clearDraftJob,
   draftStage,
@@ -202,6 +204,8 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
   const confirm = useConfirm();
+  const selfCheck = useSelfCheck(id);
+  const dirty = tab === "json" || JSON.stringify(p) !== JSON.stringify(initial);
   // Rows live in their own state so a new (still unnamed) field doesn't vanish from the form.
   const [fields, setFieldRows] = useState<ExtractionField[]>(() => extractionFields(initial));
   const setFields = (f: ExtractionField[]) => {
@@ -244,12 +248,22 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
     }
     const v = ProtocolSchema.safeParse(def);
     if (!v.success) return setIssues(protocolIssues(v.error));
+    // Grok's self-check is advice: a "revise" only adds a question here, it never blocks publishing.
+    const decision = publishDecision(selfCheck?.status === "done" ? selfCheck.result : null);
     if (
-      !(await confirm({
-        title: "Publish protocol",
-        body: `Publish "${v.data.name}"? Published protocols can't be edited; you'd draft a new version.`,
-        confirmLabel: "Publish",
-      }))
+      !(await confirm(
+        decision.confirm
+          ? {
+              title: "Publish anyway?",
+              body: `${decision.concern} Publish anyway? Published protocols can't be edited; you'd draft a new version.`,
+              confirmLabel: "Publish anyway",
+            }
+          : {
+              title: "Publish protocol",
+              body: `Publish "${v.data.name}"? Published protocols can't be edited; you'd draft a new version.`,
+              confirmLabel: "Publish",
+            },
+      ))
     )
       return;
     setBusy(true);
@@ -455,6 +469,7 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
           </>
         )}
 
+        <SelfCheckStep protocolId={id} dirty={dirty} />
         <IssueList lines={issues.length ? issues : null} />
         <ErrorBox message={error} />
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">

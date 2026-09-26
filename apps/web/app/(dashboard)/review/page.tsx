@@ -3,6 +3,7 @@ import { CircleCheck, CircleX, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import type { LenientSubmissionWithMedia as SubmissionWithMedia } from "@groundtruth/shared";
 import { Checkbox } from "@/components/ds/controls";
+import { ReviewBrief } from "@/components/grokbot/ReviewBrief";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
 import { SubmissionCard } from "@/components/submissions/SubmissionCard";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ export default function ReviewPage() {
         title="Review queue"
         description="Submissions the pipeline couldn't decide on. Approving pays the locked quote; rejecting for integrity lowers the contributor's trust score."
       />
-      <div className="mx-auto w-full max-w-4xl space-y-3 p-6">
+      <div className="mx-auto w-full max-w-5xl space-y-3 p-6">
         <ErrorBox message={stream.error} />
         {stream.loading ? <Loading /> : null}
         {!stream.loading && stream.submissions.length === 0 ? (
@@ -31,7 +32,14 @@ export default function ReviewPage() {
             showBounty
             defaultOpen={stream.submissions.length <= 3}
             fresh={stream.freshIds.includes(s.id)}
-            actions={<ReviewActions s={s} onDone={() => { stream.remove(s.id); void stream.refresh(); }} />}
+            brief={false}
+            actions={
+              // The brief sits beside the decision, never above it, and never recommends one.
+              <div className="grid w-full gap-3 py-1 md:grid-cols-[minmax(0,1fr)_300px]">
+                <ReviewBrief submissionId={s.id} autoLoad={stream.submissions.length <= 3} />
+                <ReviewActions s={s} onDone={() => { stream.remove(s.id); void stream.refresh(); }} />
+              </div>
+            }
           />
         ))}
       </div>
@@ -58,18 +66,22 @@ function ReviewActions({ s, onDone }: { s: SubmissionWithMedia; onDone: () => vo
   };
 
   return (
-    <div className="flex w-full flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="success" size="sm" disabled={busy !== null} onClick={() => void act("approve")}>
+    <div className="flex w-full flex-col gap-2 md:border-l md:pl-3">
+      <div className="caps text-[11px] font-semibold">Your decision</div>
+      {/* Both buttons look the same on purpose: nothing on this page leans toward either outcome. */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void act("approve")}>
           {busy === "approve" ? <LoaderCircle className="animate-spin" aria-hidden /> : <CircleCheck aria-hidden />}
           Approve &amp; pay
         </Button>
-        <Button variant="destructive" size="sm" disabled={busy !== null} onClick={() => void act("reject")}>
+        <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void act("reject")}>
           {busy === "reject" ? <LoaderCircle className="animate-spin" aria-hidden /> : <CircleX aria-hidden />}
           Reject
         </Button>
+      </div>
+      <div className="flex flex-col gap-2">
         <Checkbox
-          className="h-8 items-center text-xs"
+          className="items-start text-xs"
           checked={integrity}
           onChange={(e) => setIntegrity(e.target.checked)}
           label="Integrity issue (fraud/fake — larger trust penalty)"
@@ -79,7 +91,7 @@ function ReviewActions({ s, onDone }: { s: SubmissionWithMedia; onDone: () => vo
           onChange={(e) => setNote(e.target.value)}
           placeholder="Optional note"
           maxLength={500}
-          className="h-8 min-w-40 flex-1 text-xs"
+          className="h-8 text-xs"
           aria-label="Review note"
         />
       </div>

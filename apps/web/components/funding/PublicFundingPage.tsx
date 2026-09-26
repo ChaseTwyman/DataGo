@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { formatCents, PublicFundingResponseSchema, type PublicFundingResponse } from "@groundtruth/shared";
+import { formatCents } from "@groundtruth/shared";
+import { LenientPublicFundingSchema, publicImpactPath, type LenientPublicFunding } from "@/lib/client/grokbot";
 import { Mark } from "@/components/ds/Mark";
 
 /**
@@ -13,7 +14,7 @@ const HEAD = "font-[family-name:var(--font-condensed)] uppercase tracking-[0.18e
 const REFRESH_MS = 60_000;
 
 export function PublicFundingPage() {
-  const [data, setData] = useState<PublicFundingResponse | null>(null);
+  const [data, setData] = useState<LenientPublicFunding | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
@@ -21,7 +22,7 @@ export function PublicFundingPage() {
       try {
         const res = await fetch("/api/public/funding", { cache: "no-store" });
         if (!res.ok) throw new Error("unavailable");
-        const body = PublicFundingResponseSchema.parse(await res.json());
+        const body = LenientPublicFundingSchema.parse(await res.json());
         if (alive) {
           setData(body);
           setError(null);
@@ -81,7 +82,7 @@ export function PublicFundingPage() {
               ) : (
                 <ul className="mt-6 divide-y divide-white/10 border-y border-white/10">
                   {data.sponsors.map((s) => (
-                    <li key={s.name} className="flex items-center justify-between gap-4 py-4">
+                    <li key={s.id ?? s.name} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-4">
                       <span className="flex min-w-0 items-center gap-3">
                         {s.logo_url ? (
                           <img src={s.logo_url} alt="" className="size-7 shrink-0 object-contain" />
@@ -94,7 +95,14 @@ export function PublicFundingPage() {
                           <span className="truncate">{s.name}</span>
                         )}
                       </span>
-                      <span className="text-white/65 tabular-nums">{formatCents(s.contributed_cents)}</span>
+                      <span className="flex items-center gap-5">
+                        {s.id ? (
+                          <Link href={publicImpactPath(s.id)} className={`${HEAD} text-[10px] text-white/60 hover:text-white`}>
+                            Impact <span aria-hidden>→</span>
+                          </Link>
+                        ) : null}
+                        <span className="text-white/65 tabular-nums">{formatCents(s.contributed_cents)}</span>
+                      </span>
                     </li>
                   ))}
                 </ul>

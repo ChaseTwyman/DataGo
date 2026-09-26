@@ -1,5 +1,5 @@
 "use client";
-import { LoaderCircle, Play, Plus, RotateCcw } from "lucide-react";
+import { FileBarChart, LoaderCircle, Play, Plus, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { formatCents, type Contribution, type FundingRequest, type Sponsor } from "@groundtruth/shared";
@@ -7,6 +7,7 @@ import { Switch } from "@/components/ds/controls";
 import { useConfirm } from "@/components/ds/Dialog";
 import { Notice, Readout, ReadoutGrid, Section } from "@/components/ds/primitives";
 import { RelativeTime } from "@/components/ds/RelativeTime";
+import { SponsorImpactReport } from "@/components/grokbot/SponsorImpact";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
 import { toast } from "@/components/Toaster";
 import { Badge } from "@/components/ui/badge";
@@ -224,6 +225,7 @@ function Sponsors({ rows, onDone }: { rows: Sponsor[]; onDone: () => void | Prom
   const [logo, setLogo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<string | null>(null);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -257,15 +259,26 @@ function Sponsors({ rows, onDone }: { rows: Sponsor[]; onDone: () => void | Prom
       {rows.length === 0 ? <Empty title="No sponsors yet" /> : null}
       <ul className="divide-y border">
         {rows.map((s) => (
-          <li key={s.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-            <div className="min-w-0">
-              <div className="truncate font-medium">{s.name}</div>
-              <div className="truncate text-xs text-muted-foreground">{s.url ?? "no link"}</div>
+          <li key={s.id} className="text-sm">
+            <div className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="min-w-0">
+                <div className="truncate font-medium">{s.name}</div>
+                <div className="truncate text-xs text-muted-foreground">{s.url ?? "no link"}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={report === s.id}
+                  onClick={() => setReport((r) => (r === s.id ? null : s.id))}
+                >
+                  <FileBarChart aria-hidden /> Impact report
+                </Button>
+                <span className="text-xs tabular-nums text-muted-foreground">{formatCents(s.contributed_cents)}</span>
+                <Switch checked={s.active} onChange={() => void toggle(s)} label={`${s.name} active`} />
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs tabular-nums text-muted-foreground">{formatCents(s.contributed_cents)}</span>
-              <Switch checked={s.active} onChange={() => void toggle(s)} label={`${s.name} active`} />
-            </div>
+            {report === s.id ? <SponsorImpactReport sponsorId={s.id} className="m-3 mt-0" /> : null}
           </li>
         ))}
       </ul>

@@ -1,8 +1,8 @@
 "use client";
-import { ArrowRight, CloudLightning, ExternalLink, LoaderCircle, MapPin, Radar, RotateCcw } from "lucide-react";
+import { ArrowRight, CircleCheck, CircleDashed, CloudLightning, ExternalLink, LoaderCircle, MapPin, Radar, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { DEMO, type DraftBounty } from "@groundtruth/shared";
+import { DEMO, formatCents } from "@groundtruth/shared";
 import { HexMap } from "@/components/map";
 import { Slider } from "@/components/ds/controls";
 import { JobProgress } from "@/components/ds/primitives";
@@ -12,6 +12,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/form";
 import { api } from "@/lib/client/api";
+import { sortRadarDrafts, type RadarDraft } from "@/lib/client/grokbot";
 import {
   clearRadarJob,
   draftPrefillHref,
@@ -192,7 +193,9 @@ function ScanStatus({ job, onRetry }: { job: RadarJob; onRetry: () => void }) {
 }
 
 function Results({ job }: { job: Extract<RadarJob, { status: "done" }> }) {
-  const { drafts, alerts_considered: alerts } = job.result;
+  const { alerts_considered: alerts } = job.result;
+  // Drafts the sponsor pool could fund right away come first.
+  const drafts = useMemo(() => sortRadarDrafts(job.result.drafts), [job.result.drafts]);
   const events = useMemo(() => [...new Set(drafts.map((d) => d.alert_event).filter((e): e is string => !!e))], [drafts]);
 
   return (
@@ -238,7 +241,7 @@ function Results({ job }: { job: Extract<RadarJob, { status: "done" }> }) {
   );
 }
 
-function DraftCard({ d }: { d: DraftBounty }) {
+function DraftCard({ d }: { d: RadarDraft }) {
   const links = safeSourceLinks(d.sources);
   const center = { lat: d.center_lat, lng: d.center_lng };
   return (
@@ -260,6 +263,7 @@ function DraftCard({ d }: { d: DraftBounty }) {
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3 text-sm">
         <p>{d.summary}</p>
+        <FundingLine d={d} />
         <div>
           <div className="caps text-[10px] text-muted-foreground">Why here, why now</div>
           <p className="mt-0.5 text-muted-foreground">{d.rationale}</p>
@@ -293,5 +297,23 @@ function DraftCard({ d }: { d: DraftBounty }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/** Whether the sponsor pool could fund this draft now (server estimate; the allocation engine decides on create). */
+function FundingLine({ d }: { d: RadarDraft }) {
+  const f = d.funding;
+  if (!f) return null;
+  return (
+    <div className={f.fundable ? "border-l-2 border-success pl-3" : "border-l-2 border-warning pl-3"}>
+      <div className={`caps flex items-center gap-1.5 text-[11px] font-semibold ${f.fundable ? "text-success" : "text-warning"}`}>
+        {f.fundable ? <CircleCheck className="size-3.5" aria-hidden /> : <CircleDashed className="size-3.5" aria-hidden />}
+        {f.fundable ? "Fundable now" : "Would wait for funding"}
+        {f.fundable && f.estimated_allocation_cents > 0 ? (
+          <span className="text-foreground tabular-nums normal-case">· est. {formatCents(f.estimated_allocation_cents)}</span>
+        ) : null}
+      </div>
+      {f.reason ? <p className="mt-0.5 text-xs text-muted-foreground">{f.reason}</p> : null}
+    </div>
   );
 }

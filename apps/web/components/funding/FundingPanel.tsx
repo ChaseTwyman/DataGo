@@ -5,6 +5,7 @@ import { useState } from "react";
 import { formatCents, type LenientBountyDetail } from "@groundtruth/shared";
 import { useConfirm } from "@/components/ds/Dialog";
 import { Notice, Panel, PanelHeader, Readout } from "@/components/ds/primitives";
+import { GrokbotAsk } from "@/components/grokbot/GrokbotAsk";
 import { ErrorBox } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -108,6 +109,14 @@ export function FundingPanel({ bounty, onChanged }: { bounty: LenientBountyDetai
         </ul>
       ) : null}
       {bounty.justification ? <p className="border-t px-4 py-3 text-xs text-muted-foreground">Justification: {bounty.justification}</p> : null}
+      <GrokbotAsk
+        className="border-t px-4 py-3"
+        label={bounty.status === "pending_funding" ? "Why is this pending?" : bounty.status === "paused" ? "Why is this paused?" : "How is this funded?"}
+        title="Request status"
+        cacheKey={`status:${bounty.id}:${bounty.status}`}
+        load={(refresh) => api.grokbotBountyStatus(bounty.id, refresh)}
+        defaultOpen={bounty.status === "pending_funding"}
+      />
       <ErrorBox message={error} className="m-4 mt-0" />
     </Panel>
   );

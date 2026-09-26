@@ -4,7 +4,10 @@ import { useState, type ReactNode } from "react";
 import { formatCents, type LenientSubmissionWithMedia as SubmissionWithMedia } from "@groundtruth/shared";
 import { extractedRows, formatScore } from "@/lib/client/checkFormat";
 import { cn, formatTime, shortId } from "@/lib/client/cn";
+import { api } from "@/lib/client/api";
 import { RelativeTime } from "../ds/RelativeTime";
+import { GrokbotAsk } from "../grokbot/GrokbotAsk";
+import { ReviewBrief } from "../grokbot/ReviewBrief";
 import { ReasonCode, SubmissionStatusBadge } from "../status";
 import { CheckTable } from "./CheckTable";
 
@@ -14,12 +17,15 @@ export function SubmissionCard({
   defaultOpen = false,
   showBounty = false,
   actions,
+  brief = true,
 }: {
   s: SubmissionWithMedia;
   fresh?: boolean;
   defaultOpen?: boolean;
   showBounty?: boolean;
   actions?: ReactNode;
+  /** Show the reviewer brief inside the card for needs_review items (the Review queue renders it beside its buttons instead). */
+  brief?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const thumb = s.media_urls[0];
@@ -78,7 +84,7 @@ export function SubmissionCard({
           <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden />
         )}
       </button>
-      {open ? <SubmissionDetail s={s} /> : null}
+      {open ? <SubmissionDetail s={s} brief={brief} /> : null}
       {actions ? <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">{actions}</div> : null}
     </div>
   );
@@ -91,11 +97,21 @@ function headline(extracted: Record<string, unknown> | null): string {
   return "";
 }
 
-export function SubmissionDetail({ s }: { s: SubmissionWithMedia }) {
+export function SubmissionDetail({ s, brief = true }: { s: SubmissionWithMedia; brief?: boolean }) {
   const fields = extractedRows(s.extracted);
   const notes = extractedRows(s.field_notes);
+  const settled = s.status !== "pending" && s.status !== "verifying";
   return (
     <div className="space-y-4 border-t p-3">
+      {settled ? (
+        <GrokbotAsk
+          label="Explain this result"
+          title="Explanation"
+          cacheKey={`explain:${s.id}:${s.status}`}
+          load={(refresh) => api.grokbotExplain(s.id, refresh)}
+        />
+      ) : null}
+      {brief && s.status === "needs_review" ? <ReviewBrief submissionId={s.id} /> : null}
       <section>
         <h4 className="caps mb-2 text-[10px] text-muted-foreground">Frames ({s.media_urls.length || s.media.length})</h4>
         {s.media_purged_at ? (
