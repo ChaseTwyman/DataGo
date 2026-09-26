@@ -75,7 +75,7 @@ export interface NewSubmission {
   captured_at: string;
   device: DeviceInfo | Record<string, never>;
   sensors: SensorSnapshot | Record<string, never>;
-  gate: GateInfo | Record<string, never>;
+  gate: (GateInfo & { nonce?: string }) | Record<string, never>;
   field_notes: FieldNotes;
   checks: StageResult[];
   status?: SubmissionStatus;

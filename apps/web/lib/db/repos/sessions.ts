@@ -68,6 +68,15 @@ export async function setSessionStatus(db: Db, id: string, status: SessionRow["s
   await db.query("update public.capture_sessions set status = $2::public.session_status where id = $1", [id, status]);
 }
 
+/** Atomically moves an open session to submitted. False if it was not open (double submit). */
+export async function markSubmittedIfOpen(db: Db, id: string): Promise<boolean> {
+  const rows = await db.query<{ id: string }>(
+    "update public.capture_sessions set status = 'submitted' where id = $1 and status = 'open' returning id",
+    [id],
+  );
+  return rows.length === 1;
+}
+
 /** Claims the frame-check slot (1 in flight, `limit` per session). Returns checks used, or null. */
 export async function claimFrameCheck(db: Db, sessionId: string, userId: string, limit: number, lockSeconds: number): Promise<number | null> {
   const rows = await db.query<{ n: number | null }>("select public.claim_frame_check($1, $2, $3, $4) as n", [
