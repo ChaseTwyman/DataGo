@@ -24,7 +24,21 @@ Read `PRD.md` (what) and `BUILD_PROMPT.md` (how; wins on technical choices). `PL
 - Grok failure never auto-accepts: pipeline stage → `error` → `needs_review`.
 - Commit messages: `git commit -F <file>`, explain why + what was rejected.
 
+## Production
+- Vercel project `groundtruth` (team `panoptic-pigskin`), https://groundtruth-two-snowy.vercel.app. Root dir `apps/web`, install `pnpm install --filter @groundtruth/web... --frozen-lockfile`, Corepack on (pnpm 12). Token file: `C:\Users\sumedh\.vercel-token.txt` (never print it).
+- Deploy only from a clean `git worktree` of origin/main — the working copy has untracked/ignored files that hide missing-from-git bugs.
+- Hobby: route `maxDuration` ≤ 300.
+- New migrations must be applied to hosted Supabase (via DATABASE_URL, session port 5432) BEFORE deploying code that uses them.
+
+## Mobile gotchas
+- Xcode 27 / iOS 27: UIScene life cycle is mandatory — `plugins/withSceneLifecycle.js` (needs `expo prebuild --clean` after changes).
+- Entry is `apps/mobile/index.ts` (expo → UTF-16 TextDecoder polyfill → expo-router). Don't remove: h3-js needs it under Hermes.
+- Don't add `NSAllowsLocalNetworking` to ATS; it disables `NSAllowsArbitraryLoads`.
+- Phone: use `--configuration Release` builds (JS embedded). Dev builds need Metro reachable on every launch.
+
 ## Environment gotchas (Windows build machine)
+- `sed -i` in this OneDrive folder has applied edits twice (duplicated lines). Use the Edit tool.
+- Never gate on `cmd | tail`: the pipe hides the exit code.
 - No Docker/Supabase CLI here; `supabase/test/migrations.test.ts` applies migrations + seed to PGlite with an auth/storage shim. Real `supabase db reset` is a human step.
 - pnpm 12 requires build-script approval: add packages under `allowBuilds:` in `pnpm-workspace.yaml`.
 - `python` on this machine is the Windows Store stub and hangs — use node.

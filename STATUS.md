@@ -1,6 +1,19 @@
 # GroundTruth — Status
 
-_Last updated: hosted Supabase + real Grok verified from the API. Next: first device run from the Mac._
+_Last updated: production on Vercel (https://groundtruth-two-snowy.vercel.app), open data live, mobile redesign landed. Next: Release build on the iPhone pointed at Vercel._
+
+## Production
+- **Web + API:** https://groundtruth-two-snowy.vercel.app (Vercel project `groundtruth`, team `panoptic-pigskin`, Hobby, region iad1). Supabase = hosted DB/Auth/Storage/Realtime. Nothing needs to run on a laptop.
+- **Open data (no login):** https://groundtruth-two-snowy.vercel.app/data · API `/api/public/datasets[/street-flood-depth?format=csv|geojson|json|dictionary]`. CC BY 4.0, privacy-coarsened (cell centers, 5-min time, per-dataset pseudonyms, no photos). 41 rows now (40 flagged `is_demo_seed`; remove with `LOCAL_BACKEND=0 DEMO_MODE=1 npx tsx --env-file=.env scripts/seed-open-data.ts --reset` in apps/web).
+- **Deploy:** always from a clean `git worktree` of origin/main (never the working copy): `VERCEL_TOKEN=… npx vercel deploy --prod --yes --scope panoptic-pigskin`. Env vars live in the Vercel project (LOCAL_BACKEND=0, MOCK_GROK=0, DEMO_MODE=1).
+- **Measured on Vercel (real Grok):** voice token 1.2 s; frame check 1.3–1.4 s; Imagine ~16 s; grok-4.7 verification 41 s at `reasoning_effort: medium` (was 89 s at default "high", and 120 s → error before removing the SDK's hidden retry); full red-team run 58 s, caught (`CHALLENGE_FAILED` + `C2PA_AI_GENERATED`).
+
+## Bugs found by going to production (all fixed)
+- `.gitignore` `coverage/` hid `app/api/bounties/[id]/coverage/route.ts` from git: every clone lacked the endpoint while local checks passed (b2cd456).
+- postgres.js double-encoded jsonb params (PGlite doesn't) → "media must be an array" on hosted DB (d9c27f4).
+- Hobby maxDuration cap (300 s) rejected the deploy (f65bdb0); red-team 120 s limit too low (4d29cf5).
+- Verification: 12 MP frames + 60 s timeout × SDK retry → 120 s error (4615e96); reasoning effort high → 89 s (e31985f).
+- iOS 27 SDK requires UIScene life cycle (1092a35); Hermes/Expo TextDecoder lacks UTF-16 so h3-js broke every route (50bbc95); ATS ignored NSAllowsArbitraryLoads next to NSAllowsLocalNetworking (8013794).
 
 ## Milestones
 | # | Milestone | State |
@@ -9,10 +22,10 @@ _Last updated: hosted Supabase + real Grok verified from the API. Next: first de
 | M0.5 | Voice spike | ✅ code done · ⏳ device acceptance (latency, barge-in) |
 | M1 | Skeleton loop (mock AI) | ✅ done — e2e script 19/19 in local mode |
 | M2 | Capture gate + challenge | ✅ code done · ⏳ device |
-| M3 | Verification pipeline | ✅ done (mock-verified; real Grok untested) |
+| M3 | Verification pipeline | ✅ done — real Grok verified on Vercel |
 | M4 | Voice field guide | ✅ code done · ⏳ device |
 | M5 | Economy + data | ✅ done |
-| M6 | Imagine + red team | ✅ done (mock-verified) |
+| M6 | Imagine + red team | ✅ done — real Grok on Vercel, C2PA check |
 | M7 | P1 | ◑ backend for Radar, Protocol Studio, briefing video done; voice onboarding interview not built (form fallback exists); no UI for Radar/Studio |
 | M8 | Demo readiness | ◑ spawn-event, demo-reset, e2e, eval done · README.md + DEMO.md not written |
 
@@ -53,8 +66,9 @@ _Last updated: hosted Supabase + real Grok verified from the API. Next: first de
 - [x] `XAI_API_KEY` added and verified.
 - [x] `apps/mobile/.env` filled (API URL `http://10.90.48.161:3000`, Supabase URL + anon key).
 - [x] `DATABASE_URL` password fixed; API connects to hosted DB.
-- [ ] Mac: Xcode + Apple ID, Node 24, pnpm, `brew install cocoapods watchman`, clone, copy `apps/mobile/.env` (AirDrop/USB), iPhone plugged in + Developer Mode on.
-- [ ] Same Wi-Fi (or hotspot) for Windows laptop, Mac, iPhone. Allow Node through Windows Firewall (Private).
+- [x] Mac: Xcode 27 + Apple ID, Node, pnpm, CocoaPods, clone, iPhone Developer Mode. App runs on the iOS 27 simulator.
+- [x] ~~Same Wi-Fi / tunnels~~ — obsolete: API is on Vercel.
+- [ ] Mac: set EXPO_PUBLIC_API_BASE_URL=https://groundtruth-two-snowy.vercel.app, then Release build to the iPhone.
 - [ ] ~20 real test photos in `apps/web/test/fixtures` (see its README).
 
 ## Device test steps
