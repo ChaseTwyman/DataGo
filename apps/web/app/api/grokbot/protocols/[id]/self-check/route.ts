@@ -8,6 +8,7 @@ import { GrokError } from "@/lib/grok/config";
 import { runSelfCheck, storedSelfCheck } from "@/lib/grokbot/selfCheck";
 import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
 import { getStorage } from "@/lib/storage";
+import { assertGrokbotEnabled } from "@/lib/grokbot/http";
 
 // Example generation (~16 s on Vercel) + 3 frame checks and a relevance screen in parallel.
 export const maxDuration = 180;
@@ -28,6 +29,7 @@ async function withImageUrl(r: StudioSelfCheck, path: string | null, origin: str
  * (x3) and relevance screen; stores the result on the protocol. Advisory: publishing is never blocked.
  */
 export const POST = route<IdParams>(async (req, { params }) => {
+  assertGrokbotEnabled();
   const id = Uuid.parse((await params).id);
   const user = await requireResearcher(req);
   const db = await getDb();
@@ -46,6 +48,7 @@ export const POST = route<IdParams>(async (req, { params }) => {
 
 /** The last stored self-check (404 when none has run). */
 export const GET = route<IdParams>(async (req, { params }) => {
+  assertGrokbotEnabled();
   const id = Uuid.parse((await params).id);
   const user = await requireResearcher(req);
   const db = await getDb();

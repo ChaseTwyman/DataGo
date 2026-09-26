@@ -37,6 +37,10 @@ export const LIMITS = {
   // Grokbot. Reads are cached per case-file version, so only a changed case costs a model call; the
   // cap bounds a client that polls narration in a loop (a verify is ~20 polls).
   grokbot: { name: "grokbot", max: 600, windowSeconds: HOUR, what: "assistant requests" },
+  // The dashboard asks for every pending request's status on page load; cached, so cheap.
+  grokbotStatus: { name: "grokbot_status", max: 2000, windowSeconds: HOUR, what: "request status explanations" },
+  // ?refresh=1 bypasses the cache: each one can be a model call.
+  grokbotRefresh: { name: "grokbot_refresh", max: 30, windowSeconds: HOUR, what: "assistant regenerations" },
   matchRefresh: { name: "match_refresh", max: 10, windowSeconds: HOUR, what: "match refreshes" },
   // Background refreshes kicked by /nearby or a profile change: silent, never a 429 to the client.
   matchAuto: { name: "match_auto", max: 6, windowSeconds: HOUR, what: "automatic match refreshes" },

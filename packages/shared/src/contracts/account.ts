@@ -44,6 +44,11 @@ export const MeSchema = z.object({
   trust_score: z.number(),
   balance_cents: z.number().int(),
   created_at: IsoDate,
+  /** Additive (Grokbot For-you): the profile fields matches are computed from, so forms can prefill. */
+  occupation: z.string().nullable().optional(),
+  skills: z.array(z.string()).optional(),
+  interests: z.array(z.string()).optional(),
+  regular_areas: z.array(z.object({ label: z.string(), description: z.string() })).optional(),
 });
 export type Me = z.infer<typeof MeSchema>;
 

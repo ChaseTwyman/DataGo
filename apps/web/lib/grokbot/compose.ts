@@ -177,6 +177,8 @@ export interface ComposeOptions {
   /** Skip the model entirely (e.g. public endpoints, contributor integrity rejects). */
   templateOnly?: boolean;
   generate?: Generate;
+  /** ?refresh=1: skip the cache read (the new result replaces the cached one). */
+  refresh?: boolean;
   now?: Date;
 }
 
@@ -185,7 +187,7 @@ const TEMPLATE_TTL = 300;
 export async function composeMessage(db: Db, o: ComposeOptions): Promise<GrokbotMessage> {
   const c = o.caseFile;
   const key = { kind: o.op, subjectId: c.subjectId, audience: c.audience, version: caseVersion(c, o.templateOnly ? "t" : "") };
-  const cached = await cacheGet<GrokbotMessage>(db, key);
+  const cached = o.refresh ? null : await cacheGet<GrokbotMessage>(db, key);
   if (cached && GrokbotMessageSchema.safeParse(cached).success) return cached;
 
   const template = () => finalize(o.template, c, "template", o.now);

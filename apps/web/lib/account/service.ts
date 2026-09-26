@@ -10,6 +10,7 @@ import type { AuthUser } from "../auth";
 import type { Db } from "../db";
 import { wallet } from "../db/repos/ledger";
 import { toIso, toIsoOrNull } from "../db/types";
+import { loadMatchProfile } from "../grokbot/match";
 import type { ObjectStorage } from "../storage";
 import type { AccountAuth } from "./authAdmin";
 
@@ -45,7 +46,7 @@ function researcherProfile(p: Pick<ProfileFull, "researcher_org" | "researcher_p
 export async function getMe(db: Db, user: AuthUser): Promise<Me> {
   const p = await profileFull(db, user.id);
   if (!p) throw notFound("Account not found");
-  const w = await wallet(db, user.id);
+  const [w, mp] = await Promise.all([wallet(db, user.id), loadMatchProfile(db, user.id)]);
   return {
     id: p.id,
     email: p.email ?? user.email,
@@ -58,6 +59,11 @@ export async function getMe(db: Db, user: AuthUser): Promise<Me> {
     trust_score: p.trust_score,
     balance_cents: w.balance_cents,
     created_at: toIso(p.created_at),
+    // Additive: the For-you profile fields, so Account screens can prefill them.
+    occupation: mp?.occupation ?? null,
+    skills: mp?.skills ?? [],
+    interests: mp?.interests ?? [],
+    regular_areas: mp?.regular_areas ?? [],
   };
 }
 

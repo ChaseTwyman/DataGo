@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { loadSubmissionFor, narrate } from "@/lib/grokbot/submission";
 import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
+import { assertGrokbotEnabled } from "@/lib/grokbot/http";
 
 export const maxDuration = 30;
 
@@ -16,6 +17,7 @@ const Query = z.object({ after: z.coerce.number().int().min(-1).max(1000).defaul
  * so that is also the number of lines you have). `final` is set once the submission is terminal.
  */
 export const GET = route<IdParams>(async (req, { params }) => {
+  assertGrokbotEnabled();
   const id = Uuid.parse((await params).id);
   const { after } = parseQuery(req, Query);
   const user = await requireUser(req);

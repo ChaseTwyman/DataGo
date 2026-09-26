@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { sponsorImpact } from "@/lib/grokbot/impact";
 import { parsePeriod } from "@/lib/grokbot/period";
 import { clientIp, enforceRateLimit, LIMITS } from "@/lib/rateLimit";
+import { assertGrokbotEnabled } from "@/lib/grokbot/http";
 
 /**
  * Public (no login) sponsor impact: aggregate counts and money only. No user ids, no coordinates or
@@ -11,6 +12,7 @@ import { clientIp, enforceRateLimit, LIMITS } from "@/lib/rateLimit";
  * figures, else the template). Inactive sponsors and sponsors with no money in are 404.
  */
 export const GET = route<IdParams>(async (req, { params }) => {
+  assertGrokbotEnabled();
   const id = Uuid.parse((await params).id);
   const period = parsePeriod(req);
   const db = await getDb();

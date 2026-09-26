@@ -93,7 +93,7 @@ export const DraftBountySchema = z.object({
    * Grokbot (additive): what the allocation engine would grant this draft right now, computed
    * server-side after the model drafts it (never model output).
    */
-  funding: RadarFundingSchema.optional(),
+  funding: RadarFundingSchema.nullable().optional(),
 });
 export type DraftBounty = z.infer<typeof DraftBountySchema>;
 export const RadarScanResponseSchema = z.object({

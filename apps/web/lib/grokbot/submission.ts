@@ -12,7 +12,7 @@ import { getProfile } from "../db/repos/profiles";
 import { getProtocol, type ProtocolRow } from "../db/repos/protocols";
 import { getSubmission, type SubmissionRecord } from "../db/repos/submissions";
 import { TERMINAL, contributorSubmissionCase, isNeutralForContributor, researcherSubmissionCase } from "./caseFile";
-import { composeMessage, type Generate } from "./compose";
+import { composeMessage, finalize, type Generate } from "./compose";
 import { contributorExplainTemplate, narrationText, researcherExplainTemplate } from "./templates";
 import type { CaseFile } from "./types";
 
@@ -54,7 +54,7 @@ const EXPLAIN_TASK: Record<SubmissionView, string> = {
   admin: "Summarize for an administrator why this capture has its status: which stages mattered and what a reviewer should look at. Do not recommend a decision.",
 };
 
-export async function explainSubmission(db: Db, l: LoadedSubmission, o: { mockError?: boolean; generate?: Generate } = {}): Promise<GrokbotMessage> {
+export async function explainSubmission(db: Db, l: LoadedSubmission, o: { mockError?: boolean; generate?: Generate; refresh?: boolean } = {}): Promise<GrokbotMessage> {
   const c = await submissionCase(db, l, "explain");
   const contributor = l.view === "contributor";
   return composeMessage(db, {
@@ -67,6 +67,7 @@ export async function explainSubmission(db: Db, l: LoadedSubmission, o: { mockEr
     templateOnly: (contributor && isNeutralForContributor(l.submission)) || !TERMINAL.has(l.submission.status),
     ...(o.mockError ? { mockError: true } : {}),
     ...(o.generate ? { generate: o.generate } : {}),
+    ...(o.refresh ? { refresh: true } : {}),
   });
 }
 
@@ -97,6 +98,21 @@ export async function narrate(db: Db, l: LoadedSubmission, after: number, o: { m
   return {
     lines: narrationLines(l, after),
     done,
-    final: done ? await explainSubmission(db, l, o) : null,
+    final: done ? await explainSubmission(db, l, o).catch((err: unknown) => templateExplain(l, err)) : null,
   };
+}
+
+/**
+ * Last resort for narration: `done: true` must reach the phone for every terminal row, so a failing
+ * cache/DB read still yields the (pure, role-scoped) template instead of a 500.
+ */
+function templateExplain(l: LoadedSubmission, err: unknown): GrokbotMessage {
+  console.warn("[grokbot] narration final fell back to the bare template:", err instanceof Error ? err.message : err);
+  const input = { submission: l.submission, protocol: l.protocol.definition, bountyTitle: l.bounty.title };
+  if (l.view === "contributor") {
+    const c = contributorSubmissionCase(input);
+    return finalize(contributorExplainTemplate(c), c, "template");
+  }
+  const c = researcherSubmissionCase(input, l.view);
+  return finalize(researcherExplainTemplate(c), c, "template");
 }

@@ -150,10 +150,10 @@ export const defaultBriefGenerate: Generate = ({ op, system, user, mock }) =>
     mock: () => mock(),
   });
 
-export async function reviewBrief(db: Db, base: CaseFile, submissionId: string, o: { mockError?: boolean; generate?: Generate; now?: Date } = {}): Promise<ReviewBrief> {
+export async function reviewBrief(db: Db, base: CaseFile, submissionId: string, o: { mockError?: boolean; generate?: Generate; refresh?: boolean; now?: Date } = {}): Promise<ReviewBrief> {
   const c = withStageSummary(base);
   const key = { kind: "review_brief", subjectId: submissionId, audience: c.audience, version: caseVersion(c) };
-  const cached = await cacheGet<ReviewBrief>(db, key);
+  const cached = o.refresh ? null : await cacheGet<ReviewBrief>(db, key);
   if (cached && ReviewBriefSchema.safeParse(cached).success) return cached;
   const template = briefTemplate(c);
   let out: ReviewBrief | null = null;

@@ -162,7 +162,16 @@ export const RunAllocationResponseSchema = z.object({
 // ---------- public transparency (no login, no per-user data) ----------
 
 export const PublicFundingResponseSchema = z.object({
-  sponsors: z.array(z.object({ name: z.string(), url: z.string().nullable(), logo_url: z.string().nullable(), contributed_cents: Cents })),
+  sponsors: z.array(
+    z.object({
+      /** Additive (Grokbot): links to /funding/sponsors/:id (public impact report). Optional for older servers. */
+      id: z.string().uuid().optional(),
+      name: z.string(),
+      url: z.string().nullable(),
+      logo_url: z.string().nullable(),
+      contributed_cents: Cents,
+    }),
+  ),
   totals: PoolTotalsSchema,
   requests: z.object({ active: z.number().int(), pending: z.number().int() }),
   updated_at: IsoDate,

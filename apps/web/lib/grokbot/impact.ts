@@ -14,6 +14,7 @@ import { getSponsor, type SponsorRow } from "../db/repos/funding";
 import { cacheGet, caseVersion } from "./cache";
 import { dollars } from "./caseFile";
 import { composeMessage, finalize, type Generate } from "./compose";
+import type { Period } from "./period";
 import { impactTemplate } from "./templates";
 import type { CaseFile, Fact } from "./types";
 
@@ -121,14 +122,17 @@ function highlights(f: ImpactFigures): string[] {
 export async function sponsorImpact(
   db: Db,
   sponsorId: string,
-  period: { from: string; to: string },
-  o: { audience: "admin" | "public"; mockError?: boolean; generate?: Generate },
+  period: Period,
+  o: { audience: "admin" | "public"; mockError?: boolean; generate?: Generate; refresh?: boolean },
 ): Promise<SponsorImpact | null> {
   const s = await getSponsor(db, sponsorId);
   if (!s) return null;
   if (o.audience === "public" && (!s.active || s.contributed_cents <= 0)) return null;
-  const f = await impactFigures(db, s.id, period.from, period.to);
-  const c = impactCase(s, f, period.from, period.to, o.audience);
+  // All time: count everything (observations on a request can predate the sponsor's record, e.g.
+  // pre-pool budgets migrated in 000007); the report says it starts at the sponsor's creation.
+  const from = period.from ?? s.created_at;
+  const f = await impactFigures(db, s.id, period.from ?? "1970-01-01T00:00:00.000Z", period.to);
+  const c = impactCase(s, f, from, period.to, o.audience);
   let narrative;
   if (o.audience === "admin") {
     narrative = await composeMessage(db, {
@@ -139,6 +143,7 @@ export async function sponsorImpact(
       ttlSeconds: 6 * 3600,
       ...(o.mockError ? { mockError: true } : {}),
       ...(o.generate ? { generate: o.generate } : {}),
+      ...(o.refresh ? { refresh: true } : {}),
     });
   } else {
     // Same facts → same version: reuse what an admin already generated; never call the model here.
@@ -148,7 +153,7 @@ export async function sponsorImpact(
   return SponsorImpactSchema.parse({
     sponsor_id: s.id,
     sponsor_name: s.name,
-    period_from: new Date(period.from).toISOString(),
+    period_from: new Date(from).toISOString(),
     period_to: new Date(period.to).toISOString(),
     contributed_cents: f.contributed_cents,
     spent_cents: f.spent_cents,

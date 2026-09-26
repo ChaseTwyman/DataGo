@@ -103,7 +103,7 @@ export async function publicFunding(db: Db, now = new Date()): Promise<PublicFun
     sponsors: sponsors
       .filter((s) => s.active && s.contributed_cents > 0)
       .sort((a, b) => b.contributed_cents - a.contributed_cents)
-      .map((s) => ({ name: s.name, url: s.url, logo_url: s.logo_url, contributed_cents: s.contributed_cents })),
+      .map((s) => ({ id: s.id, name: s.name, url: s.url, logo_url: s.logo_url, contributed_cents: s.contributed_cents })),
     totals,
     requests,
     updated_at: now.toISOString(),

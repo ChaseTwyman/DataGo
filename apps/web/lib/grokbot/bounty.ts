@@ -29,9 +29,10 @@ import type { CaseFile, Fact } from "./types";
 
 // ---------------------------------------------------------------- price why
 
-export async function priceCase(db: Db, b: BountyRow, p: ProtocolRow, lat: number, lng: number, now = new Date()): Promise<CaseFile> {
+/** `at` null (no location from the phone) → the bounty's best open cell, same pick as /nearby. */
+export async function priceCase(db: Db, b: BountyRow, p: ProtocolRow, at: { lat: number; lng: number } | null, now = new Date()): Promise<CaseFile> {
   const pricing = await loadPricing(db, b, p.definition, now);
-  const here = cellForPoint(lat, lng);
+  const here = at ? cellForPoint(at.lat, at.lng) : null;
   const open = pricing.cells.filter((c) => !c.paused);
   const pick = pricing.cells.find((c) => c.cell === here) ?? [...open].sort((a, c) => c.price_cents - a.price_cents)[0] ?? pricing.cells[0];
   const facts: Fact[] = [];
@@ -62,8 +63,14 @@ export async function priceCase(db: Db, b: BountyRow, p: ProtocolRow, lat: numbe
   return { kind: "price_why", subjectId: `${b.id}:${pick?.cell ?? "none"}`, audience: "public", facts, untrusted: [], injectionFlags: [] };
 }
 
-export async function priceWhy(db: Db, b: BountyRow, p: ProtocolRow, lat: number, lng: number, o: { mockError?: boolean; generate?: Generate } = {}): Promise<GrokbotMessage> {
-  const c = await priceCase(db, b, p, lat, lng);
+export async function priceWhy(
+  db: Db,
+  b: BountyRow,
+  p: ProtocolRow,
+  at: { lat: number; lng: number } | null,
+  o: { mockError?: boolean; generate?: Generate } = {},
+): Promise<GrokbotMessage> {
+  const c = await priceCase(db, b, p, at);
   return composeMessage(db, {
     op: "price_why",
     caseFile: c,
@@ -124,16 +131,19 @@ export async function statusCase(db: Db, b: BountyRow, p: ProtocolRow, now = new
   return { kind: "status", subjectId: b.id, audience: "researcher", facts, untrusted: [], injectionFlags: [] };
 }
 
-export async function requestStatus(db: Db, b: BountyRow, p: ProtocolRow, o: { mockError?: boolean; generate?: Generate } = {}): Promise<GrokbotMessage> {
+export async function requestStatus(db: Db, b: BountyRow, p: ProtocolRow, o: { mockError?: boolean; generate?: Generate; refresh?: boolean } = {}): Promise<GrokbotMessage> {
   const c = await statusCase(db, b, p);
   return composeMessage(db, {
     op: "status",
     caseFile: c,
     task: "Explain to the researcher where this data request stands (funded, waiting for funding and why, paused, or pacing) and what would help next. Suggestions must follow from the facts; funding and approvals are done by people, not by you.",
     template: statusTemplate(c),
-    ttlSeconds: 900,
+    // Keyed by the case-file version (any state change is a new key), so a long TTL is safe; the
+    // dashboard asks on every page load for pending requests.
+    ttlSeconds: 6 * 3600,
     ...(o.mockError ? { mockError: true } : {}),
     ...(o.generate ? { generate: o.generate } : {}),
+    ...(o.refresh ? { refresh: true } : {}),
   });
 }
 
