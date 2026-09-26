@@ -282,12 +282,50 @@ export function IconButton({ icon, label, onPress, color = C.text, style, role =
 
 // ---------------------------------------------------------------- states
 
+/**
+ * Inline failure card. `message` must already be user copy — pass `toUserMessage(err).message`
+ * (src/api/errors.ts), never `err.message`.
+ */
 export function ErrorBox({ message, onRetry, title = "Something went wrong" }: { message: string; onRetry?: () => void; title?: string }) {
   return (
-    <View style={[styles.card, { borderColor: C.red, gap: S.md }]}>
+    <View style={[styles.card, { borderColor: C.red, gap: S.md }]} accessibilityRole="alert">
       <StatusPill tone="bad" text={title} />
       <Body size={T.bodySmall} color={C.muted}>{message}</Body>
-      {onRetry ? <Button title="Retry" kind="secondary" icon="refresh-cw" onPress={onRetry} /> : null}
+      {onRetry ? <Button title="Try again" kind="secondary" icon="refresh-cw" onPress={onRetry} /> : null}
+    </View>
+  );
+}
+
+/**
+ * A permission the user turned off. Not an error: explain why, offer the system prompt while iOS
+ * still allows it, otherwise deep-link to Settings.
+ */
+export function PermissionNeeded({
+  icon,
+  title,
+  body,
+  canAsk,
+  onAsk,
+  secondary,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+  canAsk: boolean;
+  onAsk?: () => void;
+  secondary?: ReactNode;
+}) {
+  return (
+    <View style={{ alignItems: "center", gap: S.lg, padding: S.xl }}>
+      <Icon name={icon} size={28} color={C.amber} />
+      <Heading size={T.title} style={{ textAlign: "center" }}>{title}</Heading>
+      <Body color={C.muted} style={{ textAlign: "center" }}>{body}</Body>
+      {canAsk && onAsk ? (
+        <Button title="Allow access" icon="unlock" onPress={onAsk} style={{ alignSelf: "stretch" }} />
+      ) : (
+        <Button title="Open Settings" icon="settings" onPress={() => void Linking.openSettings().catch(() => undefined)} style={{ alignSelf: "stretch" }} />
+      )}
+      {secondary}
     </View>
   );
 }

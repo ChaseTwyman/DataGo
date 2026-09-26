@@ -1,11 +1,14 @@
 import { router } from "expo-router";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FlatList, Linking, Pressable, RefreshControl, View } from "react-native";
+import { toUserMessage } from "../../src/api/errors";
 import { useNearby } from "../../src/api/queries";
 import { sortForYou } from "../../src/lib/feed";
 import { useUserLocation } from "../../src/lib/useUserLocation";
 import { BountyCard } from "../../src/ui/BountyCard";
 import { Button, EmptyState, ErrorBox, Label, LoadingState, StatusPill } from "../../src/ui/components";
 import { C, S } from "../../src/ui/theme";
+
+export { RouteErrorBoundary as ErrorBoundary } from "../../src/ui/ErrorFallback";
 
 export default function ForYou() {
   const { loc, denied } = useUserLocation();
@@ -21,14 +24,19 @@ export default function ForYou() {
       ListHeaderComponent={
         <View style={{ gap: S.sm }}>
           {data.length ? <Label>{`${data.length} active · best match first`}</Label> : null}
-          {denied ? <StatusPill tone="warn" text="Location off · showing the demo area" icon="map-pin" /> : null}
-          {q.error ? <ErrorBox title="Could not load bounties" message={q.error.message} onRetry={() => void q.refetch()} /> : null}
+          {denied ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Location is off. Open Settings to turn it on." onPress={() => void Linking.openSettings().catch(() => undefined)}>
+              <StatusPill tone="warn" text="Location off · showing the demo area · tap for Settings" icon="map-pin" />
+            </Pressable>
+          ) : null}
+          {q.error && !q.data ? <ErrorBox title="Couldn't load bounties" message={toUserMessage(q.error).message} onRetry={() => void q.refetch()} /> : null}
+          {q.error && q.data ? <StatusPill tone="neutral" icon="wifi-off" text="Showing saved results · reconnecting…" /> : null}
         </View>
       }
       ListEmptyComponent={
         q.isLoading ? (
           <LoadingState label="Scanning for bounties…" />
-        ) : q.error ? null : (
+        ) : q.error && !q.data ? null : (
           <EmptyState
             icon="radio"
             title="No bounties nearby"

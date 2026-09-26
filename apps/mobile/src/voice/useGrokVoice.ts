@@ -7,6 +7,7 @@ import type { Protocol } from "@groundtruth/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { ENV } from "../lib/env";
+import { log } from "../lib/log";
 import { activateVoiceAudioSession, deactivateVoiceAudioSession, ensureMicPermission, MicStream, QueuePlayer } from "./audioEngine";
 import { buildInstructions, CAMERA_STATUS_RESPONSE_INSTRUCTIONS, safetyOpener, VOICE_TEST_INSTRUCTIONS } from "./instructions";
 import {
@@ -40,7 +41,9 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [latencies, setLatencies] = useState<number[]>([]);
   const [agentSpeaking, setAgentSpeaking] = useState(false);
+  /** Raw technical detail — shown only on the dev-only voice test screen. */
   const [error, setError] = useState<string | null>(null);
+  const [micDenied, setMicDenied] = useState(false);
   const [unknownEvents, setUnknownEvents] = useState<string[]>([]);
 
   const sessionRef = useRef<RealtimeVoiceSession | null>(null);
@@ -59,9 +62,14 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
     micRef.current = null;
     playerRef.current = null;
     sessionRef.current = null;
-    await mic?.stop();
-    await player?.dispose();
-    await deactivateVoiceAudioSession();
+    // Best effort: a failing native teardown must never surface as an unhandled rejection.
+    for (const step of [() => mic?.stop(), () => player?.dispose(), () => deactivateVoiceAudioSession()]) {
+      try {
+        await step();
+      } catch (e) {
+        log.handled("voice-teardown", e);
+      }
+    }
   }, []);
 
   /** Bumped by every connect/disconnect; an in-flight connect() bails out when it changes. */
@@ -86,10 +94,14 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
     const gen = ++genRef.current;
     const stale = () => genRef.current !== gen;
     setError(null);
+    setMicDenied(false);
     setCaptions([]);
     setStatus("connecting");
     try {
-      if (!(await ensureMicPermission())) throw new Error("Microphone permission denied");
+      if (!(await ensureMicPermission())) {
+        setMicDenied(true);
+        throw new Error("Microphone permission denied");
+      }
       if (stale()) return;
       await activateVoiceAudioSession();
       if (stale()) return;
@@ -129,7 +141,7 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
           void teardown();
           onEndRef.current?.(reason);
         },
-        log: (...a) => console.log(...a),
+        log: (...a) => log.debug("voice", ...a),
       });
       sessionRef.current = session;
 
@@ -145,6 +157,7 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
       session.connect(token.token, url);
     } catch (e) {
       if (stale()) return;
+      log.handled("voice-connect", e);
       setError(e instanceof Error ? e.message : String(e));
       setStatus("error");
       sessionRef.current?.close("connect failed");
@@ -160,5 +173,21 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
   const injectContext = useCallback((text: string, instructions?: string) => sessionRef.current?.injectContext(text, instructions), []);
 
   const lastLatency = latencies.length ? (latencies[latencies.length - 1] ?? null) : null;
-  return { status, captions, latencies, lastLatency, agentSpeaking, error, unknownEvents, connect, disconnect, setCameraStatus, injectContext };
+  /** Drop whatever is left of a failed/closed session and connect again. */
+  const reconnect = useCallback(async () => {
+    await disconnect("reconnect");
+    await connect();
+  }, [connect, disconnect]);
+
+  /**
+   * Contributor-facing voice state: null while fine; otherwise one calm line. Capture never depends
+   * on voice, so this is a notice, not an error.
+   */
+  const notice = micDenied
+    ? "Microphone is off — voice guide unavailable. Tap to capture."
+    : status === "error" || (status === "closed" && error !== null)
+      ? "Voice guide unavailable — tap to capture."
+      : null;
+
+  return { status, captions, latencies, lastLatency, agentSpeaking, error, notice, micDenied, unknownEvents, connect, disconnect, reconnect, setCameraStatus, injectContext };
 }

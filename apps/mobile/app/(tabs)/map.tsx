@@ -1,10 +1,11 @@
 /** Map-first home: bounty hex coverage + price badges (react-native-maps; Apple Maps on iOS). */
-import { cellsForCircle, cellToPolygon, formatCents, formatSurge, isHotSurge, type BountySummary } from "@groundtruth/shared";
+import { cellsForCircle, cellToPolygon, DEMO, formatCents, formatSurge, isHotSurge, type BountySummary } from "@groundtruth/shared";
 import { router } from "expo-router";
 import { useMemo, useRef } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polygon, type Region } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { toUserMessage } from "../../src/api/errors";
 import { useNearby } from "../../src/api/queries";
 import { sortForYou } from "../../src/lib/feed";
 import { useUserLocation } from "../../src/lib/useUserLocation";
@@ -24,6 +25,8 @@ function hexes(b: BountySummary) {
   }));
 }
 
+export { RouteErrorBoundary as ErrorBoundary } from "../../src/ui/ErrorFallback";
+
 export default function MapTab() {
   const insets = useSafeAreaInsets();
   const { loc, denied } = useUserLocation();
@@ -38,7 +41,10 @@ export default function MapTab() {
     ? { latitude: loc.lat, longitude: loc.lng, latitudeDelta: 0.03, longitudeDelta: 0.03 }
     : first
       ? { latitude: first.center_lat, longitude: first.center_lng, latitudeDelta: 0.03, longitudeDelta: 0.03 }
-      : undefined;
+      : denied || q.isFetched
+        ? // No fix and no bounties: show the demo area rather than an endless spinner.
+          { latitude: DEMO.lat, longitude: DEMO.lng, latitudeDelta: 0.06, longitudeDelta: 0.06 }
+        : undefined;
 
   const recenter = () => {
     if (loc) mapRef.current?.animateToRegion({ latitude: loc.lat, longitude: loc.lng, latitudeDelta: 0.03, longitudeDelta: 0.03 }, 400);
@@ -105,12 +111,26 @@ export default function MapTab() {
             <Label>{q.isLoading ? "Scanning…" : `${bounties.length} active nearby`}</Label>
           </View>
           <View style={{ gap: S.sm }}>
-            <IconButton icon="mic" label="Voice test" onPress={() => router.push("/voice-test")} />
+            {/* Debug screen: development builds only, never in Release. */}
+            {__DEV__ ? <IconButton icon="mic" label="Voice test" onPress={() => router.push("/voice-test")} /> : null}
             {loc ? <IconButton icon="navigation" label="Center on my location" onPress={recenter} /> : null}
           </View>
         </View>
-        {denied ? <StatusPill tone="warn" text="Location off · showing the demo area" icon="map-pin" style={{ backgroundColor: C.overlay }} /> : null}
-        {q.error ? <StatusPill tone="bad" text={q.error.message} style={{ backgroundColor: C.overlay }} /> : null}
+        {denied ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Location is off. Open Settings to turn it on." onPress={() => void Linking.openSettings().catch(() => undefined)}>
+            <StatusPill tone="warn" text="Location off · demo area · tap for Settings" icon="map-pin" style={{ backgroundColor: C.overlay }} />
+          </Pressable>
+        ) : null}
+        {q.error ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Retry loading bounties" onPress={() => void q.refetch()}>
+            <StatusPill
+              tone={q.data ? "neutral" : "warn"}
+              icon="wifi-off"
+              text={q.data ? "Reconnecting…" : `${toUserMessage(q.error).title} · tap to retry`}
+              style={{ backgroundColor: C.overlay }}
+            />
+          </Pressable>
+        ) : null}
       </View>
 
       {/* Primary action: the best bounty for you, one tap to its briefing. */}

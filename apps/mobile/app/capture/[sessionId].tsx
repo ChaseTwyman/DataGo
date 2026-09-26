@@ -7,23 +7,28 @@ import type { FieldQuestion } from "@groundtruth/shared";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Camera, useCameraPermission, usePhotoOutput, type CameraRef } from "react-native-vision-camera";
-import { api, ApiError } from "../../src/api";
+import { api } from "../../src/api";
+import { toUserMessage, UserFacingError } from "../../src/api/errors";
 import { CHALLENGE_LEAD_MS, runBurst, sensorSnapshot, toMediaItems, type CapturedFrame } from "../../src/capture/burst";
 import { ChecklistOverlay } from "../../src/capture/ChecklistOverlay";
 import { deviceInfo, photoCapturer, uploadJpeg } from "../../src/capture/nativeCapture";
 import { isPreCapture } from "../../src/capture/gateMachine";
+import { uploadFrames } from "../../src/capture/upload";
 import { useCaptureGate } from "../../src/capture/useCaptureGate";
+import { log } from "../../src/lib/log";
 import { useCaptureStore, type ActiveCapture } from "../../src/state/captureStore";
-import { Body, Button, Heading, Icon, IconButton, Label, StatusPill } from "../../src/ui/components";
+import { Body, Button, Heading, Icon, IconButton, Label, PermissionNeeded, StatusPill } from "../../src/ui/components";
 import { countdownLabel, indexLabel, tPlus } from "../../src/ui/telemetry";
 import { C, F, R, S, T, TOUCH, TRACK } from "../../src/ui/theme";
 import { CaptionList } from "../../src/voice/CaptionList";
 import { CAPTURE_DONE_RESPONSE_INSTRUCTIONS } from "../../src/voice/instructions";
 import type { ToolContext } from "../../src/voice/tools";
 import { useGrokVoice } from "../../src/voice/useGrokVoice";
+
+export { RouteErrorBoundary as ErrorBoundary } from "../../src/ui/ErrorFallback";
 
 export default function CaptureScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
@@ -32,7 +37,7 @@ export default function CaptureScreen() {
 
   const { hasPermission, canRequestPermission, requestPermission } = perm;
   useEffect(() => {
-    if (!hasPermission && canRequestPermission) void requestPermission();
+    if (!hasPermission && canRequestPermission) void requestPermission().catch(() => undefined);
   }, [hasPermission, canRequestPermission, requestPermission]);
 
   if (!active) {
@@ -47,12 +52,19 @@ export default function CaptureScreen() {
   }
   if (!perm.hasPermission) {
     return (
-      <View style={[styles.center, { padding: S.xl, gap: S.lg }]}>
-        <Icon name="camera-off" size={28} color={C.amber} />
-        <Heading size={T.title}>Camera access needed</Heading>
-        <Body color={C.muted}>GroundTruth only takes photos inside the app. Nothing is imported from your library.</Body>
-        <Button title="Allow camera" icon="camera" onPress={() => void perm.requestPermission()} />
-        <Button title="Cancel" kind="secondary" onPress={() => router.back()} />
+      <View style={styles.center}>
+        <PermissionNeeded
+          icon="camera-off"
+          title="Camera access needed"
+          body={
+            perm.canRequestPermission
+              ? "GroundTruth only takes photos inside the app. Nothing is imported from your library."
+              : "Camera access is off for GroundTruth. Turn it on in Settings, then come back — your session stays open for a few minutes."
+          }
+          canAsk={perm.canRequestPermission}
+          onAsk={() => void perm.requestPermission().catch(() => undefined)}
+          secondary={<Button title="Cancel" kind="secondary" onPress={() => (router.canGoBack() ? router.back() : router.replace("/foryou"))} style={{ alignSelf: "stretch" }} />}
+        />
       </View>
     );
   }
@@ -69,6 +81,9 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
   const gate = useCaptureGate({ protocol, bounty, session, cameraRef, cameraReady });
   const { state, send } = gate;
   const framesRef = useRef<CapturedFrame[]>([]);
+  /** Indexes of framesRef already uploaded (reset on every new burst). */
+  const uploadedRef = useRef<Set<number>>(new Set());
+  const [burstError, setBurstError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [voiceOn, setVoiceOn] = useState(true);
@@ -86,10 +101,13 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
     try {
       const frames = framesRef.current;
       const slots = session.uploads.slice(active.usedUploads, active.usedUploads + frames.length);
-      if (slots.length < frames.length) throw new Error("No upload slots left in this session — start a new capture.");
-      await Promise.all(frames.map((f, i) => uploadJpeg(f.uri, slots[i]!)));
+      if (slots.length < frames.length)
+        throw new UserFacingError("This session has no photo slots left. Go back to the briefing and start a new capture.", "Session used up", false);
+      // Per-frame retries with backoff; frames already uploaded are skipped on "Try again".
+      await uploadFrames(frames, slots, uploadedRef.current, (f, slot) => uploadJpeg(f.uri, slot));
       const raw = gate.device.raw.current;
-      if (raw.lat === null || raw.lng === null) throw new Error("No GPS fix");
+      if (raw.lat === null || raw.lng === null)
+        throw new UserFacingError("Waiting for a GPS fix. Stay where you took the photos and tap Submit again.", "No GPS fix");
       const res = await api.createSubmission({
         session_id: session.session_id,
         nonce: session.nonce,
@@ -114,8 +132,10 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
       send({ type: "UPLOAD_DONE" });
       router.replace(`/result/${res.submission_id}`);
     } catch (e) {
-      send({ type: "UPLOAD_FAILED", message: e instanceof Error ? e.message : String(e) });
-      setSubmitError(e instanceof ApiError ? `${e.message} (${e.code})` : e instanceof Error ? e.message : String(e));
+      // Frames stay in framesRef (and uploaded ones in uploadedRef): Submit retries without re-shooting.
+      log.handled("submit", e);
+      send({ type: "UPLOAD_FAILED", message: "submit failed" });
+      setSubmitError(toUserMessage(e).message);
     } finally {
       submitting.current = false;
     }
@@ -185,11 +205,15 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
           onFrame: () => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
         });
         framesRef.current = frames;
+        uploadedRef.current = new Set();
+        setBurstError(null);
         send({ type: "BURST_DONE" });
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         injectContext(`[capture_status] ${JSON.stringify({ captured: true, frames: frames.length })}`, CAPTURE_DONE_RESPONSE_INSTRUCTIONS);
       } catch (e) {
-        send({ type: "BURST_FAILED", message: e instanceof Error ? e.message : String(e) });
+        log.handled("burst", e);
+        setBurstError("The photos didn't come through. Hold steady — the shutter unlocks again once the scene is re-checked.");
+        send({ type: "BURST_FAILED", message: "burst failed" });
       }
     }, CHALLENGE_LEAD_MS);
     return () => {
@@ -205,6 +229,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
   };
 
   const ended = state.phase === "ended";
+  const voiceDown = voiceOn && !ended && (voice.micDenied || voice.status === "error" || voice.status === "closed");
   const inNotes = state.phase === "notes" || state.phase === "uploading";
   const showChallenge = state.phase === "challenge" || state.phase === "capturing";
 
@@ -235,8 +260,18 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
           <View style={{ alignItems: "center", gap: 4 }}>
             <MissionClock />
             <StatusPill
-              tone={voice.status === "open" ? (voice.agentSpeaking ? "info" : "ok") : voice.status === "error" ? "bad" : "neutral"}
-              text={voice.status === "open" ? (voice.agentSpeaking ? "Guide speaking" : "Guide listening") : `Voice ${voice.status}`}
+              tone={voice.status === "open" ? (voice.agentSpeaking ? "info" : "ok") : "neutral"}
+              text={
+                voice.status === "open"
+                  ? voice.agentSpeaking
+                    ? "Guide speaking"
+                    : "Guide listening"
+                  : !voiceOn
+                    ? "Voice off"
+                    : voiceDown
+                      ? "Voice unavailable"
+                      : "Voice connecting"
+              }
               icon={voice.status === "open" ? (voice.agentSpeaking ? "volume-2" : "mic") : voiceOn ? "radio" : "mic-off"}
               style={{ backgroundColor: C.scrim, alignSelf: "center" }}
             />
@@ -251,13 +286,23 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
           />
         </View>
         <View style={styles.captions}>
-          <CaptionList captions={voice.captions} max={3} />
-          {voice.error ? (
-            <View style={{ flexDirection: "row", gap: S.sm, marginTop: S.sm }}>
-              <Icon name="alert-octagon" size={15} color={C.red} style={{ marginTop: 2 }} />
-              <Text style={{ color: C.red, fontFamily: F.body, fontSize: 15, flex: 1 }}>Voice: {voice.error}</Text>
-            </View>
-          ) : null}
+          {voiceDown ? (
+            // Voice is optional: a calm notice + one action, never an error wall or alert.
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={voice.micDenied ? "Open Settings to allow the microphone" : "Reconnect the voice guide"}
+              onPress={() => (voice.micDenied ? void Linking.openSettings().catch(() => undefined) : void voice.reconnect())}
+              style={{ flexDirection: "row", gap: S.sm, alignItems: "flex-start" }}
+            >
+              <Icon name="mic-off" size={15} color={C.muted} style={{ marginTop: 3 }} />
+              <Text style={{ color: C.text, fontFamily: F.body, fontSize: 15, lineHeight: 21, flex: 1 }}>
+                {voice.notice ?? "Voice guide unavailable — tap to capture."}
+                <Text style={{ color: C.accent }}>{voice.micDenied ? "  Open Settings" : "  Reconnect"}</Text>
+              </Text>
+            </Pressable>
+          ) : (
+            <CaptionList captions={voice.captions} max={3} />
+          )}
         </View>
       </View>
 
@@ -299,9 +344,15 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
                 <Text style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: 17, lineHeight: 23, flex: 1 }}>{state.lastHint}</Text>
               </View>
             ) : null}
+            {gate.device.permission === "denied" ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Location is off. Open Settings." onPress={() => void Linking.openSettings().catch(() => undefined)}>
+                <StatusPill tone="warn" icon="map-pin" text="Location is off — captures need it. Tap to open Settings." />
+              </Pressable>
+            ) : null}
+            {burstError && state.phase !== "ready" ? <StatusPill tone="warn" icon="camera" text={burstError} /> : null}
             <Shutter locked={state.phase !== "ready"} reason={gate.lock} busy={showChallenge} onPress={onShutter} />
             <Label style={{ textAlign: "center" }}>
-              {`Say “capture” or tap · checks ${state.attempts}/${state.frameLimit}${state.error && state.phase !== "cant_verify" ? ` · ${state.error}` : ""}`}
+              {`${voiceDown || !voiceOn ? "Tap to capture" : "Say “capture” or tap"} · checks ${state.attempts}/${state.frameLimit}`}
             </Label>
           </View>
         )}

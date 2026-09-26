@@ -1,16 +1,20 @@
-/** Every endpoint the phone calls, typed on the shared contracts (PRD §16 + contracts/lists.ts). */
+/**
+ * Every endpoint the phone calls, typed on the shared contracts (PRD §16 + contracts/lists.ts).
+ * Responses are parsed with the LENIENT read-side schemas: an installed build must keep working when
+ * a newer server adds stages, reason codes or enum values (packages/shared/src/contracts/lenient.ts).
+ */
 import {
-  BountyDetailSchema,
-  CreateSessionResponseSchema,
-  CreateSubmissionResponseSchema,
-  DevSessionResponseSchema,
   FrameCheckResponseSchema,
-  HealthResponseSchema,
-  NearbyResponseSchema,
+  LenientBountyDetailSchema,
+  LenientCreateSessionResponseSchema,
+  LenientCreateSubmissionResponseSchema,
+  LenientDevSessionResponseSchema,
+  LenientHealthResponseSchema,
+  LenientNearbyResponseSchema,
+  LenientSubmissionWithMediaSchema,
+  LenientWalletResponseSchema,
   ProfileResponseSchema,
-  SubmissionWithMediaSchema,
   VoiceTokenResponseSchema,
-  WalletResponseSchema,
   type CreateSessionRequest,
   type CreateSubmissionRequest,
   type FrameCheckRequest,
@@ -20,18 +24,18 @@ import type { Http } from "./http";
 
 export function endpoints(http: Http) {
   return {
-    health: () => http.request("GET", "/api/health", { schema: HealthResponseSchema, auth: false, timeoutMs: 6000 }),
+    health: () => http.request("GET", "/api/health", { schema: LenientHealthResponseSchema, auth: false, timeoutMs: 6000 }),
     devSession: (userId?: string) =>
       http.request("POST", "/api/dev/session", {
-        schema: DevSessionResponseSchema,
+        schema: LenientDevSessionResponseSchema,
         auth: false,
         body: { role: "contributor", ...(userId ? { user_id: userId } : {}) },
       }),
     nearby: (lat: number, lng: number, radiusKm = 25) =>
-      http.request("GET", "/api/bounties/nearby", { schema: NearbyResponseSchema, query: { lat, lng, radius_km: radiusKm } }),
-    bounty: (id: string) => http.request("GET", `/api/bounties/${encodeURIComponent(id)}`, { schema: BountyDetailSchema }),
+      http.request("GET", "/api/bounties/nearby", { schema: LenientNearbyResponseSchema, query: { lat, lng, radius_km: radiusKm } }),
+    bounty: (id: string) => http.request("GET", `/api/bounties/${encodeURIComponent(id)}`, { schema: LenientBountyDetailSchema }),
     createSession: (body: CreateSessionRequest) =>
-      http.request("POST", "/api/capture/sessions", { schema: CreateSessionResponseSchema, body }),
+      http.request("POST", "/api/capture/sessions", { schema: LenientCreateSessionResponseSchema, body }),
     frameCheck: (body: FrameCheckRequest) =>
       http.request("POST", "/api/capture/frame-check", {
         schema: FrameCheckResponseSchema,
@@ -40,10 +44,10 @@ export function endpoints(http: Http) {
         timeoutMs: 12_000,
       }),
     createSubmission: (body: CreateSubmissionRequest) =>
-      http.request("POST", "/api/submissions", { schema: CreateSubmissionResponseSchema, body, mockVariant: true }),
+      http.request("POST", "/api/submissions", { schema: LenientCreateSubmissionResponseSchema, body, mockVariant: true }),
     submission: (id: string) =>
-      http.request("GET", `/api/submissions/${encodeURIComponent(id)}`, { schema: SubmissionWithMediaSchema }),
-    wallet: () => http.request("GET", "/api/me/wallet", { schema: WalletResponseSchema }),
+      http.request("GET", `/api/submissions/${encodeURIComponent(id)}`, { schema: LenientSubmissionWithMediaSchema }),
+    wallet: () => http.request("GET", "/api/me/wallet", { schema: LenientWalletResponseSchema }),
     voiceToken: () => http.request("POST", "/api/voice/token", { schema: VoiceTokenResponseSchema, body: {} }),
     profile: (body: ProfileRequest) => http.request("POST", "/api/profile", { schema: ProfileResponseSchema, body }),
   };

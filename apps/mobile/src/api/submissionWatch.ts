@@ -10,7 +10,6 @@ import {
   reasonKind,
   type Protocol,
   type ReasonCode,
-  type SubmissionRow,
 } from "@groundtruth/shared";
 
 export const FINAL_STATUSES = new Set(["accepted", "rejected", "needs_review"]);
@@ -21,8 +20,13 @@ export interface WatchDeps<T extends { status: string }> {
   /** Returns an unsubscribe function; null when realtime isn't available. */
   subscribe: ((onRow: (row: T) => void) => () => void) | null;
   onUpdate: (row: T) => void;
-  onError?: (e: unknown) => void;
+  /** Every failed fetch (the watcher keeps retrying unless this returns "stop"). */
+  onError?: (e: unknown) => void | "stop";
   intervalMs?: number;
+  /** Cap for the error backoff (poll interval doubles per consecutive failure). */
+  maxBackoffMs?: number;
+  /** Poll interval while realtime is subscribed (safety net for missed/dead channels). */
+  backstopMs?: number;
   setTimeout?: (fn: () => void, ms: number) => unknown;
   clearTimeout?: (h: unknown) => void;
 }
@@ -35,6 +39,7 @@ export function watchSubmission<T extends { status: string }>(d: WatchDeps<T>): 
   let timer: unknown = null;
   let unsubscribe: (() => void) | null = null;
   let done = false;
+  let failures = 0;
 
   const deliver = (row: T) => {
     if (stopped) return;
@@ -48,12 +53,25 @@ export function watchSubmission<T extends { status: string }>(d: WatchDeps<T>): 
   const poll = async () => {
     timer = null;
     if (stopped) return;
+    const base = d.intervalMs ?? 1000;
     try {
       deliver(await d.fetchOnce());
+      failures = 0;
     } catch (e) {
-      d.onError?.(e);
+      failures++;
+      if (d.onError?.(e) === "stop") {
+        stop();
+        return;
+      }
     }
-    if (!stopped && !done && !unsubscribe) timer = setT(() => void poll(), d.intervalMs ?? 1000);
+    // Errors back off; with realtime a slow backstop poll still runs, because a silently dead
+    // channel would otherwise leave the result screen on "Verifying…" forever.
+    const wait = failures
+      ? Math.min(base * 2 ** failures, d.maxBackoffMs ?? 10_000)
+      : unsubscribe
+        ? (d.backstopMs ?? 5000)
+        : base;
+    if (!stopped && !done) timer = setT(() => void poll(), wait);
   };
 
   function stop() {
@@ -83,12 +101,13 @@ export interface ResultView {
  * which check fired — so the screen can't be used to learn how to beat verification.
  */
 export function resultView(
-  row: Pick<SubmissionRow, "status" | "reason_codes" | "payout_cents">,
+  row: { status: string; reason_codes: readonly string[]; payout_cents: number | null },
   protocol: Protocol | null,
   opts: { sessionOpen: boolean; serverRetryable?: boolean } = { sessionOpen: false },
 ): ResultView {
-  const codes = row.reason_codes as ReasonCode[];
-  const label = (code: ReasonCode) =>
+  // May contain codes this build doesn't know (newer server): the shared helpers treat those neutrally.
+  const codes = [...row.reason_codes] as (ReasonCode | (string & {}))[];
+  const label = (code: string) =>
     code.startsWith("MISSING_ELEMENT:")
       ? protocol?.capture.required_elements.find((e) => e.id === code.slice("MISSING_ELEMENT:".length))?.label
       : undefined;

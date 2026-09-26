@@ -2,11 +2,13 @@
 import { formatCents, formatSurge, type CellPrice } from "@groundtruth/shared";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { api, ApiError } from "../../src/api";
+import { api } from "../../src/api";
+import { toUserMessage } from "../../src/api/errors";
 import { useBounty } from "../../src/api/queries";
-import { preciseFix } from "../../src/lib/useUserLocation";
+import { log } from "../../src/lib/log";
+import { LocationPermissionError, preciseFix } from "../../src/lib/useUserLocation";
 import { useCaptureStore } from "../../src/state/captureStore";
 import { Badge, Body, Button, Divider, ErrorBox, Heading, Icon, Label, LoadingState, Money, Muted, Readout, Section, SponsorLine, StatusPill, SurgeBadge } from "../../src/ui/components";
 import { indexLabel, timeLeftReadout } from "../../src/ui/telemetry";
@@ -16,18 +18,21 @@ function bestCell(cov: CellPrice[]): CellPrice | null {
   return [...cov].filter((c) => !c.paused).sort((a, b) => b.price_cents - a.price_cents)[0] ?? null;
 }
 
+export { RouteErrorBoundary as ErrorBoundary } from "../../src/ui/ErrorFallback";
+
 export default function BountyBriefing() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const q = useBounty(id);
   const put = useCaptureStore((s) => s.put);
   const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<{ text: string; settings: boolean } | null>(null);
 
-  if (q.error)
+  if (q.error && !q.data)
     return (
-      <View style={{ flex: 1, backgroundColor: C.bg, padding: S.lg }}>
-        <ErrorBox title="Could not load briefing" message={q.error.message} onRetry={() => void q.refetch()} />
+      <View style={{ flex: 1, backgroundColor: C.bg, padding: S.lg, gap: S.md }}>
+        <ErrorBox title="Couldn't load the briefing" message={toUserMessage(q.error).message} onRetry={() => void q.refetch()} />
+        <Button title="Back to bounties" kind="secondary" icon="arrow-left" onPress={() => (router.canGoBack() ? router.back() : router.replace("/foryou"))} />
       </View>
     );
   const b = q.data;
@@ -51,7 +56,8 @@ export default function BountyBriefing() {
       put({ session, bounty: b });
       router.push(`/capture/${session.session_id}`);
     } catch (e) {
-      setStartError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e));
+      log.handled("start-capture", e);
+      setStartError({ text: toUserMessage(e).message, settings: e instanceof LocationPermissionError });
     } finally {
       setStarting(false);
     }
@@ -137,7 +143,10 @@ export default function BountyBriefing() {
 
       {/* sticky primary action */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + S.md }]}>
-        {startError ? <StatusPill tone="bad" text={startError} /> : null}
+        {startError ? <StatusPill tone={startError.settings ? "warn" : "bad"} text={startError.text} icon={startError.settings ? "map-pin" : undefined} /> : null}
+        {startError?.settings ? (
+          <Button title="Open Settings" kind="secondary" icon="settings" onPress={() => void Linking.openSettings().catch(() => undefined)} />
+        ) : null}
         <Button
           title={allPaused ? "Captures paused" : "Start capture"}
           icon={allPaused ? "pause-circle" : "aperture"}

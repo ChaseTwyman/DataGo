@@ -29,6 +29,11 @@ export interface HttpOptions {
   getToken: () => Promise<string | null> | string | null;
   getMockVariant?: () => MockVariant | null;
   timeoutMs?: number;
+  /**
+   * Called once when an authenticated call gets a 401 (expired/revoked token). Resolve true after
+   * obtaining a fresh token and the call is retried once, silently; false/throw → the 401 surfaces.
+   */
+  reauth?: () => Promise<boolean>;
 }
 
 export interface RequestOptions<S extends z.ZodType> {
@@ -55,6 +60,22 @@ export class Http {
   constructor(private readonly o: HttpOptions) {}
 
   async request<S extends z.ZodType>(method: string, path: string, r: RequestOptions<S>): Promise<z.infer<S>> {
+    try {
+      return await this.once(method, path, r);
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 401 || r.auth === false || !this.o.reauth) throw e;
+      let renewed = false;
+      try {
+        renewed = await this.o.reauth();
+      } catch {
+        renewed = false;
+      }
+      if (!renewed) throw e;
+      return this.once(method, path, r);
+    }
+  }
+
+  private async once<S extends z.ZodType>(method: string, path: string, r: RequestOptions<S>): Promise<z.infer<S>> {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (r.body !== undefined) headers["Content-Type"] = "application/json";
     if (r.auth !== false) {

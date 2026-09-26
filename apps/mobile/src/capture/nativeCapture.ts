@@ -9,6 +9,7 @@ import { File, UploadType } from "expo-file-system";
 import { Platform } from "react-native";
 import type { CameraPhotoOutput } from "react-native-vision-camera";
 import type { CapturedFrame } from "./burst";
+import { UploadError } from "./upload";
 
 const toFileUri = (p: string) => (p.includes("://") ? p : `file://${p}`);
 
@@ -41,12 +42,18 @@ export function photoCapturer(output: CameraPhotoOutput) {
 
 export async function uploadJpeg(uri: string, target: SignedUpload): Promise<void> {
   const file = new File(uri);
-  const res = await file.upload(target.signed_url, {
-    httpMethod: "PUT",
-    uploadType: UploadType.BINARY_CONTENT,
-    headers: { "Content-Type": "image/jpeg" },
-  });
-  if (res.status < 200 || res.status >= 300) throw new Error(`upload failed (${res.status}): ${res.body.slice(0, 200)}`);
+  let res: { status: number; body: string };
+  try {
+    res = await file.upload(target.signed_url, {
+      httpMethod: "PUT",
+      uploadType: UploadType.BINARY_CONTENT,
+      headers: { "Content-Type": "image/jpeg" },
+    });
+  } catch (e) {
+    // Transport failure (offline, dropped connection): status 0 → retryable.
+    throw new UploadError(0, e instanceof Error ? e.message : "");
+  }
+  if (res.status < 200 || res.status >= 300) throw new UploadError(res.status, (res.body ?? "").slice(0, 200));
 }
 
 export function deviceInfo(): DeviceInfo {

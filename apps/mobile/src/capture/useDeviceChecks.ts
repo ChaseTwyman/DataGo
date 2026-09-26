@@ -60,7 +60,12 @@ export function useDeviceChecks(protocol: Protocol, bounty: Pick<BountyDetail, "
     };
 
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      let status: Location.PermissionStatus;
+      try {
+        status = (await Location.requestForegroundPermissionsAsync()).status;
+      } catch {
+        status = Location.PermissionStatus.DENIED;
+      }
       if (cancelled) return;
       setPermission(status === "granted" ? "granted" : "denied");
       if (status !== "granted") return;
@@ -81,7 +86,10 @@ export function useDeviceChecks(protocol: Protocol, bounty: Pick<BountyDetail, "
         },
       );
       if (cancelled) locSub.remove();
-    })();
+    })().catch(() => {
+      // Location Services unavailable: the gate keeps showing "Waiting for GPS" (never unlocks).
+      if (!cancelled) setPermission("denied");
+    });
 
     DeviceMotion.setUpdateInterval(100);
     const motionSub = DeviceMotion.addListener((m) => {

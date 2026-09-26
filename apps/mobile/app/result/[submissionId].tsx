@@ -4,11 +4,12 @@
  * integrity reject with the neutral message only.
  */
 import {
-  ChecksSchema,
+  LenientChecksSchema,
+  lenientArray,
+  openString,
   pendingChecks,
-  ReasonCodeSchema,
-  SubmissionStatusSchema,
-  type StageResult,
+  stageLabel,
+  type LenientStageResult,
   type StageStatus,
 } from "@groundtruth/shared";
 import * as Haptics from "expo-haptics";
@@ -17,8 +18,10 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { z } from "zod";
-import { api } from "../../src/api";
+import { api, ApiError } from "../../src/api";
+import { isTransient, toUserMessage } from "../../src/api/errors";
 import { resultView, watchSubmission, type ResultKind } from "../../src/api/submissionWatch";
+import { log } from "../../src/lib/log";
 import { getSupabase } from "../../src/lib/supabase";
 import { preciseFix } from "../../src/lib/useUserLocation";
 import { useApp } from "../../src/state/appStore";
@@ -28,16 +31,24 @@ import { indexLabel } from "../../src/ui/telemetry";
 import { C, F, S, T } from "../../src/ui/theme";
 import { useCountUp } from "../../src/ui/useCountUp";
 
-/** The subset of a submission row the phone renders (realtime rows are parsed leniently). */
+/**
+ * The subset of a submission row the phone renders. Lenient on purpose (API responses AND realtime
+ * rows): stages, statuses and reason codes added by a newer server render generically.
+ */
 const ViewRowSchema = z.object({
-  status: SubmissionStatusSchema,
-  checks: ChecksSchema.catch([]),
-  reason_codes: z.array(ReasonCodeSchema).catch([]),
+  status: openString(),
+  checks: LenientChecksSchema,
+  reason_codes: lenientArray(z.string()),
   payout_cents: z.number().int().nullable().catch(null),
-  retryable: z.boolean().optional(),
-  bounty_title: z.string().nullable().optional(),
+  retryable: z.boolean().optional().catch(undefined),
+  bounty_title: z.string().nullable().optional().catch(undefined),
 });
 type ViewRow = z.infer<typeof ViewRowSchema>;
+
+/** After this long still "verifying", reassure and let the contributor leave. */
+const LONG_WAIT_MS = 90_000;
+
+const UNKNOWN_STAGE_TONE = { tone: "neutral" as Tone, text: "Checked" };
 
 const STAGE_TONE: Record<StageStatus, { tone: Tone; text: string }> = {
   pending: { tone: "neutral", text: "Waiting" },
@@ -58,12 +69,23 @@ const HEADER: Record<ResultKind, { tone: Tone; icon: IconName }> = {
   integrity_reject: { tone: "bad", icon: "x-circle" },
 };
 
+export { RouteErrorBoundary as ErrorBoundary } from "../../src/ui/ErrorFallback";
+
 export default function ResultScreen() {
   const { submissionId } = useLocalSearchParams<{ submissionId: string }>();
   const insets = useSafeAreaInsets();
   const realtime = useApp((s) => s.health?.realtime === true && s.authMode === "supabase");
   const [row, setRow] = useState<ViewRow | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  /** Background fetch trouble: shown as a subtle "reconnecting" line while retries continue. */
+  const [reconnecting, setReconnecting] = useState(false);
+  /** A failure retrying can't fix (e.g. the submission doesn't exist): calm message + way out. */
+  const [fatal, setFatal] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), LONG_WAIT_MS);
+    return () => clearTimeout(t);
+  }, []);
   const capture = useCaptureStore(() => (submissionId ? findCaptureBySubmission(submissionId) : null));
   const put = useCaptureStore((s) => s.put);
   const [retrying, setRetrying] = useState(false);
@@ -71,7 +93,11 @@ export default function ResultScreen() {
   useEffect(() => {
     if (!submissionId) return;
     return watchSubmission<ViewRow>({
-      fetchOnce: async () => ViewRowSchema.parse(await api.submission(submissionId)),
+      fetchOnce: async () => {
+        const parsed = ViewRowSchema.safeParse(await api.submission(submissionId));
+        if (!parsed.success) throw new ApiError(200, "CONTRACT_MISMATCH", "submission view row");
+        return parsed.data;
+      },
       subscribe: realtime
         ? (onRow) => {
             const sb = getSupabase();
@@ -86,10 +112,18 @@ export default function ResultScreen() {
           }
         : null,
       onUpdate: (r) => {
-        setErr(null);
+        setReconnecting(false);
         setRow((prev) => ({ ...r, retryable: r.retryable ?? prev?.retryable, bounty_title: r.bounty_title ?? prev?.bounty_title }));
       },
-      onError: (e) => setErr(e instanceof Error ? e.message : String(e)),
+      onError: (e) => {
+        log.handled("result-watch", e);
+        if (isTransient(e)) {
+          setReconnecting(true);
+          return;
+        }
+        setFatal(toUserMessage(e).message);
+        return "stop";
+      },
     });
   }, [realtime, submissionId]);
 
@@ -107,13 +141,14 @@ export default function ResultScreen() {
     );
   }, [view.kind]);
 
-  const checks: StageResult[] = row?.checks.length ? row.checks : pendingChecks();
+  const checks: LenientStageResult[] = row?.checks.length ? row.checks : pendingChecks();
 
   const retry = async () => {
     if (!capture) return router.replace("/foryou");
     if (canRetryInSession(capture)) return router.replace(`/capture/${capture.session.session_id}`);
     // Server issues one upload slot per frame and one submission per session: a retry opens a new session.
     setRetrying(true);
+    setRetryError(null);
     try {
       const b = capture.bounty;
       const fix = await preciseFix();
@@ -121,7 +156,8 @@ export default function ResultScreen() {
       put({ session, bounty: b });
       router.replace(`/capture/${session.session_id}`);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      log.handled("result-retry", e);
+      setRetryError(toUserMessage(e).message);
     } finally {
       setRetrying(false);
     }
@@ -165,11 +201,18 @@ export default function ResultScreen() {
           </View>
         </Section>
 
-        {err ? <StatusPill tone="warn" text={`Connection: ${err}`} icon="wifi-off" /> : null}
+        {reconnecting && !fatal ? <StatusPill tone="neutral" text="Reconnecting… your result is safe" icon="wifi-off" /> : null}
+        {fatal ? <StatusPill tone="warn" text={fatal} icon="info" /> : null}
+        {slow && view.kind === "verifying" && !fatal ? (
+          <Body color={C.muted} size={T.bodySmall}>
+            Still verifying — this can take a couple of minutes. You can leave this screen; your wallet updates when it&apos;s done.
+          </Body>
+        ) : null}
       </ScrollView>
 
-      {view.kind !== "verifying" ? (
+      {view.kind !== "verifying" || fatal || slow ? (
         <View style={[styles.footer, { paddingBottom: insets.bottom + S.md }]}>
+          {retryError ? <StatusPill tone="bad" text={retryError} /> : null}
           {view.kind === "protocol_reject" && view.retryable ? (
             <Button title="Retry capture" icon="rotate-ccw" onPress={() => void retry()} loading={retrying} />
           ) : null}
@@ -185,7 +228,7 @@ export default function ResultScreen() {
   );
 }
 
-function StageRow({ stage, index, hideDetail }: { stage: StageResult; index: number; hideDetail: boolean }) {
+function StageRow({ stage, index, hideDetail }: { stage: LenientStageResult; index: number; hideDetail: boolean }) {
   const fade = useRef(new Animated.Value(0)).current;
   const status = stage.status;
   useEffect(() => {
@@ -193,12 +236,14 @@ function StageRow({ stage, index, hideDetail }: { stage: StageResult; index: num
     Animated.timing(fade, { toValue: 1, duration: 350, delay: index * 60, useNativeDriver: true }).start();
   }, [fade, index, status]);
   // Integrity rejects never reveal which layer fired: every finished stage reads the same.
-  const t = hideDetail ? { tone: "neutral" as Tone, text: status === "pending" || status === "running" ? "…" : "Checked" } : STAGE_TONE[status];
+  const t = hideDetail
+    ? { tone: "neutral" as Tone, text: status === "pending" || status === "running" ? "…" : "Checked" }
+    : (STAGE_TONE[status as StageStatus] ?? UNKNOWN_STAGE_TONE);
   return (
     <Animated.View style={{ opacity: fade, flexDirection: "row", alignItems: "center", minHeight: 52, gap: S.md, paddingVertical: S.sm }}>
       <Text style={styles.index}>{indexLabel(index)}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: T.body }}>{stage.label}</Text>
+        <Text style={{ color: C.text, fontFamily: F.bodyMedium, fontSize: T.body }}>{stageLabel(stage.stage, stage.label)}</Text>
         {!hideDetail && stage.status === "waived" ? <Label>Weather check waived (demo)</Label> : null}
       </View>
       {status === "running" && !hideDetail ? <ActivityIndicator color={C.blue} size="small" /> : null}

@@ -2,13 +2,16 @@ import { type MockVariant } from "@groundtruth/shared";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { toUserMessage } from "../../src/api/errors";
 import { useWallet } from "../../src/api/queries";
 import { useApp } from "../../src/state/appStore";
-import { Divider, EmptyState, ErrorBox, Icon, Label, LoadingState, Money, Muted, Readout, Section } from "../../src/ui/components";
+import { Divider, EmptyState, ErrorBox, Icon, Label, LoadingState, Money, Muted, Readout, Section, StatusPill } from "../../src/ui/components";
 import { C, F, R, S, T, TOUCH } from "../../src/ui/theme";
 import { useCountUp } from "../../src/ui/useCountUp";
 
 const VARIANTS: MockVariant[] = ["default", "screen_recapture", "missing_element"];
+
+export { RouteErrorBoundary as ErrorBoundary } from "../../src/ui/ErrorFallback";
 
 export default function Wallet() {
   const q = useWallet();
@@ -51,14 +54,15 @@ export default function Wallet() {
               <Readout label="Entries" value={String(q.data.entries.length)} size={28} />
             </View>
           ) : null}
-          {q.error ? <ErrorBox title="Could not load wallet" message={q.error.message} onRetry={() => void q.refetch()} /> : null}
+          {q.error && !q.data ? <ErrorBox title="Couldn't load wallet" message={toUserMessage(q.error).message} onRetry={() => void q.refetch()} /> : null}
+          {q.error && q.data ? <StatusPill tone="neutral" icon="wifi-off" text="Showing last balance · reconnecting…" /> : null}
           <Section title="History" />
         </View>
       }
       ListEmptyComponent={
         q.isLoading ? (
           <LoadingState label="Loading ledger…" />
-        ) : q.error ? null : (
+        ) : q.error && !q.data ? null : (
           <EmptyState icon="inbox" title="No payouts yet" body="Accepted observations are credited here the moment verification passes." />
         )
       }

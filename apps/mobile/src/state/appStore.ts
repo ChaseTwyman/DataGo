@@ -1,4 +1,4 @@
-import type { HealthResponse, MockVariant } from "@groundtruth/shared";
+import type { LenientHealthResponse as HealthResponse, MockVariant } from "@groundtruth/shared";
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 

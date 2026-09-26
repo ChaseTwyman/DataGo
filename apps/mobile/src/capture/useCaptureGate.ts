@@ -5,7 +5,7 @@
  * The shutter unlocks only on the server's `gate_passed`; failures back off (gateMachine) and
  * never unlock.
  */
-import type { BountyDetail, CreateSessionResponse, Protocol } from "@groundtruth/shared";
+import type { LenientBountyDetail as BountyDetail, LenientCreateSessionResponse as CreateSessionResponse, Protocol } from "@groundtruth/shared";
 import * as Haptics from "expo-haptics";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";

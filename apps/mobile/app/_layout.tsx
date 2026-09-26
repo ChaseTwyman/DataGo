@@ -5,12 +5,26 @@ import { useEffect } from "react";
 import { ActivityIndicator, Image, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { boot } from "../src/api";
+import { isTransient } from "../src/api/errors";
 import { useApp } from "../src/state/appStore";
 import { ErrorBox, Label, Muted } from "../src/ui/components";
+import { RouteErrorBoundary } from "../src/ui/ErrorFallback";
 import { useAppFonts } from "../src/ui/fonts";
 import { C, F, S, TRACK } from "../src/ui/theme";
 
-const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 10_000 } } });
+/** Render crashes anywhere below the root show a calm fallback with "Try again" (Expo Router). */
+export const ErrorBoundary = RouteErrorBoundary;
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 10_000,
+      // Transient failures (offline, 5xx, timeouts) retry quietly with backoff; 4xx do not.
+      retry: (count, err) => count < 3 && isTransient(err),
+      retryDelay: (n) => Math.min(1000 * 2 ** n, 8000),
+    },
+  },
+});
 
 const theme = {
   ...DarkTheme,
@@ -35,8 +49,8 @@ function BootGate({ children }: { children: React.ReactNode }) {
       </View>
       {bootError ? (
         <>
-          <ErrorBox title="No link to GroundTruth" message={bootError} onRetry={() => void boot()} />
-          <Muted>Check EXPO_PUBLIC_API_BASE_URL (laptop LAN IP) and that `pnpm dev:web` is running.</Muted>
+          <ErrorBox title="Can't connect" message={bootError} onRetry={() => void boot()} />
+          {__DEV__ ? <Muted>Dev: check EXPO_PUBLIC_API_BASE_URL and that the API is running.</Muted> : null}
         </>
       ) : (
         <View style={{ alignItems: "center", gap: S.md }} accessibilityLiveRegion="polite">

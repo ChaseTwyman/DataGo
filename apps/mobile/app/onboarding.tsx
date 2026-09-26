@@ -5,11 +5,13 @@
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Image, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AudioManager } from "react-native-audio-api";
 import { useCameraPermission } from "react-native-vision-camera";
 import { api } from "../src/api";
+import { toUserMessage } from "../src/api/errors";
+import { log } from "../src/lib/log";
 import { useApp } from "../src/state/appStore";
 import { Body, Button, Divider, Heading, Icon, Label, Muted, Section, StatusPill, type IconName } from "../src/ui/components";
 import { C, F, R, S, T, TOUCH } from "../src/ui/theme";
@@ -17,6 +19,8 @@ import { C, F, R, S, T, TOUCH } from "../src/ui/theme";
 type Perm = "unknown" | "granted" | "denied";
 
 const MARK = require("../assets/splash-icon.png") as number;
+
+export { RouteErrorBoundary as ErrorBoundary } from "../src/ui/ErrorFallback";
 
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
@@ -32,10 +36,25 @@ export default function Onboarding() {
   const [err, setErr] = useState<string | null>(null);
   const setOnboarded = useApp((s) => s.setOnboarded);
 
+  // Each prompt independently: one failing (or throwing) must not skip the others.
   const askAll = async () => {
-    await cam.requestPermission();
-    setMic((await AudioManager.requestRecordingPermissions()) === "Granted" ? "granted" : "denied");
-    setLoc((await Location.requestForegroundPermissionsAsync()).status === "granted" ? "granted" : "denied");
+    try {
+      await cam.requestPermission();
+    } catch (e) {
+      log.handled("perm-camera", e);
+    }
+    try {
+      setMic((await AudioManager.requestRecordingPermissions()) === "Granted" ? "granted" : "denied");
+    } catch (e) {
+      log.handled("perm-mic", e);
+      setMic("denied");
+    }
+    try {
+      setLoc((await Location.requestForegroundPermissionsAsync()).status === "granted" ? "granted" : "denied");
+    } catch (e) {
+      log.handled("perm-location", e);
+      setLoc("denied");
+    }
   };
 
   const finish = async () => {
@@ -52,7 +71,8 @@ export default function Onboarding() {
       setOnboarded(true);
       router.replace("/map");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      log.handled("onboarding", e);
+      setErr(toUserMessage(e).message);
     } finally {
       setSaving(false);
     }
@@ -60,6 +80,7 @@ export default function Onboarding() {
 
   const camState: Perm = cam.hasPermission ? "granted" : cam.canRequestPermission ? "unknown" : "denied";
   const permsOk = cam.hasPermission && mic === "granted" && loc === "granted";
+  const anyDenied = camState === "denied" || mic === "denied" || loc === "denied";
   const ready = adult && consent;
 
   return (
@@ -76,6 +97,12 @@ export default function Onboarding() {
           <PermRow icon="mic" label="Microphone" detail="Voice field guide" state={mic} />
           <PermRow icon="map-pin" label="Location" detail="Only while using the app" state={loc} />
           <Button title={permsOk ? "Access granted" : "Allow access"} kind={permsOk ? "secondary" : "primary"} icon={permsOk ? "check" : "unlock"} onPress={() => void askAll()} disabled={permsOk} />
+          {anyDenied ? (
+            <View style={{ gap: S.sm }}>
+              <Muted>iOS won't ask again for a permission you turned down. You can switch it on in Settings — or continue, and turn it on later.</Muted>
+              <Button title="Open Settings" kind="secondary" icon="settings" onPress={() => void Linking.openSettings().catch(() => undefined)} />
+            </View>
+          ) : null}
         </Section>
 
         <Section index={1} title="Eligibility and license">

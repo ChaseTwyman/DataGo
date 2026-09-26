@@ -1,4 +1,4 @@
-import type { BountyDetail, CreateSessionResponse } from "@groundtruth/shared";
+import type { LenientBountyDetail as BountyDetail, LenientCreateSessionResponse as CreateSessionResponse } from "@groundtruth/shared";
 import { create } from "zustand";
 
 export interface ActiveCapture {

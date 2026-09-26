@@ -2,6 +2,7 @@
  * M0.5 voice spike: connect → talk → hear Grok. Shows both captions, the speech-end → first-audio
  * latency for every turn, and any unknown server event types (to adapt the parser on device).
  */
+import { Redirect } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 import { Body, Button, Divider, Readout, Section, StatusPill, type Tone } from "../src/ui/components";
 import { C, S } from "../src/ui/theme";
@@ -10,7 +11,15 @@ import { useGrokVoice } from "../src/voice/useGrokVoice";
 
 const TONE: Record<string, Tone> = { idle: "neutral", connecting: "info", open: "ok", closed: "neutral", error: "bad" };
 
+export { RouteErrorBoundary as ErrorBoundary } from "../src/ui/ErrorFallback";
+
+/** Developer diagnostics: unreachable in Release builds (no entry point, and a deep link bounces). */
 export default function VoiceTest() {
+  if (!__DEV__) return <Redirect href="/map" />;
+  return <VoiceTestInner />;
+}
+
+function VoiceTestInner() {
   const v = useGrokVoice({ mode: { kind: "test" } });
   const live = v.status === "open" || v.status === "connecting";
   const avg = v.latencies.length ? Math.round(v.latencies.reduce((a, b) => a + b, 0) / v.latencies.length) : null;

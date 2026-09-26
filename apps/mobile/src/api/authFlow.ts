@@ -3,7 +3,7 @@
  * - health.backend === "supabase" and a Supabase URL is configured → anonymous Supabase sign-in.
  * - otherwise → POST /api/dev/session, reusing the persisted dev user id.
  */
-import type { HealthResponse } from "@groundtruth/shared";
+import type { LenientHealthResponse as HealthResponse } from "@groundtruth/shared";
 
 export interface AuthDeps {
   health: () => Promise<HealthResponse>;
