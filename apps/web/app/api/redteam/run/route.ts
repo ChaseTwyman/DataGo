@@ -8,7 +8,9 @@ import { runAttack } from "@/lib/redteam";
 import { getStorage } from "@/lib/storage";
 import { liveDeps } from "@/lib/verification/deps";
 
-export const maxDuration = 120;
+// Imagine (~15 s) + grok-4.7 verification (~30 s locally, more on Vercel; the SDK retries a
+// timed-out call once). 120 s timed out on Vercel; 300 is the Hobby maximum.
+export const maxDuration = 300;
 
 /** Runs one attack through the pipeline (skipping only session integrity). Writes redteam_runs only. */
 export const POST = route(async (req) => {
