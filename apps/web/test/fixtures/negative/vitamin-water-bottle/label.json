@@ -1,0 +1,8 @@
+{
+  "expected_status": "rejected",
+  "notes": "Pulled from submission cecbc0a4 (was rejected: GATE_DEGRADED, DEMO_WAIVER, STAGE_ERROR, REVIEWER_REJECTED).",
+  "lat": 33.7744867010612,
+  "lng": -84.3966378746536,
+  "captured_at": "2026-09-26T12:41:48.078Z",
+  "protocol": "street-flood-depth"
+}
