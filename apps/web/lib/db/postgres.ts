@@ -38,9 +38,30 @@ export function normalizeDatabaseUrl(url: string): { url: string; ssl: "require"
   return { url: u.toString(), ssl };
 }
 
+/**
+ * Repos pass json/jsonb params already stringified (`json()` in ./types, the same for both drivers).
+ * postgres.js describes each statement, sees a jsonb parameter, and JSON.stringifies it again, so
+ * `[...]` lands as the jsonb *string* "[...]". PGlite does not do this, so the tests never saw it;
+ * it surfaced on hosted Supabase as "submissions.media must be an array". Strings pass through.
+ */
+export const jsonParamSerializer = (x: unknown): string =>
+  typeof x === "string" ? x : JSON.stringify(x);
+
+const JSON_TYPES = {
+  jsonb: { to: 3802, from: [3802], serialize: jsonParamSerializer, parse: (s: string) => JSON.parse(s) as unknown },
+  json: { to: 114, from: [114], serialize: jsonParamSerializer, parse: (s: string) => JSON.parse(s) as unknown },
+};
+
 export function openPostgres(rawUrl: string): { db: Db; close(): Promise<void> } {
   const { url, ssl } = normalizeDatabaseUrl(rawUrl);
   // prepare:false: Supabase's transaction pooler (port 6543) does not support prepared statements.
-  const sql = postgres(url, { max: 5, prepare: false, ssl, idle_timeout: 20, connect_timeout: 10 });
+  const sql = postgres(url, {
+    max: 5,
+    prepare: false,
+    ssl,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    types: JSON_TYPES,
+  });
   return { db: wrap(sql, sql), close: () => sql.end({ timeout: 5 }) };
 }
