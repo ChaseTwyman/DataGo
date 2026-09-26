@@ -47,6 +47,8 @@ export const LIMITS = {
   // Up to 1 image generation + 4 vision calls each.
   selfCheck: { name: "self_check", max: 10, windowSeconds: HOUR, what: "protocol self-checks" },
   publicImpact: { name: "public_impact", max: 120, windowSeconds: HOUR, what: "impact report requests from this network" },
+  // Contributor impact cards: an image compose each (sharp); AI backgrounds are pooled + capped separately.
+  impactCard: { name: "impact_card", max: 30, windowSeconds: HOUR, what: "impact cards" },
 } as const satisfies Record<string, Limit>;
 
 export function rateLimited(limit: Limit): HttpError {
