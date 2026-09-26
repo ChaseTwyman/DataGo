@@ -219,7 +219,7 @@ describe("example image", () => {
   it("researchers cannot regenerate another owner's protocol image", async () => {
     const other = await env.db.query<{ id: string }>("select gen_random_uuid()::text as id");
     const oid = other[0]!.id;
-    await env.db.query("insert into auth.users (id) values ($1)", [oid]);
+    await env.db.query("insert into auth.users (id, email) values ($1, $2)", [oid, `${oid}@t.local`]); // an account, not anonymous
     await env.db.query("update public.profiles set role = 'researcher' where id = $1", [oid]);
     const r = await exampleImage(req("POST", `/api/protocols/${DEMO.protocolId}/example-image`, { token: `dev.${oid}` }), idCtx(DEMO.protocolId));
     expect(r.status).toBe(403);

@@ -8,7 +8,8 @@ import { ensureDevUser } from "@/lib/db/repos/profiles";
 
 /**
  * LOCAL_BACKEND=1 only: mints a dev bearer token without Supabase Auth.
- * contributor → new (or reused) anonymous user; researcher/admin → the seeded demo researcher.
+ * contributor → new (or reused) dev account dev+<id>@local (a real, non-anonymous account);
+ * researcher/admin → the seeded demo admin.
  */
 export const POST = route(async (req) => {
   assertLocalBackend();

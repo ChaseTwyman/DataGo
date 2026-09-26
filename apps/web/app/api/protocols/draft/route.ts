@@ -5,6 +5,7 @@ import { requireResearcher } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { insertProtocol } from "@/lib/db/repos/protocols";
 import { GrokError } from "@/lib/grok/config";
+import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
 import { draftProtocol } from "@/lib/studio";
 
 export const maxDuration = 180;
@@ -13,6 +14,7 @@ export const maxDuration = 180;
 export const POST = route(async (req) => {
   const user = await requireResearcher(req);
   const { need } = await parseBody(req, DraftProtocolRequestSchema);
+  await enforceRateLimit(await getDb(), LIMITS.protocolDraft, user.id);
   let protocol;
   try {
     protocol = await draftProtocol(need);

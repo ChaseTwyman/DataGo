@@ -1,4 +1,4 @@
-import { canManageBounty, isResearcherRole, type AuthUser } from "../auth";
+import { canManageBounty, researcherRequired, type AuthUser } from "../auth";
 import type { Db } from "../db";
 import { getBounty, type BountyRow } from "../db/repos/bounties";
 import { getProtocol, type ProtocolRow } from "../db/repos/protocols";
@@ -17,7 +17,7 @@ export async function loadVisibleBounty(db: Db, user: AuthUser, id: string): Pro
 
 /** Researcher that owns the bounty (or admin). */
 export async function loadManagedBounty(db: Db, user: AuthUser, id: string): Promise<{ bounty: BountyRow; protocol: ProtocolRow }> {
-  if (!isResearcherRole(user.role)) throw forbidden("Researcher or admin role required");
+  if (!user.isResearcher) throw researcherRequired();
   const bounty = await getBounty(db, id);
   if (!bounty) throw notFound("Bounty not found");
   if (!canManageBounty(user, bounty.created_by)) throw forbidden("Not your bounty");

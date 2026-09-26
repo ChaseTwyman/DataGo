@@ -6,21 +6,35 @@ export interface ProfileRow {
   role: Role;
   display_name: string | null;
   trust_score: number;
+  is_researcher: boolean;
+  is_admin: boolean;
+  suspended_at: string | null;
 }
 
 export async function getProfile(db: Db, id: string): Promise<ProfileRow | null> {
   const rows = await db.query<ProfileRow>(
-    "select id, role::text as role, display_name, trust_score from public.profiles where id = $1",
+    "select id, role::text as role, display_name, trust_score, is_researcher, is_admin, suspended_at::text as suspended_at from public.profiles where id = $1",
     [id],
   );
   return rows[0] ?? null;
 }
 
-/** LOCAL_BACKEND only: create an auth.users row (the trigger creates the contributor profile). */
+/**
+ * LOCAL_BACKEND only: create a real (non-anonymous) dev account dev+<id>@local; the trigger
+ * creates the profile. researcher → is_researcher; admin → is_admin + is_researcher.
+ */
 export async function ensureDevUser(db: Db, id: string, role: Role = "contributor"): Promise<ProfileRow> {
-  await db.query("insert into auth.users (id, is_anonymous, role, aud) values ($1, true, 'authenticated', 'authenticated') on conflict (id) do nothing", [id]);
+  await db.query(
+    "insert into auth.users (id, is_anonymous, role, aud, email, email_confirmed_at) values ($1, false, 'authenticated', 'authenticated', $2, now()) on conflict (id) do nothing",
+    [id, `dev+${id}@local`],
+  );
+  // Adult + license consent: a dev account stands in for a completed sign-up.
+  await db.query("update public.profiles set is_adult = true, consent_license = true where id = $1 and not is_adult", [id]);
   if (role !== "contributor") {
-    await db.query("update public.profiles set role = $2::public.user_role where id = $1", [id, role]);
+    await db.query(
+      "update public.profiles set is_researcher = true, is_admin = (is_admin or $2), researcher_since = coalesce(researcher_since, now()) where id = $1",
+      [id, role === "admin"],
+    );
   }
   const p = await getProfile(db, id);
   if (!p) throw new Error("dev user profile missing");

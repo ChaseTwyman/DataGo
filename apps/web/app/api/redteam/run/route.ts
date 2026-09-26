@@ -5,6 +5,7 @@ import { requireResearcher } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { GrokError } from "@/lib/grok/config";
 import { runAttack } from "@/lib/redteam";
+import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
 import { getStorage } from "@/lib/storage";
 import { liveDeps } from "@/lib/verification/deps";
 
@@ -18,6 +19,7 @@ export const POST = route(async (req) => {
   const body = await parseBody(req, RedteamRunRequestSchema);
   const db = await getDb();
   const { bounty, protocol } = await loadManagedBounty(db, user, body.bounty_id);
+  await enforceRateLimit(db, LIMITS.redteam, user.id);
   try {
     const res = await runAttack({ db, storage: getStorage(), deps: liveDeps(db), bounty, protocol, attack: body.attack_type, origin: originOf(req) });
     return json(res);

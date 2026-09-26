@@ -12,6 +12,8 @@ export interface ObjectStorage {
   exists(path: string): Promise<boolean>;
   /** URL the phone PUTs raw bytes to (Content-Type: image/jpeg). `origin` = this server's origin. */
   signedUpload(path: string, origin: string): Promise<SignedUploadTarget>;
+  /** Deletes objects; missing ones are ignored. */
+  remove(paths: string[]): Promise<void>;
   /** Short-lived read URL. */
   signedRead(path: string, origin: string, ttlSeconds?: number): Promise<string>;
 }

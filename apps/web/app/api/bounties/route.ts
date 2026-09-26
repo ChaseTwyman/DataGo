@@ -14,7 +14,7 @@ import { getProtocol } from "@/lib/db/repos/protocols";
 /** Researcher: own bounties; admin: all. */
 export const GET = route(async (req) => {
   const user = await requireResearcher(req);
-  const rows = await listBountiesFor(await getDb(), user.id, user.role === "admin");
+  const rows = await listBountiesFor(await getDb(), user.id, user.isAdmin);
   const bounties: BountyListItem[] = rows.map((b) => ({
     id: b.id,
     title: b.title,

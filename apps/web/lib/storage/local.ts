@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { localSigningSecret } from "../env";
 import { splitPath, type ObjectStorage, type SignedUploadTarget } from "./types";
@@ -51,6 +51,10 @@ export class LocalStorage implements ObjectStorage {
     } catch {
       return false;
     }
+  }
+
+  async remove(paths: string[]): Promise<void> {
+    for (const p of paths) await rm(this.file(p), { force: true });
   }
 
   async signedUpload(path: string, origin: string): Promise<SignedUploadTarget> {

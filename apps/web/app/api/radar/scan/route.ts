@@ -26,7 +26,7 @@ export const POST = route(async (req) => {
       console.warn("[radar] NWS unavailable:", err instanceof Error ? err.message : err);
     }
   }
-  const protocols = (await listProtocols(db, user.id, user.role === "admin"))
+  const protocols = (await listProtocols(db, user.id, user.isAdmin))
     .filter((p) => p.status === "published")
     .map((p) => ({ slug: p.slug, name: p.name, why_it_matters: p.definition.why_it_matters }));
   try {

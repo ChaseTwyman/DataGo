@@ -13,6 +13,7 @@ import { getDb } from "@/lib/db";
 import { getBounty, listBountiesFor } from "@/lib/db/repos/bounties";
 import { getSession, markSubmittedIfOpen } from "@/lib/db/repos/sessions";
 import { insertSubmission, listSubmissions } from "@/lib/db/repos/submissions";
+import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
 import { getStorage } from "@/lib/storage";
 import { liveDeps } from "@/lib/verification/deps";
 import { processSubmission } from "@/lib/verification/live";
@@ -31,6 +32,7 @@ export const POST = route(async (req) => {
     throw new HttpError(400, "SYNTHETIC_MEDIA", "Submissions may only reference camera captures in the observations bucket", synthetic);
   }
   const db = await getDb();
+  await enforceRateLimit(db, LIMITS.submission, user.id);
   const session = await getSession(db, body.session_id);
   if (!session || session.user_id !== user.id) throw notFound("Session not found");
   if (session.status !== "open") throw conflict("SESSION_ALREADY_SUBMITTED", "This session has already been submitted");
@@ -76,11 +78,11 @@ export const GET = route(async (req) => {
   const user = await requireResearcher(req);
   const q = parseQuery(req, SubmissionListQuerySchema);
   const db = await getDb();
-  const own = await listBountiesFor(db, user.id, user.role === "admin");
+  const own = await listBountiesFor(db, user.id, user.isAdmin);
   const titles = new Map(own.map((b) => [b.id, b.title]));
   if (q.bounty_id && !titles.has(q.bounty_id)) throw notFound("Bounty not found");
   const rows = await listSubmissions(db, {
-    bountyIds: user.role === "admin" ? null : [...titles.keys()],
+    bountyIds: user.isAdmin ? null : [...titles.keys()],
     ...(q.bounty_id ? { bountyId: q.bounty_id } : {}),
     ...(q.status ? { status: q.status } : {}),
     limit: q.limit,

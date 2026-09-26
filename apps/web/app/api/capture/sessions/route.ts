@@ -14,6 +14,7 @@ import { requireUser } from "@/lib/auth";
 import { budgetRemaining, loadCoverage } from "@/lib/coverage";
 import { getDb } from "@/lib/db";
 import { insertSession } from "@/lib/db/repos/sessions";
+import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
 import { getStorage } from "@/lib/storage";
 
 const SESSION_TTL_MIN = 15;
@@ -27,6 +28,7 @@ export const POST = route(async (req) => {
   const user = await requireUser(req);
   const body = await parseBody(req, CreateSessionRequestSchema);
   const db = await getDb();
+  await enforceRateLimit(db, LIMITS.captureSession, user.id);
   const { bounty, protocol } = await loadVisibleBounty(db, user, body.bounty_id);
   const now = new Date();
   if (bounty.status !== "active" || Date.parse(bounty.starts_at) > now.getTime() || Date.parse(bounty.ends_at) <= now.getTime()) {

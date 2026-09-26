@@ -18,7 +18,7 @@ export const POST = route<IdParams>(async (req, { params }) => {
   const db = await getDb();
   const protocol = await getProtocol(db, id);
   if (!protocol) throw notFound("Protocol not found");
-  if (user.role !== "admin" && protocol.created_by !== user.id) throw forbidden("Not your protocol");
+  if (!user.isAdmin && protocol.created_by !== user.id) throw forbidden("Not your protocol");
   const force = new URL(req.url).searchParams.get("force") === "1";
   try {
     const { path } = await generateExampleImage(db, getStorage(), protocol, { force });

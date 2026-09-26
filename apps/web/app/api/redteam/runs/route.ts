@@ -14,7 +14,7 @@ export const GET = route(async (req) => {
   const user = await requireResearcher(req);
   const q = parseQuery(req, Query);
   const db = await getDb();
-  const ids = user.role === "admin" ? null : (await listBountiesFor(db, user.id, false)).map((b) => b.id);
+  const ids = user.isAdmin ? null : (await listBountiesFor(db, user.id, false)).map((b) => b.id);
   const rows = await listRedteamRuns(db, ids, q.bounty_id);
   const origin = originOf(req);
   const runs: z.infer<typeof RedteamRunRowSchema>[] = await Promise.all(

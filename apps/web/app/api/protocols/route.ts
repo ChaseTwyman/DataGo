@@ -7,7 +7,7 @@ import { listProtocols } from "@/lib/db/repos/protocols";
 /** Published protocols plus the caller's own drafts (admins: all). */
 export const GET = route(async (req) => {
   const user = await requireUser(req);
-  const rows = await listProtocols(await getDb(), user.id, user.role === "admin");
+  const rows = await listProtocols(await getDb(), user.id, user.isAdmin);
   const origin = originOf(req);
   const protocols = await Promise.all(
     rows.map(async (p) => ({

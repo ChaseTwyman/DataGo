@@ -50,7 +50,8 @@ export async function bountyDetail(db: Db, b: BountyRow, p: ProtocolRow, origin:
 }
 
 export async function submissionWithMedia(s: SubmissionRecord, origin: string, bountyTitle: string | null): Promise<SubmissionWithMedia> {
-  const urls = await Promise.all(s.media.map((m) => mediaUrl(m.path, origin)));
+  // Purged photos (retention / account deletion) no longer exist: no URLs, same array length.
+  const urls = s.media_purged_at ? s.media.map(() => null) : await Promise.all(s.media.map((m) => mediaUrl(m.path, origin)));
   return {
     ...toSubmissionRow(s),
     media_urls: urls.map((u) => u ?? ""),

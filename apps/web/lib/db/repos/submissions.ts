@@ -28,7 +28,7 @@ export interface SubmissionRecord extends SubmissionRow {
 
 const COLS = `id, session_id, bounty_id, user_id, media, lat, lng, accuracy_m, h3_cell, captured_at, received_at,
   device, sensors, gate, field_notes, status::text as status, checks, reason_codes, confidence, protocol_score,
-  authenticity_score, extracted, phashes, payout_cents, retryable, reviewed_by, reviewed_at, review_note, verifier`;
+  authenticity_score, extracted, phashes, payout_cents, retryable, reviewed_by, reviewed_at, review_note, verifier, media_purged_at`;
 
 function map(r: Record<string, unknown>): SubmissionRecord {
   return {
@@ -36,6 +36,7 @@ function map(r: Record<string, unknown>): SubmissionRecord {
     captured_at: toIso(r.captured_at),
     received_at: toIso(r.received_at),
     reviewed_at: r.reviewed_at ? toIso(r.reviewed_at) : null,
+    media_purged_at: r.media_purged_at ? toIso(r.media_purged_at) : null,
   };
 }
 
@@ -62,6 +63,7 @@ export function toSubmissionRow(s: SubmissionRecord): SubmissionRow {
     extracted: s.extracted,
     field_notes: s.field_notes,
     payout_cents: s.payout_cents,
+    media_purged_at: s.media_purged_at ?? null,
   };
 }
 

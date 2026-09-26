@@ -25,6 +25,21 @@ export class SupabaseStorage implements ObjectStorage {
     return (data ?? []).some((o) => o.name === name);
   }
 
+  async remove(paths: string[]): Promise<void> {
+    const byBucket = new Map<string, string[]>();
+    for (const p of paths) {
+      const { bucket, key } = splitPath(p);
+      byBucket.set(bucket, [...(byBucket.get(bucket) ?? []), key]);
+    }
+    for (const [bucket, keys] of byBucket) {
+      // The API takes up to 1000 keys per call; missing keys are not an error.
+      for (let i = 0; i < keys.length; i += 1000) {
+        const { error } = await supabaseAdmin().storage.from(bucket).remove(keys.slice(i, i + 1000));
+        if (error) throw new Error("storage remove " + bucket + ": " + error.message);
+      }
+    }
+  }
+
   async signedUpload(path: string): Promise<SignedUploadTarget> {
     const { bucket, key } = splitPath(path);
     const { data, error } = await supabaseAdmin().storage.from(bucket).createSignedUploadUrl(key, { upsert: true });
