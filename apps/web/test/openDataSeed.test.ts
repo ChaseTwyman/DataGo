@@ -73,7 +73,7 @@ describe("seedOpenData", () => {
       expect(["still", "slow", "fast"]).toContain(x.extracted.water_state);
       expect(x.field_notes.water_state).toBe(x.extracted.water_state);
       // the reference object must be tall enough to gauge the depth
-      expect(Number(x.extracted.reference_object_assumed_height_cm)).toBeGreaterThanOrEqual(Math.min(Number(x.extracted.depth_cm), 75));
+      expect(Number(x.extracted.reference_object_assumed_height_cm)).toBeGreaterThanOrEqual(Number(x.extracted.depth_cm));
     }
     // plausible, varied depths
     expect(Math.min(...depths)).toBeGreaterThanOrEqual(1);

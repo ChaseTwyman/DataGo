@@ -87,7 +87,8 @@ export async function seedOpenData(
         // a 15 cm curb can't gauge deeper water, so deeper rows use taller references
         : depth <= 45 ? pick(["tire", "tire", "hydrant", "measuring_stick"] as const)
         : depth <= 60 ? pick(["hydrant", "sign_post", "tire"] as const)
-        : pick(["hydrant", "sign_post"] as const);
+        : depth <= 75 ? pick(["hydrant", "sign_post"] as const)
+        : "sign_post";
       const refHeight = REF_HEIGHT[ref];
       const water = depth < 10 ? (rand() < 0.8 ? "still" : "slow") : depth < 30 ? pick(["still", "slow", "slow"] as const) : pick(["slow", "fast", "fast"] as const);
       const debris = rand() < 0.15 + depth / 120;
