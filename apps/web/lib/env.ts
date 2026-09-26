@@ -32,6 +32,14 @@ export function assertMockGrokAllowed(): void {
   if (isMockGrok() && !isLocalBackend() && !truthy(process.env.ALLOW_MOCK_ON_REAL_DB)) throw new MockOnRealDbError();
 }
 
+/**
+ * Whether frame-check results may count toward the server-side capture gate. Mock fixtures are
+ * always green, so they count only on the local backend (dev/tests), never against a real DB.
+ */
+export function frameChecksCountTowardGate(): boolean {
+  return !isMockGrok() || isLocalBackend();
+}
+
 /** NWS events that pause captures (in addition to severity=Extreme). */
 export function hazardPauseEvents(): string[] {
   const raw = process.env.HAZARD_PAUSE_EVENTS;

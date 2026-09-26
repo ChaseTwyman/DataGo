@@ -11,7 +11,7 @@ import { getDb } from "@/lib/db";
 import { getBounty } from "@/lib/db/repos/bounties";
 import { getProtocol } from "@/lib/db/repos/protocols";
 import { claimFrameCheck, frameCheckState, getSession, recordFrameCheck, releaseFrameCheck } from "@/lib/db/repos/sessions";
-import { isLocalBackend, isMockGrok } from "@/lib/env";
+import { frameChecksCountTowardGate } from "@/lib/env";
 import { frameCheck } from "@/lib/grok/vision";
 
 /** Lock long enough to cover a slow Grok call; released as soon as the call ends. */
@@ -59,8 +59,7 @@ export const POST = route(async (req) => {
       throw new HttpError(502, "GROK_UNAVAILABLE", err instanceof Error ? err.message : "Frame check failed");
     }
     const allGreen = isFrameAllGreen(protocol.definition, result);
-    const countable = !isMockGrok() || isLocalBackend();
-    const gate = await recordFrameCheck(db, session.id, allGreen && countable, GATE_REQUIRED_GREEN);
+    const gate = await recordFrameCheck(db, session.id, allGreen && frameChecksCountTowardGate(), GATE_REQUIRED_GREEN);
     const res: FrameCheckResponse = {
       result,
       all_green: allGreen,
