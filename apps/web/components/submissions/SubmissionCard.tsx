@@ -1,0 +1,169 @@
+"use client";
+import { ChevronDown, ChevronRight, ImageOff, MapPin } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { formatCents, type SubmissionWithMedia } from "@groundtruth/shared";
+import { extractedRows, formatScore } from "@/lib/client/checkFormat";
+import { cn, formatTime, shortId, timeAgo } from "@/lib/client/cn";
+import { ReasonCode, SubmissionStatusBadge } from "../status";
+import { CheckTable } from "./CheckTable";
+
+export function SubmissionCard({
+  s,
+  fresh = false,
+  defaultOpen = false,
+  showBounty = false,
+  actions,
+}: {
+  s: SubmissionWithMedia;
+  fresh?: boolean;
+  defaultOpen?: boolean;
+  showBounty?: boolean;
+  actions?: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const thumb = s.media_urls[0];
+  return (
+    <div className={cn("rounded-lg border bg-card", fresh && "gt-arrive")}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full cursor-pointer items-start gap-3 p-3 text-left hover:bg-muted/40"
+      >
+        <div className="size-14 shrink-0 overflow-hidden rounded-md border bg-muted">
+          {thumb ? (
+            <img src={thumb} alt="Submission frame 1" className="size-full object-cover" />
+          ) : (
+            <div className="flex size-full items-center justify-center text-muted-foreground">
+              <ImageOff className="size-4" aria-hidden />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <SubmissionStatusBadge status={s.status} />
+            {s.payout_cents !== null && s.payout_cents > 0 ? (
+              <span className="text-sm font-semibold text-emerald-700 tabular-nums">{formatCents(s.payout_cents)}</span>
+            ) : null}
+            <span className="ml-auto text-[11px] whitespace-nowrap text-muted-foreground" title={s.received_at}>
+              {timeAgo(s.received_at)}
+            </span>
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            {showBounty && s.bounty_title ? <span className="font-medium text-foreground">{s.bounty_title} · </span> : null}
+            conf {formatScore(s.confidence)} · cell <span className="font-mono">{s.h3_cell.slice(-6)}</span>
+            {headline(s.extracted)}
+          </div>
+          {s.reason_codes.length ? (
+            <div className="flex flex-wrap gap-1">
+              {s.reason_codes.slice(0, 4).map((r) => (
+                <ReasonCode key={r} code={r} />
+              ))}
+              {s.reason_codes.length > 4 ? (
+                <span className="text-[11px] text-muted-foreground">+{s.reason_codes.length - 4}</span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        {open ? (
+          <ChevronDown className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden />
+        ) : (
+          <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden />
+        )}
+      </button>
+      {open ? <SubmissionDetail s={s} /> : null}
+      {actions ? <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+function headline(extracted: Record<string, unknown> | null): string {
+  if (!extracted) return "";
+  const depth = extracted["depth_cm"];
+  if (typeof depth === "number") return ` · depth ${Math.round(depth)} cm`;
+  return "";
+}
+
+export function SubmissionDetail({ s }: { s: SubmissionWithMedia }) {
+  const fields = extractedRows(s.extracted);
+  const notes = extractedRows(s.field_notes);
+  return (
+    <div className="space-y-4 border-t p-3">
+      <section>
+        <h4 className="mb-1.5 text-xs font-semibold">Frames ({s.media_urls.length || s.media.length})</h4>
+        {s.media_urls.length ? (
+          <div className="grid grid-cols-3 gap-2">
+            {s.media_urls.map((u, i) => (
+              <a key={i} href={u} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border">
+                <img src={u} alt={`Frame ${i + 1}`} className="aspect-[4/3] w-full object-cover" />
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No media URLs available.</p>
+        )}
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+        <KV k="Confidence" v={formatScore(s.confidence)} />
+        <KV k="Protocol score" v={formatScore(s.protocol_score)} />
+        <KV k="Authenticity" v={formatScore(s.authenticity_score)} />
+        <KV k="Payout" v={s.payout_cents !== null ? formatCents(s.payout_cents) : "—"} />
+      </section>
+
+      <section>
+        <h4 className="mb-1.5 text-xs font-semibold">Verification checks</h4>
+        <CheckTable checks={s.checks} />
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <h4 className="mb-1.5 text-xs font-semibold">Extracted fields</h4>
+          <KVTable rows={fields} empty="Not extracted yet." />
+        </div>
+        <div>
+          <h4 className="mb-1.5 text-xs font-semibold">Field notes</h4>
+          <KVTable rows={notes} empty="No field notes." />
+        </div>
+      </section>
+
+      <section className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <MapPin className="size-3" aria-hidden />
+          {s.lat.toFixed(5)}, {s.lng.toFixed(5)}
+          {s.accuracy_m !== null ? ` ±${Math.round(s.accuracy_m)} m` : ""}
+        </span>
+        <span>captured {formatTime(s.captured_at)}</span>
+        <span>received {formatTime(s.received_at)}</span>
+        <span className="font-mono">id {shortId(s.id)}</span>
+        <span className="font-mono">user {shortId(s.user_id)}</span>
+      </section>
+    </div>
+  );
+}
+
+function KV({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div className="rounded-md border px-2 py-1.5">
+      <div className="text-[10px] tracking-wide text-muted-foreground uppercase">{k}</div>
+      <div className="font-mono text-sm font-semibold tabular-nums">{v}</div>
+    </div>
+  );
+}
+
+function KVTable({ rows, empty }: { rows: { key: string; value: string }[]; empty: string }) {
+  if (!rows.length) return <p className="text-xs text-muted-foreground">{empty}</p>;
+  return (
+    <table className="w-full text-xs">
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.key} className="border-b last:border-0">
+            <td className="py-1 pr-2 font-mono text-muted-foreground">{r.key}</td>
+            <td className="py-1 break-all">{r.value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+

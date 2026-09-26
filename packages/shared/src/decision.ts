@@ -52,6 +52,7 @@ const HARD_FAIL: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
   "SESSION_INVALID",
   "SESSION_EXPIRED",
   "OUTSIDE_AREA",
+  "OUTSIDE_WINDOW",
   "DUPLICATE",
   "CHALLENGE_FAILED",
   "SYNTHETIC_MEDIA",

@@ -35,6 +35,7 @@ describe("decide — hard fails", () => {
     ["session_integrity", "SESSION_INVALID", "integrity"],
     ["session_integrity", "SESSION_EXPIRED", "integrity"],
     ["context", "OUTSIDE_AREA", "context"],
+    ["context", "OUTSIDE_WINDOW", "context"],
     ["duplicates", "DUPLICATE", "integrity"],
     ["challenge", "CHALLENGE_FAILED", "integrity"],
     ["session_integrity", "SYNTHETIC_MEDIA", "integrity"],

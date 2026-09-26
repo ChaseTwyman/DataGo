@@ -27,6 +27,8 @@ export const FIXED_REASON_CODES = [
   "GATE_DEGRADED",
   "HAZARD_PAUSED",
   "REVIEWER_REJECTED",
+  "BUDGET_EXHAUSTED",
+  "OUTSIDE_WINDOW",
 ] as const;
 
 export type FixedReasonCode = (typeof FIXED_REASON_CODES)[number];
@@ -61,12 +63,14 @@ const KIND: Record<FixedReasonCode, ReasonKind> = {
   BAD_FRAMING: "protocol",
   LOW_CONFIDENCE: "protocol",
   OUTSIDE_AREA: "context",
+  OUTSIDE_WINDOW: "context",
   WEATHER_IMPLAUSIBLE: "context",
   DAYLIGHT_MISMATCH: "context",
   HAZARD_PAUSED: "context",
   LOW_TRUST_REVIEW: "review",
   STAGE_ERROR: "review",
   REVIEWER_REJECTED: "review",
+  BUDGET_EXHAUSTED: "review",
   DEMO_WAIVER: "info",
   GATE_DEGRADED: "info",
 };
@@ -90,12 +94,14 @@ const CONTRIBUTOR_TEXT: Partial<Record<FixedReasonCode, string>> = {
   BAD_FRAMING: "The subject wasn't framed well. Center the reference object.",
   LOW_CONFIDENCE: "We couldn't read the scene clearly enough. Try a clearer angle.",
   OUTSIDE_AREA: "This capture was outside the bounty area.",
+  OUTSIDE_WINDOW: "This capture was outside the bounty time window.",
   WEATHER_IMPLAUSIBLE: "Recent weather at this spot doesn't match the observation.",
   DAYLIGHT_MISMATCH: "The lighting doesn't match the time of day at this location.",
   HAZARD_PAUSED: "Captures are paused here because of an active hazard warning.",
   LOW_TRUST_REVIEW: "A reviewer will take a look.",
   STAGE_ERROR: "A reviewer will take a look.",
   DEMO_WAIVER: "Weather check waived (demo).",
+  BUDGET_EXHAUSTED: "This bounty ran out of budget. A reviewer will take a look.",
 };
 
 export function contributorMessage(code: ReasonCode, elementLabel?: string): string {
