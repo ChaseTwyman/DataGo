@@ -30,8 +30,9 @@ _Last updated: M0 complete._
 - Decision rules beyond the PRD: weak (<0.8) authenticity suspicion, edited/composited, velocity, impossible travel → capped at `needs_review`. Missing element / protocol score below minimum → retryable reject.
 
 ## Human TODOs
-- [ ] Create Supabase project (or `supabase start`), run `supabase db reset`, fill `apps/web/.env` and `apps/mobile/.env`.
-- [ ] Add `XAI_API_KEY` to `apps/web/.env`.
+- [x] Hosted Supabase project created; anonymous sign-ins on; `apps/web/.env` filled. Migrations + seed applied via DATABASE_URL (recorded in `supabase_migrations.schema_migrations`, so `supabase db push` treats them as applied). Verified: researcher login, anonymous sign-in, RLS reads, buckets, realtime publication.
+- [ ] Fill `apps/mobile/.env` (API base URL, Supabase URL + anon key only).
+- [x] `XAI_API_KEY` added and verified (HTTP 200; all configured model names resolve).
 - [ ] Sign iOS build in Xcode with an Apple ID; enable Developer Mode on the iPhone.
 - [ ] Same network for laptop + phone (or tunnel); set `EXPO_PUBLIC_API_BASE_URL`.
 - [ ] ~20 real test photos (good + bad) in `apps/web/test/fixtures`.
