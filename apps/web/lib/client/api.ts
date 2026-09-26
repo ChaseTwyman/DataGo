@@ -22,7 +22,9 @@ import {
   type ChangePasswordRequestSchema,
   type Protocol,
   type SignupRequest,
+  BriefingVideoResponseSchema,
   CoverageResponseSchema,
+  RadarScanResponseSchema,
   CreateBountyRequestSchema,
   CreateBountyResponseSchema,
   ExampleImageResponseSchema,
@@ -212,6 +214,11 @@ export const api = {
   redteamRun: (bounty_id: string, attack_type: AttackType) =>
     apiFetch("/api/redteam/run", LenientRedteamRunResponseSchema, { body: { bounty_id, attack_type } }),
   redteamRuns: (bounty_id?: string) => apiFetch(`/api/redteam/runs${qs({ bounty_id })}`, LenientRedteamRunListResponseSchema),
+
+  /** Opportunity Radar: NWS alerts + grok-4.7 (x_search, web_search) → drafted bounties. Can take minutes. */
+  radarScan: (body: { lat: number; lng: number; radius_km: number }) => apiFetch("/api/radar/scan", RadarScanResponseSchema, { body }),
+  /** Starts a Grok Imagine briefing clip (202); poll the bounty for briefing_video_url. */
+  briefingVideo: (bountyId: string) => apiFetch(`/api/bounties/${bountyId}/briefing-video`, BriefingVideoResponseSchema, { body: {} }),
 
   spawnEvent: (lat: number, lng: number, radius_m?: number) =>
     apiFetch("/api/demo/spawn-event", SpawnEventResponseSchema, {

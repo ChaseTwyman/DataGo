@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatCents, formatSurge, isHotSurge } from "@groundtruth/shared";
 import { HexMap, MapLegend, type MapPoint } from "@/components/map";
 import { Empty, ErrorBox, Loading, PageHeader, Stat } from "@/components/page";
+import { BriefingVideo } from "@/components/BriefingVideo";
 import { BountyStatusBadge } from "@/components/status";
 import { SubmissionCard } from "@/components/submissions/SubmissionCard";
 import { SyntheticImage } from "@/components/SyntheticImage";
@@ -40,6 +41,10 @@ export default function BountyPage() {
   });
   const [filter, setFilter] = useState<Filter>("all");
   const [actionError, setActionError] = useState<string | null>(null);
+  // BountyDetail has no owner field; GET /api/bounties lists exactly the bounties this researcher
+  // manages (admins: all). If that list fails, offer the action and let the server decide.
+  const mine = useApi(() => api.bounties(), "bounties:mine");
+  const canManage = mine.error ? true : (mine.data?.bounties.some((x) => x.id === id) ?? false);
 
   // New arrivals or decisions change coverage/prices: refresh right away instead of waiting for the tick.
   const acceptedCount = stream.submissions.filter((s) => s.status === "accepted").length;
@@ -172,14 +177,23 @@ export default function BountyPage() {
               ) : null}
               <MapLegend />
             </div>
-            {b.example_image_url ? (
-              <SyntheticImage
-                src={b.example_image_url}
-                label="Example — AI-generated"
-                alt="Protocol example image"
-                className="pointer-events-auto w-44 shadow-md"
+            <div className="flex items-end gap-2">
+              <BriefingVideo
+                bountyId={id}
+                videoUrl={b.briefing_video_url}
+                canManage={canManage}
+                refresh={bounty.refresh}
+                className="pointer-events-auto w-36"
               />
-            ) : null}
+              {b.example_image_url ? (
+                <SyntheticImage
+                  src={b.example_image_url}
+                  label="Example — AI-generated"
+                  alt="Protocol example image"
+                  className="pointer-events-auto w-44 shadow-md"
+                />
+              ) : null}
+            </div>
           </div>
         </div>
 

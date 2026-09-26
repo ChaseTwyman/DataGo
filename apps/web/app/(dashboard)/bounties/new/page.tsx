@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, LoaderCircle, TriangleAlert } from "lucide-react";
+import { ArrowLeft, LoaderCircle, Radar, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -13,10 +13,9 @@ import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
 import { fieldErrorSummary } from "@/lib/client/errors";
 import { dollarsToCents, isoToLocalInput, localInputToIso, previewPrices } from "@/lib/client/pricePreview";
+import { FORM_RADIUS_MAX as RADIUS_MAX, FORM_RADIUS_MIN as RADIUS_MIN, parseBountyPrefill, pickProtocolId, zoomForRadiusM, type BountyPrefill } from "@/lib/client/radar";
 import { useApi } from "@/lib/client/useApi";
 
-const RADIUS_MIN = 100;
-const RADIUS_MAX = 5000;
 /** Fields rendered with their own inline message; others are summarized above the submit button. */
 const INLINE_FIELDS = new Set(["protocol_id", "title", "summary", "radius_m", "starts_at", "ends_at", "base_price_cents", "max_price_cents", "target_per_cell", "budget_cents", "sponsor_name", "sponsor_url"]);
 
@@ -44,15 +43,26 @@ export default function NewBountyPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
+  // Prefill from the URL: ?protocol=<id> (Protocol Studio) or a whole Opportunity Radar draft
+  // (lib/client/radar.ts draftPrefillHref). Read on mount, directly from window.location, so the page
+  // needs no Suspense boundary for useSearchParams. The researcher reviews and publishes; nothing
+  // is created from the URL alone.
+  const [prefill, setPrefill] = useState<BountyPrefill | null>(null);
+  useEffect(() => {
+    const p = parseBountyPrefill(window.location.search);
+    if (!p) return;
+    setPrefill(p);
+    if (p.title) setTitle(p.title);
+    if (p.summary !== null) setSummary(p.summary);
+    if (p.center) setCenter(p.center);
+    if (p.radiusM !== null) setRadius(p.radiusM);
+  }, []);
 
   const list = protocols.data?.protocols ?? [];
   useEffect(() => {
     if (protocolId || !list[0]) return;
-    // ?protocol=<id> from Protocol Studio's "Create bounty with this protocol" (read directly so the
-    // page needs no Suspense boundary for useSearchParams).
-    const wanted = new URLSearchParams(window.location.search).get("protocol");
-    setProtocolId(list.find((p) => p.id === wanted && p.status === "published")?.id ?? list[0].id);
-  }, [list, protocolId]);
+    setProtocolId(pickProtocolId(list, { protocolId: prefill?.protocolId ?? null, protocolSlug: prefill?.protocolSlug ?? null }));
+  }, [list, protocolId, prefill]);
   const protocol = list.find((p) => p.id === protocolId)?.definition ?? null;
 
   const cells = useMemo(() => cellsForCircle(center.lat, center.lng, radius), [center, radius]);
@@ -103,7 +113,7 @@ export default function NewBountyPage() {
         sponsor_name: sponsorName.trim() || null,
         sponsor_url: sponsorUrl.trim() || null,
         status: "active",
-        source: "manual",
+        source: prefill?.source ?? "manual",
       });
       router.push(`/bounties/${r.id}`);
     } catch (err) {
@@ -121,6 +131,8 @@ export default function NewBountyPage() {
   };
 
   const overBudget = Number.isFinite(budgetCents) && preview.maxExposureCents > budgetCents;
+  const radarSlugMissing =
+    prefill?.source === "radar" && !!prefill.protocolSlug && list.length > 0 && !list.some((p) => p.slug === prefill.protocolSlug && p.status === "published");
 
   return (
     <>
@@ -137,11 +149,12 @@ export default function NewBountyPage() {
         <div className="relative min-h-[420px]">
           <HexMap
             center={center}
-            zoom={13.5}
+            zoom={prefill?.radiusM ? Math.min(13.5, zoomForRadiusM(prefill.radiusM)) : 13.5}
             cells={preview.cells}
             circle={{ ...center, radiusM: radius }}
             marker={center}
             onMapClick={(lat, lng) => setCenter({ lat, lng })}
+            flyKey={prefill?.center ? "prefill" : undefined}
             cursor="crosshair"
             className="absolute inset-0"
           />
@@ -151,6 +164,23 @@ export default function NewBountyPage() {
         </div>
 
         <div className="space-y-4 overflow-y-auto border-l bg-card p-5">
+          {prefill?.source === "radar" ? (
+            <div role="note" className="space-y-1 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+              <div className="flex items-center gap-1.5 font-medium">
+                <Radar className="size-4" aria-hidden /> Drafted by Opportunity Radar
+                {prefill.alertEvent ? <Badge tone="warning">{prefill.alertEvent}</Badge> : null}
+              </div>
+              <p className="text-xs text-sky-900/80">
+                Title, summary, area and protocol come from the AI draft. Check every field, set prices and budget, then publish — nothing is
+                created until you do.
+              </p>
+              {radarSlugMissing ? (
+                <p className="text-xs text-amber-800">
+                  The drafted protocol ({prefill.protocolSlug}) isn&apos;t available to you; choose a protocol below.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <Card className="bg-muted/30">
             <CardHeader className="pb-2">
               <CardTitle>Live price preview</CardTitle>

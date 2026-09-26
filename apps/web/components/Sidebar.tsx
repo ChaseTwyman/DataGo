@@ -7,6 +7,7 @@ import {
   Hexagon,
   LogOut,
   Map as MapIcon,
+  Radar,
   Radio,
   Sparkles,
   Swords,
@@ -34,6 +35,7 @@ const NAV: { href: string; label: string; icon: LucideIcon }[] = [
 const RESEARCH = [
   { href: "/protocols", label: "Protocols", icon: FlaskConical },
   { href: "/studio", label: "Protocol Studio", icon: Sparkles },
+  { href: "/radar", label: "Opportunity Radar", icon: Radar },
 ];
 const ADMIN = [{ href: "/admin/users", label: "Users", icon: Users }];
 const ALWAYS = [
