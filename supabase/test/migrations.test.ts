@@ -481,3 +481,138 @@ describe("accounts (20260926000006)", () => {
     expect(r.rows[0]?.media_purged_at).toBeNull();
   });
 });
+
+describe("sponsor pool (20260926000007)", () => {
+  const migration = () => readFileSync(join(root, "migrations", "20260926000007_sponsor_pool.sql"), "utf8");
+  const one = async <T,>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)).rows[0]!;
+  async function bounty(budget: number, status = "active") {
+    return (
+      await one<{ id: string }>(
+        `insert into public.bounties (protocol_id, created_by, title, area, center_lat, center_lng, radius_m, ends_at, base_price_cents, max_price_cents, budget_cents, status)
+         values ($1, $2, 'b', '{}'::jsonb, 0, 0, 100, now() + interval '1 day', 100, 200, $3, $4::public.bounty_status) returning id`,
+        [DEMO.protocolId, DEMO.researcherId, budget, status],
+      )
+    ).id;
+  }
+  async function sponsor(name: string) {
+    return (await one<{ id: string }>("insert into public.sponsors (name) values ($1) returning id", [name])).id;
+  }
+  async function contribute(sponsorId: string, cents: number, earmark: { bounty_id?: string; protocol_slug?: string } = {}) {
+    return (
+      await one<{ id: string }>(
+        "insert into public.sponsor_contributions (sponsor_id, amount_cents, bounty_id, protocol_slug) values ($1, $2, $3, $4) returning id",
+        [sponsorId, cents, earmark.bounty_id ?? null, earmark.protocol_slug ?? null],
+      )
+    ).id;
+  }
+  const allocate = async (b: string, c: string | null, cents: number, kind = "allocate") =>
+    (await one<{ ok: boolean }>("select public.pool_allocate($1, $2, $3, $4, 'test', null) as ok", [b, c, cents, kind])).ok;
+  const available = async (c: string | null) => Number((await one<{ n: string }>("select public.pool_bucket_available($1) as n", [c])).n);
+  const budgetOf = async (b: string) => (await one<{ budget_cents: number }>("select budget_cents from public.bounties where id = $1", [b])).budget_cents;
+
+  it("migrates the seeded demo bounty as already funded by an earmarked contribution of its budget", async () => {
+    const b = await one<{ status: string; budget_cents: number; funded: boolean }>(
+      "select status::text as status, budget_cents, funded_at is not null as funded from public.bounties where id = $1",
+      [DEMO.bountyId],
+    );
+    expect(b).toEqual({ status: "active", budget_cents: DEMO.budgetCents, funded: true });
+    const c = await db.query<{ amount_cents: number; name: string }>(
+      "select c.amount_cents, s.name from public.sponsor_contributions c join public.sponsors s on s.id = c.sponsor_id where c.bounty_id = $1",
+      [DEMO.bountyId],
+    );
+    expect(c.rows).toEqual([{ amount_cents: DEMO.budgetCents, name: DEMO.sponsorName }]);
+    const a = await one<{ n: number; kind: string }>(
+      "select sum(amount_cents)::int as n, min(kind) as kind from public.pool_allocations where bounty_id = $1",
+      [DEMO.bountyId],
+    );
+    expect(a).toEqual({ n: DEMO.budgetCents, kind: "migrated" });
+  });
+
+  it("backfill on an old database: funded bounties gain contributions once; re-running changes nothing", async () => {
+    const old = await bounty(7_000);
+    const draft = await bounty(0, "draft");
+    await db.exec(migration());
+    await db.exec(migration());
+    const rows = await db.query<{ bounty_id: string; n: number }>(
+      "select bounty_id, sum(amount_cents)::int as n from public.pool_allocations where bounty_id = any($1::uuid[]) group by 1",
+      [[old, draft]],
+    );
+    expect(rows.rows).toEqual([{ bounty_id: old, n: 7_000 }]);
+    expect(await budgetOf(old)).toBe(7_000);
+    const f = await one<{ funded: boolean; status: string }>("select funded_at is not null as funded, status::text as status from public.bounties where id = $1", [old]);
+    expect(f).toEqual({ funded: true, status: "active" });
+  });
+
+  it("adds the pending_funding status and request columns", async () => {
+    const b = await bounty(0, "pending_funding");
+    await db.query("update public.bounties set justification = 'why', funding_reason = 'pool empty' where id = $1", [b]);
+    const r = await one<{ status: string; justification: string }>("select status::text as status, justification from public.bounties where id = $1", [b]);
+    expect(r).toEqual({ status: "pending_funding", justification: "why" });
+  });
+
+  it("pool_allocate moves money atomically between buckets and requests and keeps budget = allocations", async () => {
+    const s = await sponsor("Pool test sponsor");
+    const general0 = await available(null);
+    await contribute(s, 1_000);
+    expect(await available(null)).toBe(general0 + 1_000);
+    const b = await bounty(0, "pending_funding");
+    expect(await allocate(b, null, general0 + 600)).toBe(true);
+    expect(await budgetOf(b)).toBe(general0 + 600);
+    expect(await allocate(b, null, 500)).toBe(false); // only 400 left
+    expect(await available(null)).toBe(400);
+    // release: can't go below what's spent
+    await db.query("select public.spend_bounty_budget($1, 300)", [b]);
+    expect(await allocate(b, null, -(general0 + 400))).toBe(false);
+    expect(await allocate(b, null, -200, "release")).toBe(true);
+    expect(await budgetOf(b)).toBe(general0 + 400);
+    expect(await available(null)).toBe(600);
+    // an earmark for another request can't be drawn here
+    const other = await bounty(0, "pending_funding");
+    const e = await contribute(s, 500, { bounty_id: other });
+    expect(await allocate(b, e, 100)).toBe(false);
+    expect(await allocate(other, e, 500)).toBe(true);
+    expect(await available(e)).toBe(0);
+  });
+
+  it("ledgers are append-only; corrections are reversals limited to unallocated money", async () => {
+    const s = await sponsor("Reversal sponsor");
+    const c = await contribute(s, 800, { protocol_slug: "street-flood-depth" });
+    await expect(db.query("update public.sponsor_contributions set amount_cents = 1 where id = $1", [c])).rejects.toThrow(/APPEND_ONLY/);
+    await expect(db.query("delete from public.sponsor_contributions where id = $1", [c])).rejects.toThrow(/APPEND_ONLY/);
+    const b = await bounty(0, "pending_funding");
+    expect(await allocate(b, c, 500)).toBe(true);
+    await expect(db.query("delete from public.pool_allocations where bounty_id = $1", [b])).rejects.toThrow(/APPEND_ONLY/);
+    const rev = async (n: number) => (await one<{ id: string | null }>("select public.pool_reverse_contribution($1, $2, 'typo', null) as id", [c, n])).id;
+    expect(await rev(400)).toBeNull(); // only 300 unallocated
+    expect(await rev(300)).not.toBeNull();
+    expect(await available(c)).toBe(0);
+    const bucket = await one<{ contributed_cents: unknown; allocated_cents: unknown; available_cents: unknown }>(
+      "select contributed_cents::int as contributed_cents, allocated_cents::int as allocated_cents, available_cents::int as available_cents from public.pool_buckets where contribution_id = $1",
+      [c],
+    );
+    expect(bucket).toEqual({ contributed_cents: 500, allocated_cents: 500, available_cents: 0 });
+  });
+
+  it("pool_buckets reports the general pool and attributes spend to buckets", async () => {
+    const g = await one<{ contributed: number; allocated: number; available: number; paid: number }>(
+      `select contributed_cents::int as contributed, allocated_cents::int as allocated, available_cents::int as available, paid_cents::int as paid
+         from public.pool_buckets where contribution_id is null`,
+    );
+    expect(g.contributed - g.allocated).toBe(g.available);
+    expect(g.paid).toBeGreaterThanOrEqual(300);
+  });
+
+  it("pool and budget functions refuse callers with a JWT subject (PostgREST RPC)", async () => {
+    const b = await bounty(0, "pending_funding");
+    await asUser(CONTRIB_A, async () => {
+      await expect(db.query("select public.pool_allocate($1, null, 1, 'allocate', null, null)", [b])).rejects.toThrow(/SERVER_ONLY|permission denied/);
+      await expect(db.query("select public.spend_bounty_budget($1, 1)", [DEMO.bountyId])).rejects.toThrow(/SERVER_ONLY|permission denied/);
+      await expect(db.query("select public.pool_backfill_legacy()")).rejects.toThrow(/SERVER_ONLY|permission denied/);
+      const rows = await db.query("select id from public.sponsor_contributions").then(
+        (r) => r.rows,
+        () => [],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+});

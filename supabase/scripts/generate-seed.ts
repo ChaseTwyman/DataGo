@@ -80,6 +80,10 @@ insert into public.bounties (
   -- an existing demo bounty (e.g. the hosted DB) only gains a sponsor; nothing else is touched
   set sponsor_name = coalesce(public.bounties.sponsor_name, excluded.sponsor_name),
       sponsor_url = coalesce(public.bounties.sponsor_url, excluded.sponsor_url);
+
+-- sponsor pool (migration 000007): the demo budget is recorded as an earmarked sponsor contribution
+-- + allocation, so pool totals match bounty budgets. Idempotent.
+select public.pool_backfill_legacy();
 `;
 
 const out = fileURLToPath(new URL("../seed.sql", import.meta.url));
