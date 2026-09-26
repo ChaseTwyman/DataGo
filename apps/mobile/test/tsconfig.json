@@ -19,7 +19,8 @@
     "../src/api/endpoints.ts",
     "../src/api/authFlow.ts",
     "../src/api/submissionWatch.ts",
-    "../src/lib/feed.ts"
+    "../src/lib/feed.ts",
+    "../scripts/*.ts"
   ],
   "exclude": []
 }

@@ -10,7 +10,8 @@
     "prebuild": "expo prebuild --no-install",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke": "tsx scripts/api-smoke.ts"
   },
   "dependencies": {
     "@groundtruth/shared": "workspace:*",
@@ -49,6 +50,7 @@
   "devDependencies": {
     "@types/node": "^24.19.0",
     "eslint": "^9.39.5",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
   }

@@ -7,8 +7,25 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "types": [],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["node_modules", "ios", "android", "dist", "test", "vitest.config.mts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "ios",
+    "android",
+    "dist",
+    "test",
+    "vitest.config.mts",
+    "scripts"
+  ]
 }
