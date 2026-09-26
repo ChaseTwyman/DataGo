@@ -100,4 +100,8 @@ export const ACCOUNT_ERROR_CODES = [
   "RESEARCHER_REQUIRED",
   "ADMIN_REQUIRED",
   "RATE_LIMITED",
+  // additive (web track): admin revoked researcher access, so self-serve re-enable is refused
+  "RESEARCHER_REVOKED",
+  // additive: an admin tried to remove their own admin flag or suspend themselves
+  "CANNOT_CHANGE_SELF",
 ] as const;

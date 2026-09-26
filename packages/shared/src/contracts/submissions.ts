@@ -88,6 +88,8 @@ export const SubmissionRowSchema = z.object({
   extracted: z.record(z.string(), z.unknown()).nullable(),
   field_notes: FieldNotesSchema.nullable(),
   payout_cents: z.number().int().nullable(),
+  /** Set when the photos were deleted (rejected-photo retention or account deletion); media_urls are then empty. Additive (000006). */
+  media_purged_at: z.string().nullable().optional(),
 });
 export type SubmissionRow = z.infer<typeof SubmissionRowSchema>;
 

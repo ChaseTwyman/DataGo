@@ -38,7 +38,7 @@ beforeAll(async () => {
     .map((f) => readFileSync(join(migDir, f), "utf8"));
   await applySupabaseSchema(db, { migrations, seed: readFileSync(join(root, "seed.sql"), "utf8") });
   for (const id of [CONTRIB_A, CONTRIB_B]) {
-    await db.query(`insert into auth.users (id, is_anonymous) values ($1, true)`, [id]);
+    await db.query(`insert into auth.users (id, is_anonymous, email) values ($1, false, $2)`, [id, `${id.slice(-4)}@test.local`]);
   }
 }, 60_000);
 
@@ -55,7 +55,7 @@ describe("migrations + seed", () => {
     expect(r.rows[0]).toEqual({ role: "admin", trust_score: 0.5 });
   });
 
-  it("anonymous users get contributor profiles via trigger", async () => {
+  it("new auth users get contributor profiles via trigger", async () => {
     const r = await db.query<{ role: string }>("select role from public.profiles where id = $1", [CONTRIB_A]);
     expect(r.rows[0]?.role).toBe("contributor");
   });
@@ -318,5 +318,166 @@ describe("verification hardening (20260926000005)", () => {
     await db.exec(migration());
     const r = await db.query<{ definition: unknown }>("select definition from public.protocols where id = $1", [DEMO.protocolId]);
     expect(r.rows[0]?.definition).toEqual(streetFloodDepth);
+  });
+});
+
+describe("accounts (20260926000006)", () => {
+  const migration = () => readFileSync(join(root, "migrations", "20260926000006_accounts.sql"), "utf8");
+  let n = 0;
+  async function account(opts: { researcher?: boolean; admin?: boolean; anonymous?: boolean; suspended?: boolean } = {}) {
+    const id = `00000000-0000-4000-8000-0000000c${String(++n).padStart(4, "0")}`;
+    await db.query(`insert into auth.users (id, is_anonymous, email) values ($1, $2, $3)`, [id, opts.anonymous ?? false, opts.anonymous ? null : `u${n}@t.local`]);
+    await db.query(
+      "update public.profiles set is_researcher = $2, is_admin = $3, suspended_at = case when $4 then now() end where id = $1",
+      [id, opts.researcher ?? false, opts.admin ?? false, opts.suspended ?? false],
+    );
+    return id;
+  }
+  async function bountyOf(owner: string) {
+    const r = await db.query<{ id: string }>(
+      `insert into public.bounties (protocol_id, created_by, title, area, center_lat, center_lng, radius_m, ends_at, base_price_cents, max_price_cents, status)
+       values ($1, $2, 'b', '{}'::jsonb, 0, 0, 100, now() + interval '1 day', 100, 200, 'draft') returning id`,
+      [DEMO.protocolId, owner],
+    );
+    return r.rows[0]!.id;
+  }
+  async function subOn(bounty: string, user: string) {
+    const r = await db.query<{ id: string }>(
+      `insert into public.submissions (bounty_id, user_id, media, lat, lng, h3_cell, captured_at) values ($1, $2, '[]'::jsonb, 0, 0, 'c', now()) returning id`,
+      [bounty, user],
+    );
+    return r.rows[0]!.id;
+  }
+  const roleOf = async (id: string) =>
+    (await db.query<{ role: string }>("select role::text as role from public.profiles where id = $1", [id])).rows[0]?.role;
+
+  it("backfills flags from the seeded admin role and keeps role in sync with flags", async () => {
+    const r = await db.query<{ role: string; is_admin: boolean; is_researcher: boolean }>(
+      "select role::text as role, is_admin, is_researcher from public.profiles where id = $1",
+      [DEMO.researcherId],
+    );
+    expect(r.rows[0]).toEqual({ role: "admin", is_admin: true, is_researcher: true });
+    const id = await account({ researcher: true });
+    expect(await roleOf(id)).toBe("researcher");
+    await db.query("update public.profiles set role = 'admin' where id = $1", [id]); // legacy writer
+    const l = await db.query<{ is_admin: boolean; is_researcher: boolean }>("select is_admin, is_researcher from public.profiles where id = $1", [id]);
+    expect(l.rows[0]).toEqual({ is_admin: true, is_researcher: true });
+    await db.query("update public.profiles set is_admin = false, is_researcher = false where id = $1", [id]);
+    expect(await roleOf(id)).toBe("contributor");
+  });
+
+  it("backfill on an old database: role enum → flags (researcher, admin)", async () => {
+    const r = await account();
+    const a = await account();
+    // simulate pre-000006 rows: role set, flags false (bypass the trigger)
+    await db.exec("alter table public.profiles disable trigger profiles_sync_role");
+    await db.query("update public.profiles set role = 'researcher', is_researcher = false where id = $1", [r]);
+    await db.query("update public.profiles set role = 'admin', is_admin = false, is_researcher = false where id = $1", [a]);
+    await db.exec("alter table public.profiles enable trigger profiles_sync_role");
+    await db.exec(migration());
+    const rows = await db.query<{ id: string; is_admin: boolean; is_researcher: boolean; role: string }>(
+      "select id, is_admin, is_researcher, role::text as role from public.profiles where id = any($1::uuid[]) order by id",
+      [[r, a]],
+    );
+    expect(rows.rows).toEqual([
+      { id: r, is_admin: false, is_researcher: true, role: "researcher" },
+      { id: a, is_admin: true, is_researcher: true, role: "admin" },
+    ]);
+  });
+
+  it("a researcher can't read another researcher's bounty submissions; an admin can", async () => {
+    const r1 = await account({ researcher: true });
+    const r2 = await account({ researcher: true });
+    const admin = await account({ admin: true });
+    const c = await account();
+    const b1 = await bountyOf(r1);
+    const s1 = await subOn(b1, c);
+    await asUser(r2, async () => {
+      expect((await db.query("select id from public.submissions where id = $1", [s1])).rows).toHaveLength(0);
+      expect((await db.query("select id from public.bounties where id = $1", [b1])).rows).toHaveLength(0);
+    });
+    await asUser(r1, async () => {
+      expect((await db.query("select id from public.submissions where id = $1", [s1])).rows).toHaveLength(1);
+    });
+    await asUser(admin, async () => {
+      expect((await db.query("select id from public.submissions where id = $1", [s1])).rows).toHaveLength(1);
+    });
+  });
+
+  it("a creator whose researcher flag was revoked loses bounty-owner reads", async () => {
+    const r = await account({ researcher: true });
+    const c = await account();
+    const s = await subOn(await bountyOf(r), c);
+    await db.query("update public.profiles set is_researcher = false where id = $1", [r]);
+    await asUser(r, async () => {
+      expect((await db.query("select id from public.submissions where id = $1", [s])).rows).toHaveLength(0);
+    });
+  });
+
+  it("suspended and anonymous users read nothing, not even their own rows", async () => {
+    for (const opts of [{ suspended: true }, { anonymous: true }]) {
+      const u = await account(opts);
+      await subOn(DEMO.bountyId, u);
+      await asUser(u, async () => {
+        expect((await db.query("select id from public.submissions")).rows).toHaveLength(0);
+        expect((await db.query("select id from public.profiles")).rows).toHaveLength(0);
+        expect((await db.query("select id from public.bounties")).rows).toHaveLength(0);
+      });
+    }
+  });
+
+  it("a suspended admin is not an admin", async () => {
+    const a = await account({ admin: true, suspended: true });
+    await asUser(a, async () => {
+      expect((await db.query<{ v: boolean }>("select public.is_admin() as v")).rows[0]?.v).toBe(false);
+      expect((await db.query("select id from public.submissions")).rows).toHaveLength(0);
+    });
+  });
+
+  it("users cannot grant themselves researcher/admin (no profiles UPDATE policy)", async () => {
+    const u = await account();
+    await asUser(u, async () => {
+      await db.query("update public.profiles set is_admin = true, is_researcher = true where id = $1", [u]);
+    });
+    const r = await db.query<{ is_admin: boolean; is_researcher: boolean }>("select is_admin, is_researcher from public.profiles where id = $1", [u]);
+    expect(r.rows[0]).toEqual({ is_admin: false, is_researcher: false });
+  });
+
+  it("creates the suspended deleted-user placeholder, idempotently", async () => {
+    await db.exec(migration());
+    const r = await db.query<{ display_name: string; suspended: boolean; is_admin: boolean; email: string | null }>(
+      `select p.display_name, p.suspended_at is not null as suspended, p.is_admin, u.email
+         from public.profiles p join auth.users u on u.id = p.id where p.id = $1`,
+      [DEMO.deletedUserId],
+    );
+    expect(r.rows).toEqual([{ display_name: "Deleted user", suspended: true, is_admin: false, email: null }]);
+  });
+
+  it("rate_limit_hit counts per key inside a window; rate_limits is invisible to users", async () => {
+    const hit = async (k: string) => (await db.query<{ n: number }>("select public.rate_limit_hit($1, 3600) as n", [k])).rows[0]?.n;
+    expect(await hit("t:a")).toBe(1);
+    expect(await hit("t:a")).toBe(2);
+    expect(await hit("t:b")).toBe(1);
+    const u = await account();
+    await asUser(u, async () => {
+      // The migration revokes all privileges (permission denied); the test shim re-grants them, and
+      // then RLS with no policies returns nothing. Either way a user can't read the table.
+      const rows = await db.query("select key from public.rate_limits").then(
+        (r) => r.rows,
+        (e: unknown) => {
+          expect(String(e)).toMatch(/permission denied/);
+          return [];
+        },
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  it("adds submissions.media_purged_at", async () => {
+    const r = await db.query<{ media_purged_at: Date | null }>(
+      `insert into public.submissions (bounty_id, user_id, media, lat, lng, h3_cell, captured_at) values ($1, $2, '[]'::jsonb, 0, 0, 'c', now()) returning media_purged_at`,
+      [DEMO.bountyId, CONTRIB_A],
+    );
+    expect(r.rows[0]?.media_purged_at).toBeNull();
   });
 });

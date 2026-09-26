@@ -90,7 +90,11 @@ async function devToken(role: "contributor" | "researcher"): Promise<Tok> {
   return DevSessionResponseSchema.parse((await api("POST", "/api/dev/session", { body: { role } })).json);
 }
 
-/** Supabase backend: anonymous sign-in (contributor) or the seeded researcher's password login. */
+/**
+ * Supabase backend. Contributor: a fresh account via POST /api/auth/signup (anonymous users are
+ * refused by the API), then a password grant. Researcher: the seeded admin; its password is never in
+ * the repo, so pass it as E2E_RESEARCHER_PASSWORD.
+ */
 async function supabaseToken(role: "contributor" | "researcher"): Promise<Tok> {
   if (existsSync(".env")) process.loadEnvFile(".env");
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -98,10 +102,16 @@ async function supabaseToken(role: "contributor" | "researcher"): Promise<Tok> {
   expect(url && anon, "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY needed for the Supabase backend");
   const { createClient } = await import("@supabase/supabase-js");
   const sb = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } =
-    role === "contributor"
-      ? await sb.auth.signInAnonymously()
-      : await sb.auth.signInWithPassword({ email: DEMO.researcherEmail, password: DEMO.researcherPassword });
+  let email: string = DEMO.researcherEmail;
+  let password = process.env.E2E_RESEARCHER_PASSWORD ?? "";
+  if (role === "contributor") {
+    email = `e2e+${Date.now()}@groundtruth.test`;
+    password = `e2e-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+    await api("POST", "/api/auth/signup", { body: { email, password, display_name: "E2E contributor", is_adult: true, accept_terms: true } });
+  } else {
+    expect(password, "set E2E_RESEARCHER_PASSWORD to the admin password for the Supabase backend");
+  }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   expect(!error && data.session, `supabase ${role} sign-in failed: ${error?.message ?? "no session"}`);
   return { user_id: data.session.user.id, access_token: data.session.access_token, role };
 }

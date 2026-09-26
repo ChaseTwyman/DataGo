@@ -2,7 +2,8 @@
 export const DEMO = {
   researcherId: "00000000-0000-4000-8000-000000000001",
   researcherEmail: "researcher@groundtruth.dev",
-  researcherPassword: "groundtruth-demo",
+  // No password here: the seed generator sets a random one (SEED_ADMIN_PASSWORD or printed once);
+  // rotate the hosted one with apps/web/scripts/rotate-admin-password.ts.
   protocolId: "00000000-0000-4000-8000-000000000101",
   bountyId: "00000000-0000-4000-8000-000000000201",
   title: "Midtown flash flood: street depth",
@@ -19,4 +20,6 @@ export const DEMO = {
   /** Demo sponsor: sponsors pay to direct collection; the data stays free for everyone. */
   sponsorName: "Georgia Tech Urban Hydrology Lab (demo)",
   sponsorUrl: null as string | null,
+  /** De-identified owner of open-data rows whose contributor deleted their account (migration 000006). */
+  deletedUserId: "00000000-0000-4000-8000-00000000dead",
 } as const;
