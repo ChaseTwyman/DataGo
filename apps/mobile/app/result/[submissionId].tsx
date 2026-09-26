@@ -86,7 +86,8 @@ export default function ResultScreen() {
   const { submissionId, voice: voiceParam } = useLocalSearchParams<{ submissionId: string; voice?: string }>();
   const insets = useSafeAreaInsets();
   // Voice follows the capture screen's toggle (?voice=0 when the guide was turned off there).
-  const companion = useVerificationCompanion(submissionId, { voice: voiceParam !== "0" });
+  const integrityRef = useRef(false);
+  const companion = useVerificationCompanion(submissionId, { voice: voiceParam !== "0", integrityRef });
   const [explained, setExplained] = useState<LenientGrokbotMessage | null>(null);
   const [explaining, setExplaining] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
@@ -146,6 +147,7 @@ export default function ResultScreen() {
   const view = row
     ? resultView(row, capture?.session.protocol ?? null, { sessionOpen: true, serverRetryable: row.retryable })
     : resultView({ status: "pending", reason_codes: [], payout_cents: null }, null);
+  integrityRef.current = view.kind === "integrity_reject";
   const payout = useCountUp(view.kind === "accepted" ? (row?.payout_cents ?? 0) : null, 1600, 0);
 
   const buzzed = useRef(false);

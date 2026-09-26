@@ -10,7 +10,7 @@ import { useBounty, useCachedSummary } from "../../src/api/queries";
 import { MatchReason } from "../../src/grokbot/MatchReason";
 import { PriceWhySheet } from "../../src/grokbot/PriceWhySheet";
 import { log } from "../../src/lib/log";
-import { LocationPermissionError, preciseFix, useUserLocation } from "../../src/lib/useUserLocation";
+import { LocationPermissionError, preciseFix } from "../../src/lib/useUserLocation";
 import { useCaptureStore } from "../../src/state/captureStore";
 import { Badge, Body, Button, Divider, ErrorBox, Heading, Icon, Label, LoadingState, Money, Muted, Readout, Section, SponsorLine, StatusPill, SurgeBadge } from "../../src/ui/components";
 import { indexLabel, timeLeftReadout } from "../../src/ui/telemetry";
@@ -31,7 +31,6 @@ export default function BountyBriefing() {
   const [startError, setStartError] = useState<{ text: string; settings: boolean } | null>(null);
   const [whyOpen, setWhyOpen] = useState(false);
   const summary = useCachedSummary(id);
-  const { loc } = useUserLocation();
 
   if (q.error && !q.data)
     return (
@@ -188,8 +187,6 @@ export default function BountyBriefing() {
         visible={whyOpen}
         onClose={() => setWhyOpen(false)}
         bountyId={b.id}
-        // ~100 m rounding: GPS jitter mustn't refetch the explanation while the sheet is open.
-        at={loc ? { lat: Math.round(loc.lat * 1000) / 1000, lng: Math.round(loc.lng * 1000) / 1000 } : null}
         localReasons={priceReasons}
       />
     </View>

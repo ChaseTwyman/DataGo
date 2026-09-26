@@ -23,8 +23,13 @@ export function configureVoiceAudioSession(): void {
   });
 }
 
-export async function activateVoiceAudioSession(): Promise<void> {
-  configureVoiceAudioSession();
+/**
+ * `speakOnly` (verification companion): a plain playback session — no record category, so no mic
+ * indicator, no permission prompt and no voice-chat DSP. Everything else: the full duplex session.
+ */
+export async function activateVoiceAudioSession(opts: { speakOnly?: boolean } = {}): Promise<void> {
+  if (opts.speakOnly) AudioManager.setAudioSessionOptions({ iosCategory: "playback", iosMode: "spokenAudio", iosOptions: [] });
+  else configureVoiceAudioSession();
   await AudioManager.setAudioSessionActivity(true);
 }
 

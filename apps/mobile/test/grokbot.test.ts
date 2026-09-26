@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/http";
 import { toUserMessage } from "../src/api/errors";
-import { citationText, explainErrorText, grokbotCardView, matchReasonText, priceWhyView } from "../src/grokbot/messageView";
+import { NEUTRAL_INTEGRITY_MESSAGE } from "@groundtruth/shared";
+import { citationText, explainErrorText, grokbotCardView, matchReasonText, NEUTRAL_INTEGRITY_CARD, priceWhyView } from "../src/grokbot/messageView";
 import { pollNarration, type NarrationStopReason } from "../src/grokbot/narrationPoller";
 import { NarrationSpeaker, speakable } from "../src/grokbot/narrationSpeaker";
 import { areasFromText, saveProfileAndRefresh, splitList } from "../src/grokbot/profile";
@@ -252,8 +253,17 @@ describe("Grokbot message view", () => {
     for (const w of v.why) expect(w).not.toMatch(/reason_code|extracted_field|price_reason/);
   });
 
-  it("integrity rejects show no citations at all", () => {
-    expect(grokbotCardView(full, { integrityReject: true }).why).toEqual([]);
+  it("integrity rejects show only the fixed neutral card: no server text, no citations", () => {
+    const leaky = msg({
+      headline: "Your photo looked like a screen recapture",
+      paragraphs: ["The authenticity check saw moire."],
+      next_steps: ["Don't photograph screens."],
+      citations: [{ kind: "stage", ref: "authenticity", detail: "moire" }],
+    });
+    const v = grokbotCardView(leaky, { integrityReject: true });
+    expect(v).toEqual(NEUTRAL_INTEGRITY_CARD);
+    expect(v.headline).toBe(NEUTRAL_INTEGRITY_MESSAGE);
+    expect(JSON.stringify(v)).not.toMatch(/screen|moire|authenticity/i);
   });
 
   it("citationText never shows a raw integrity code", () => {

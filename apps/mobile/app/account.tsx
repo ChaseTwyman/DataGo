@@ -16,9 +16,9 @@ import { ENV } from "../src/lib/env";
 import { log } from "../src/lib/log";
 import { Body, Button, Divider, ErrorBox, Label, LoadingState, Money, Muted, Readout, Section, StatusPill } from "../src/ui/components";
 import { FieldError, PasswordField, TextField } from "../src/ui/forms";
+import { C, F, S, T, TOUCH } from "../src/ui/theme";
 
 type Me = Awaited<ReturnType<typeof api.me>>;
-import { C, F, S, T, TOUCH } from "../src/ui/theme";
 
 export { RouteErrorBoundary as ErrorBoundary } from "../src/ui/ErrorFallback";
 

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { log } from "../lib/log";
 import { useGrokVoice } from "../voice/useGrokVoice";
+import { NEUTRAL_INTEGRITY_CARD } from "./messageView";
 import { pollNarration, type NarrationStopReason } from "./narrationPoller";
 import { NarrationSpeaker } from "./narrationSpeaker";
 import type { LenientGrokbotMessage, LenientNarrationLine } from "./schemas";
@@ -16,7 +17,15 @@ const MAX_LINES = 12;
 
 export type CompanionVoice = "off" | "connecting" | "speaking" | "ready" | "unavailable";
 
-export function useVerificationCompanion(submissionId: string | undefined, opts: { voice: boolean }) {
+export function useVerificationCompanion(
+  submissionId: string | undefined,
+  opts: {
+    voice: boolean;
+    /** True once the screen knows this is an integrity reject: the final is then spoken neutrally. */
+    integrityRef: { readonly current: boolean };
+  },
+) {
+  const integrityRef = opts.integrityRef;
   const [lines, setLines] = useState<LenientNarrationLine[]>([]);
   const [final, setFinal] = useState<LenientGrokbotMessage | null>(null);
   const [stopped, setStopped] = useState<NarrationStopReason | null>(null);
@@ -52,7 +61,8 @@ export function useVerificationCompanion(submissionId: string | undefined, opts:
       onFinal: (m, isLive) => {
         setLive(isLive);
         setFinal(m);
-        speaker.offerFinal(m, isLive);
+        // Integrity reject (as far as the screen knows): say the neutral line, not the server's.
+        speaker.offerFinal(integrityRef.current ? { ...m, headline: NEUTRAL_INTEGRITY_CARD.headline } : m, isLive);
       },
       onStop: (reason) => {
         setStopped(reason);
@@ -61,7 +71,7 @@ export function useVerificationCompanion(submissionId: string | undefined, opts:
       },
       onError: (e) => log.handled("companion-poll", e),
     });
-  }, [submissionId]);
+  }, [submissionId, integrityRef]);
 
   const setMuted = useCallback((m: boolean) => {
     setMutedState(m);

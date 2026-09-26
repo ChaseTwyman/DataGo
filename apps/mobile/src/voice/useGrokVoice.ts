@@ -115,7 +115,7 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
         throw new Error("Microphone permission denied");
       }
       if (stale()) return;
-      await activateVoiceAudioSession();
+      await activateVoiceAudioSession({ speakOnly: narrator });
       if (stale()) return;
       const player = new QueuePlayer();
       playerRef.current = player;

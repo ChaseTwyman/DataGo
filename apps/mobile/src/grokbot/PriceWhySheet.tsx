@@ -3,6 +3,7 @@
  * + public factors). If that fails or isn't deployed yet, the bounty's own `price_reasons` are shown
  * instead — the contributor never sees an error here.
  */
+import * as Location from "expo-location";
 import { useEffect, useState } from "react";
 import { Modal, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,23 +14,33 @@ import { C, S, T } from "../ui/theme";
 import { GrokbotCard } from "./GrokbotCard";
 import { priceWhyView, type PriceWhyView } from "./messageView";
 
+/**
+ * Where the contributor is, only if location is ALREADY allowed (never prompts, never watches):
+ * the last known fix rounded to ~100 m. Null otherwise — the server then explains without it.
+ */
+async function lastKnownRounded(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    if ((await Location.getForegroundPermissionsAsync()).status !== "granted") return null;
+    const p = await Location.getLastKnownPositionAsync();
+    return p ? { lat: Math.round(p.coords.latitude * 1000) / 1000, lng: Math.round(p.coords.longitude * 1000) / 1000 } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function PriceWhySheet({
   visible,
   onClose,
   bountyId,
-  at,
   localReasons,
 }: {
   visible: boolean;
   onClose: () => void;
   bountyId: string;
-  at: { lat: number; lng: number } | null;
   localReasons: readonly string[] | undefined;
 }) {
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<PriceWhyView | null>(null);
-  const lat = at?.lat;
-  const lng = at?.lng;
   const reasonsKey = (localReasons ?? []).join("|");
 
   useEffect(() => {
@@ -37,17 +48,19 @@ export function PriceWhySheet({
     let cancelled = false;
     setView(null);
     const reasons = reasonsKey ? reasonsKey.split("|") : [];
-    api
-      .priceWhy(bountyId, lat !== undefined && lng !== undefined ? { lat, lng } : null)
-      .then((message) => !cancelled && setView(priceWhyView({ ok: true, message }, reasons)))
-      .catch((error: unknown) => {
+    void (async () => {
+      try {
+        const message = await api.priceWhy(bountyId, await lastKnownRounded());
+        if (!cancelled) setView(priceWhyView({ ok: true, message }, reasons));
+      } catch (error) {
         log.handled("price-why", error);
         if (!cancelled) setView(priceWhyView({ ok: false, error }, reasons));
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [visible, bountyId, lat, lng, reasonsKey]);
+  }, [visible, bountyId, reasonsKey]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>

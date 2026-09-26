@@ -1,11 +1,11 @@
 /**
  * What the phone renders from a GrokbotMessage (explain, final narration, price-why). Pure,
  * unit-tested. The server role-scopes every message; these helpers only add defense in depth:
- * - integrity rejects render no citations at all (the "why?" list would point at a check);
+ * - integrity rejects render the fixed neutral card — no server text, no citations (like resultView);
  * - reason-code citations for integrity codes are dropped everywhere;
  * - citations are turned into plain-language sentences, never raw kinds/refs.
  */
-import { contributorMessage, isIntegrityCode, isKnownReasonCode, stageLabel } from "@groundtruth/shared";
+import { contributorMessage, isIntegrityCode, isKnownReasonCode, NEUTRAL_INTEGRITY_MESSAGE, stageLabel } from "@groundtruth/shared";
 import { toUserMessage } from "../api/errors";
 import { isUnsupported } from "./narrationPoller";
 import type { LenientCitation, LenientGrokbotMessage } from "./schemas";
@@ -54,8 +54,20 @@ export function citationText(c: LenientCitation): string | null {
   }
 }
 
+/** What an integrity reject shows and says, whatever the server's message: nothing check-specific. */
+export const NEUTRAL_INTEGRITY_CARD: GrokbotCardView = {
+  headline: NEUTRAL_INTEGRITY_MESSAGE,
+  paragraphs: [],
+  nextSteps: ["You can start a new capture from any bounty nearby."],
+  why: [],
+  templated: false,
+};
+
 export function grokbotCardView(m: LenientGrokbotMessage, opts: { integrityReject?: boolean } = {}): GrokbotCardView {
-  const why = opts.integrityReject ? [] : [...new Set(m.citations.map(citationText).filter((s): s is string => !!s))];
+  // Same rule as resultView(): integrity rejects never render server text (defense in depth — a
+  // role-scoping bug on the server must not become a lesson in beating verification).
+  if (opts.integrityReject) return NEUTRAL_INTEGRITY_CARD;
+  const why = [...new Set(m.citations.map(citationText).filter((s): s is string => !!s))];
   return {
     headline: tidy(m.headline),
     paragraphs: m.paragraphs.map(tidy).filter(Boolean),
