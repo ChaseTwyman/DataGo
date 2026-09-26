@@ -19,6 +19,10 @@ Source of truth: `PRD.md` (product) + `BUILD_PROMPT.md` (technical). This plan b
 
 ---
 
+## Decision: local backend mode (made after M0)
+
+No Supabase exists yet and none can run here, but M1 needs a headless end-to-end check. So the API reads/writes Postgres through a small SQL `Db` interface (`apps/web/lib/db`) with two drivers: `postgres` via `DATABASE_URL` (Supabase's Postgres) and **PGlite**, which applies the real migrations + seed. `LOCAL_BACKEND=1` = PGlite + local-disk storage + dev bearer tokens (`POST /api/dev/session`) + polling in place of realtime. Supabase mode = Supabase Auth, Storage, Realtime + `DATABASE_URL`. Dev routes/tokens are refused outside local mode. Tracks after M0: W1 (API + pipeline), W2 (dashboard UI), M (mobile), running in parallel against `packages/shared` contracts.
+
 ## M0 — Foundations and contracts
 
 Root:
