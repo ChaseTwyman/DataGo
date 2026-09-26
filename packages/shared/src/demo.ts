@@ -16,4 +16,7 @@ export const DEMO = {
   maxCents: 1000,
   targetPerCell: 5,
   budgetCents: 50_000,
+  /** Demo sponsor: sponsors pay to direct collection; the data stays free for everyone. */
+  sponsorName: "Georgia Tech Urban Hydrology Lab (demo)",
+  sponsorUrl: null as string | null,
 } as const;

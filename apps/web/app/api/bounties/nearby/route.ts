@@ -64,6 +64,8 @@ export const GET = route(async (req) => {
       match_reason: m?.reason ?? null,
       budget_remaining_cents: budgetRemaining(b),
       example_image_url: await mediaUrl(p.example_image_path, origin, 24 * 3600),
+      sponsor_name: b.sponsor_name,
+      sponsor_url: b.sponsor_url,
     });
   }
   out.sort((a, b) => a.distance_m - b.distance_m);

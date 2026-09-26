@@ -64,6 +64,8 @@ export async function spawnDemoEvent(
     budget_cents: DEMO.budgetCents,
     status: "active",
     source: "demo",
+    sponsor_name: DEMO.sponsorName,
+    sponsor_url: DEMO.sponsorUrl,
   });
 
   await ensureDevUser(db, DEMO_SEED_USER_ID, "contributor");

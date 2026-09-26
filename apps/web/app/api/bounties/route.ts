@@ -66,6 +66,8 @@ export const POST = route(async (req) => {
     budget_cents: body.budget_cents,
     status: body.status,
     source: body.source,
+    sponsor_name: body.sponsor_name?.trim() || null,
+    sponsor_url: body.sponsor_url,
   });
   return json({ id, cells }, { status: 201 });
 });

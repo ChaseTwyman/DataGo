@@ -190,3 +190,42 @@ describe("row level security", () => {
     });
   });
 });
+
+describe("open data (20260926000004)", () => {
+  it("demo bounty carries the demo sponsor from the seed", async () => {
+    const r = await db.query<{ sponsor_name: string | null; sponsor_url: string | null }>(
+      "select sponsor_name, sponsor_url from public.bounties where id = $1",
+      [DEMO.bountyId],
+    );
+    expect(r.rows[0]).toEqual({ sponsor_name: DEMO.sponsorName, sponsor_url: DEMO.sponsorUrl });
+  });
+
+  it("re-running the seed keeps an existing sponsor and still converges", async () => {
+    await db.query("update public.bounties set sponsor_name = 'Kept Sponsor' where id = $1", [DEMO.bountyId]);
+    await db.exec(readFileSync(join(root, "seed.sql"), "utf8"));
+    const r = await db.query<{ sponsor_name: string }>("select sponsor_name from public.bounties where id = $1", [DEMO.bountyId]);
+    expect(r.rows[0]?.sponsor_name).toBe("Kept Sponsor");
+    await db.query("update public.bounties set sponsor_name = null where id = $1", [DEMO.bountyId]);
+    await db.exec(readFileSync(join(root, "seed.sql"), "utf8"));
+    const r2 = await db.query<{ sponsor_name: string }>("select sponsor_name from public.bounties where id = $1", [DEMO.bountyId]);
+    expect(r2.rows[0]?.sponsor_name).toBe(DEMO.sponsorName);
+  });
+
+  it("creates a random 64-hex public dataset salt", async () => {
+    const r = await db.query<{ value: string }>("select value from public.app_settings where key = 'public_dataset_salt'");
+    expect(r.rows[0]?.value).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("app_settings is invisible to signed-in users (RLS, no policies)", async () => {
+    await asUser(CONTRIB_A, async () => {
+      const r = await db.query("select key from public.app_settings");
+      expect(r.rows).toHaveLength(0);
+    });
+  });
+
+  it("rejects over-long sponsor names", async () => {
+    await expect(
+      db.query("update public.bounties set sponsor_name = $2 where id = $1", [DEMO.bountyId, "x".repeat(121)]),
+    ).rejects.toThrow(/bounties_sponsor_name_len/);
+  });
+});

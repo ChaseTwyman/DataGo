@@ -50,14 +50,18 @@ values (
 insert into public.bounties (
   id, protocol_id, created_by, title, summary, area, center_lat, center_lng, radius_m, h3_res, cells,
   starts_at, ends_at, event_started_at, base_price_cents, max_price_cents, target_per_cell, priority,
-  budget_cents, spent_cents, status, source
+  budget_cents, spent_cents, status, source, sponsor_name, sponsor_url
 ) values (
   ${q(DEMO.bountyId)}, ${q(DEMO.protocolId)}, ${q(DEMO.researcherId)},
   ${q(DEMO.title)}, ${q(DEMO.summary)}, ${json(area)}, ${DEMO.lat}, ${DEMO.lng}, ${DEMO.radiusM}, 9,
   array[${cells.map(q).join(", ")}]::text[],
   now() - interval '1 hour', now() + interval '7 days', now() - interval '20 minutes',
-  ${DEMO.baseCents}, ${DEMO.maxCents}, ${DEMO.targetPerCell}, 1, ${DEMO.budgetCents}, 0, 'active', 'demo'
-) on conflict (id) do nothing;
+  ${DEMO.baseCents}, ${DEMO.maxCents}, ${DEMO.targetPerCell}, 1, ${DEMO.budgetCents}, 0, 'active', 'demo',
+  ${q(DEMO.sponsorName)}, ${DEMO.sponsorUrl === null ? "null" : q(DEMO.sponsorUrl)}
+) on conflict (id) do update
+  -- an existing demo bounty (e.g. the hosted DB) only gains a sponsor; nothing else is touched
+  set sponsor_name = coalesce(public.bounties.sponsor_name, excluded.sponsor_name),
+      sponsor_url = coalesce(public.bounties.sponsor_url, excluded.sponsor_url);
 `;
 
 const out = fileURLToPath(new URL("../seed.sql", import.meta.url));

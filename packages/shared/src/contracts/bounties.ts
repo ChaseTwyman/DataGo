@@ -49,6 +49,9 @@ export const BountySummarySchema = z.object({
   match_reason: z.string().nullable(),
   budget_remaining_cents: z.number().int(),
   example_image_url: z.string().nullable(),
+  /** Who funds the bounty. Data is free for everyone; sponsors pay to direct collection. */
+  sponsor_name: z.string().nullable().default(null),
+  sponsor_url: z.string().nullable().default(null),
 });
 export type BountySummary = z.infer<typeof BountySummarySchema>;
 
@@ -80,6 +83,9 @@ export const BountyDetailSchema = z.object({
   spent_cents: z.number().int(),
   example_image_url: z.string().nullable(),
   briefing_video_url: z.string().nullable(),
+  /** Who funds the bounty. Data is free for everyone; sponsors pay to direct collection. */
+  sponsor_name: z.string().nullable().default(null),
+  sponsor_url: z.string().nullable().default(null),
   coverage: z.array(CellPriceSchema),
 });
 export type BountyDetail = z.infer<typeof BountyDetailSchema>;
@@ -102,6 +108,8 @@ export const CreateBountyRequestSchema = z
     target_per_cell: z.number().int().min(1).max(100),
     priority: z.number().min(0.1).max(5).default(1),
     budget_cents: z.number().int().min(0),
+    sponsor_name: z.string().max(120).nullable().default(null),
+    sponsor_url: z.string().url().max(300).nullable().default(null),
     status: BountyStatusSchema.default("active"),
     source: BountySourceSchema.default("manual"),
   })
@@ -122,6 +130,9 @@ export const PatchBountyRequestSchema = z.object({
   target_per_cell: z.number().int().min(1).optional(),
   priority: z.number().min(0.1).max(5).optional(),
   budget_cents: z.number().int().min(0).optional(),
+  /** null clears the sponsor. */
+  sponsor_name: z.string().max(120).nullable().optional(),
+  sponsor_url: z.string().url().max(300).nullable().optional(),
 });
 export type PatchBountyRequest = z.infer<typeof PatchBountyRequestSchema>;
 

@@ -25,12 +25,14 @@ export interface BountyRow {
   status: BountyStatus;
   source: "manual" | "nws" | "radar" | "demo";
   briefing_video_path: string | null;
+  sponsor_name: string | null;
+  sponsor_url: string | null;
   created_at: string;
 }
 
 const COLS = `id, protocol_id, created_by, title, summary, area, center_lat, center_lng, radius_m, h3_res, cells,
   starts_at, ends_at, event_started_at, base_price_cents, max_price_cents, target_per_cell, priority,
-  budget_cents, spent_cents, status::text as status, source::text as source, briefing_video_path, created_at`;
+  budget_cents, spent_cents, status::text as status, source::text as source, briefing_video_path, sponsor_name, sponsor_url, created_at`;
 
 type Raw = Record<string, unknown>;
 
@@ -105,19 +107,22 @@ export interface NewBounty {
   budget_cents: number;
   status: BountyStatus;
   source: "manual" | "nws" | "radar" | "demo";
+  sponsor_name?: string | null;
+  sponsor_url?: string | null;
 }
 
 export async function insertBounty(db: Db, b: NewBounty): Promise<string> {
   const rows = await db.query<{ id: string }>(
     `insert into public.bounties (protocol_id, created_by, title, summary, area, center_lat, center_lng, radius_m, h3_res, cells,
-       starts_at, ends_at, event_started_at, base_price_cents, max_price_cents, target_per_cell, priority, budget_cents, status, source)
+       starts_at, ends_at, event_started_at, base_price_cents, max_price_cents, target_per_cell, priority, budget_cents, status, source,
+       sponsor_name, sponsor_url)
      values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, 9, $9::text[], $10::timestamptz, $11::timestamptz, $12::timestamptz,
-             $13, $14, $15, $16, $17, $18::public.bounty_status, $19::public.bounty_source)
+             $13, $14, $15, $16, $17, $18::public.bounty_status, $19::public.bounty_source, $20, $21)
      returning id`,
     [
       b.protocol_id, b.created_by, b.title, b.summary, json(b.area), b.center_lat, b.center_lng, b.radius_m, b.cells,
       b.starts_at, b.ends_at, b.event_started_at, b.base_price_cents, b.max_price_cents, b.target_per_cell, b.priority,
-      b.budget_cents, b.status, b.source,
+      b.budget_cents, b.status, b.source, b.sponsor_name ?? null, b.sponsor_url ?? null,
     ],
   );
   return rows[0]!.id;
@@ -125,8 +130,8 @@ export async function insertBounty(db: Db, b: NewBounty): Promise<string> {
 
 export async function patchBounty(db: Db, id: string, p: PatchBountyRequest): Promise<void> {
   const sets: string[] = [];
-  const params: (string | number)[] = [id];
-  const add = (col: string, val: string | number, cast = "") => {
+  const params: (string | number | null)[] = [id];
+  const add = (col: string, val: string | number | null, cast = "") => {
     params.push(val);
     sets.push(`${col} = $${params.length}${cast}`);
   };
@@ -139,6 +144,8 @@ export async function patchBounty(db: Db, id: string, p: PatchBountyRequest): Pr
   if (p.target_per_cell !== undefined) add("target_per_cell", p.target_per_cell);
   if (p.priority !== undefined) add("priority", p.priority);
   if (p.budget_cents !== undefined) add("budget_cents", p.budget_cents);
+  if (p.sponsor_name !== undefined) add("sponsor_name", p.sponsor_name?.trim() || null);
+  if (p.sponsor_url !== undefined) add("sponsor_url", p.sponsor_url);
   if (sets.length === 0) return;
   await db.query(`update public.bounties set ${sets.join(", ")} where id = $1`, params);
 }

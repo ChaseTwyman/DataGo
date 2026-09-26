@@ -43,6 +43,8 @@ export async function bountyDetail(db: Db, b: BountyRow, p: ProtocolRow, origin:
     spent_cents: b.spent_cents,
     example_image_url: await mediaUrl(p.example_image_path, origin, 24 * 3600),
     briefing_video_url: await mediaUrl(b.briefing_video_path, origin, 24 * 3600),
+    sponsor_name: b.sponsor_name,
+    sponsor_url: b.sponsor_url,
     coverage,
   };
 }

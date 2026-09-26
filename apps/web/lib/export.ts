@@ -74,37 +74,40 @@ export async function exportRows(db: Db, bountyId: string, protocol: Protocol): 
     `select * from public.observations_export where bounty_id = $1 order by captured_at`,
     [bountyId],
   );
+  return rows.map((r) => flattenExportRow(r, protocol));
+}
+
+/** One observations_export row → flat columns (BASE + extraction fields + field notes). Full fidelity. */
+export function flattenExportRow(r: Record<string, unknown>, protocol: Protocol): ExportRow {
   const extractionFields = Object.keys(protocol.extraction_schema.properties);
-  return rows.map((r) => {
-    const extracted = (r.extracted ?? {}) as Record<string, unknown>;
-    const notes = (r.field_notes ?? {}) as Record<string, unknown>;
-    const out: ExportRow = {
-      observation_id: String(r.observation_id),
-      bounty_id: String(r.bounty_id),
-      protocol_slug: String(r.protocol_slug),
-      protocol_version: Number(r.protocol_version),
-      lat: Number(r.lat),
-      lng: Number(r.lng),
-      accuracy_m: r.accuracy_m === null ? null : Number(r.accuracy_m),
-      h3_cell: String(r.h3_cell),
-      captured_at: toIso(r.captured_at),
-      received_at: toIso(r.received_at),
-      confidence: r.confidence === null ? null : Number(r.confidence),
-      protocol_score: r.protocol_score === null ? null : Number(r.protocol_score),
-      authenticity_score: r.authenticity_score === null ? null : Number(r.authenticity_score),
-      reason_codes: ((r.reason_codes as string[] | null) ?? []).join(";"),
-      human_reviewed: Boolean(r.human_reviewed),
-      gate_degraded: r.gate_degraded === null ? null : Boolean(r.gate_degraded),
-      contributor_id: String(r.contributor_id),
-      contributor_trust: r.contributor_trust === null ? null : Number(r.contributor_trust),
-      device_model: (r.device_model as string | null) ?? null,
-      device_os: (r.device_os as string | null) ?? null,
-      frame_count: Number(r.frame_count),
-    };
-    for (const f of extractionFields) out[extractionColumnName(f)] = scalar(extracted[f]);
-    for (const q of protocol.capture.field_questions) out[`note_${q.id}`] = scalar(notes[q.id]);
-    return out;
-  });
+  const extracted = (r.extracted ?? {}) as Record<string, unknown>;
+  const notes = (r.field_notes ?? {}) as Record<string, unknown>;
+  const out: ExportRow = {
+    observation_id: String(r.observation_id),
+    bounty_id: String(r.bounty_id),
+    protocol_slug: String(r.protocol_slug),
+    protocol_version: Number(r.protocol_version),
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    accuracy_m: r.accuracy_m === null ? null : Number(r.accuracy_m),
+    h3_cell: String(r.h3_cell),
+    captured_at: toIso(r.captured_at),
+    received_at: toIso(r.received_at),
+    confidence: r.confidence === null ? null : Number(r.confidence),
+    protocol_score: r.protocol_score === null ? null : Number(r.protocol_score),
+    authenticity_score: r.authenticity_score === null ? null : Number(r.authenticity_score),
+    reason_codes: ((r.reason_codes as string[] | null) ?? []).join(";"),
+    human_reviewed: Boolean(r.human_reviewed),
+    gate_degraded: r.gate_degraded === null ? null : Boolean(r.gate_degraded),
+    contributor_id: String(r.contributor_id),
+    contributor_trust: r.contributor_trust === null ? null : Number(r.contributor_trust),
+    device_model: (r.device_model as string | null) ?? null,
+    device_os: (r.device_os as string | null) ?? null,
+    frame_count: Number(r.frame_count),
+  };
+  for (const f of extractionFields) out[extractionColumnName(f)] = scalar(extracted[f]);
+  for (const q of protocol.capture.field_questions) out[`note_${q.id}`] = scalar(notes[q.id]);
+  return out;
 }
 
 function scalar(v: unknown): string | number | boolean | null {
