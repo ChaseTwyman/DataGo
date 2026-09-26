@@ -616,3 +616,31 @@ describe("sponsor pool (20260926000007)", () => {
     });
   });
 });
+
+describe("migration 000008 (grokbot)", () => {
+  it("adds grokbot_cache (server-only: invisible and unwritable for signed-in users) and protocols.self_check", async () => {
+    await db.query(
+      `insert into public.grokbot_cache (kind, subject_id, audience, version, payload, source, expires_at)
+       values ('explain', 's1', 'contributor', 'v1', '{"headline":"x"}', 'template', now() + interval '1 hour')`,
+    );
+    await expect(
+      db.query(`insert into public.grokbot_cache (kind, subject_id, audience, version, payload, source, expires_at)
+                values ('explain', 's1', 'someone', 'v1', '{}', 'template', now())`),
+    ).rejects.toThrow();
+    await asUser(CONTRIB_A, async () => {
+      const r = await db.query("select kind from public.grokbot_cache").then(
+        (x) => x.rows,
+        () => [],
+      );
+      expect(r).toHaveLength(0);
+      await expect(
+        db.query(`insert into public.grokbot_cache (kind, subject_id, audience, version, payload, source, expires_at)
+                  values ('explain', 's2', 'public', 'v1', '{}', 'grok', now())`),
+      ).rejects.toThrow();
+    });
+    const col = await db.query<{ data_type: string }>(
+      "select data_type from information_schema.columns where table_schema = 'public' and table_name = 'protocols' and column_name = 'self_check'",
+    );
+    expect(col.rows[0]?.data_type).toBe("jsonb");
+  });
+});
