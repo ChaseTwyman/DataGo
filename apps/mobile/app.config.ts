@@ -39,8 +39,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSMicrophoneUsageDescription: MIC,
       NSLocationWhenInUseUsageDescription: LOCATION,
       NSMotionUsageDescription: "GroundTruth checks that the phone is level and steady before capture.",
-      // Dev builds talk to the laptop API over plain HTTP on the LAN.
-      NSAppTransportSecurity: { NSAllowsArbitraryLoads: true, NSAllowsLocalNetworking: true },
+      // Dev builds load JS from Metro (LAN IP or an `expo start --tunnel` http URL) and talk to the
+      // laptop API over plain HTTP. Do NOT add NSAllowsLocalNetworking here: when it is present iOS
+      // ignores NSAllowsArbitraryLoads, which blocked the http://*.exp.direct tunnel bundle
+      // ("App Transport Security policy requires the use of a secure connection", -1022).
+      NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
       NSLocalNetworkUsageDescription: "GroundTruth connects to the development server on your local network.",
       ITSAppUsesNonExemptEncryption: false,
     },
