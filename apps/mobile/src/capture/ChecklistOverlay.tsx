@@ -50,7 +50,7 @@ function VerifyBanner({ state }: { state: GateState }) {
         )}
       </View>
       <Text style={styles.bannerBody}>{detail}</Text>
-      {v === "failed" && state.fatal ? <Text style={styles.bannerMetaMuted}>{state.fatal}</Text> : null}
+      {/* state.fatal holds the raw server/exception text: logs only, never shown (canned copy above). */}
     </View>
   );
 }
@@ -95,6 +95,5 @@ const styles = StyleSheet.create({
   banner: { marginTop: S.sm, borderWidth: 1, borderRadius: R.sm, padding: S.md, gap: S.xs, backgroundColor: C.bg },
   bannerTitle: { fontFamily: F.display, fontSize: 16, letterSpacing: TRACK.label },
   bannerMeta: { fontFamily: F.numeralRegular, fontSize: 13, letterSpacing: TRACK.label, fontVariant: ["tabular-nums"] },
-  bannerMetaMuted: { color: C.muted, fontFamily: F.body, fontSize: 15 },
   bannerBody: { color: C.text, fontFamily: F.body, fontSize: 15, lineHeight: 20 },
 });

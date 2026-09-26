@@ -340,7 +340,7 @@ export class RealtimeVoiceSession {
         this.responseInProgress = false;
         this.awaitingResponseId = false;
         this.currentResponseId = null;
-        void this.afterResponseDone();
+        this.afterResponseDone().catch((e: unknown) => this.opts.log?.("[voice] after response failed", e));
         break;
       case "assistant_transcript_delta":
         if (ev.responseId && this.droppedResponses.has(ev.responseId)) break;
@@ -367,7 +367,7 @@ export class RealtimeVoiceSession {
         this.speechEndAt = this.now();
         break;
       case "function_call":
-        void this.handleFunctionCall(ev.name, ev.callId, ev.arguments);
+        this.handleFunctionCall(ev.name, ev.callId, ev.arguments).catch((e: unknown) => this.opts.log?.("[voice] tool call failed", e));
         break;
       case "error":
         // A rejected response.create (e.g. "active response in progress") never gets
