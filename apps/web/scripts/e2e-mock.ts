@@ -7,6 +7,7 @@
  * Researcher: submissions list, coverage, CSV + GeoJSON export, red team (ai_generated + recycled).
  * Exits non-zero on the first failed expectation.
  */
+import { existsSync } from "node:fs";
 import sharp from "sharp";
 import {
   CoverageResponseSchema,
@@ -79,6 +80,32 @@ async function frame(seed: number, w = 640, h = 480): Promise<Buffer> {
   return sharp(raw, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 80 }).toBuffer();
 }
 
+interface Tok {
+  user_id: string;
+  access_token: string;
+  role: string;
+}
+
+async function devToken(role: "contributor" | "researcher"): Promise<Tok> {
+  return DevSessionResponseSchema.parse((await api("POST", "/api/dev/session", { body: { role } })).json);
+}
+
+/** Supabase backend: anonymous sign-in (contributor) or the seeded researcher's password login. */
+async function supabaseToken(role: "contributor" | "researcher"): Promise<Tok> {
+  if (existsSync(".env")) process.loadEnvFile(".env");
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  expect(url && anon, "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY needed for the Supabase backend");
+  const { createClient } = await import("@supabase/supabase-js");
+  const sb = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data, error } =
+    role === "contributor"
+      ? await sb.auth.signInAnonymously()
+      : await sb.auth.signInWithPassword({ email: DEMO.researcherEmail, password: DEMO.researcherPassword });
+  expect(!error && data.session, `supabase ${role} sign-in failed: ${error?.message ?? "no session"}`);
+  return { user_id: data.session.user.id, access_token: data.session.access_token, role };
+}
+
 async function main(): Promise<void> {
   console.log(`GroundTruth e2e (mock) against ${BASE}\n`);
   const seed = Date.now() % 1_000_000;
@@ -86,14 +113,13 @@ async function main(): Promise<void> {
   const health = await step("health", async () => {
     const h = HealthResponseSchema.parse((await api("GET", "/api/health")).json);
     expect(h.ok, "db not ok");
-    expect(h.backend === "local", "e2e:mock needs LOCAL_BACKEND=1 (dev tokens)");
     return [h, `backend=${h.backend} mock_grok=${h.mock_grok} demo=${h.demo_mode} realtime=${h.realtime}`];
   });
-  if (!health.mock_grok) console.log("  ! MOCK_GROK is off: real Grok calls will be made");
+  if (!health.mock_grok) console.log("  ! MOCK_GROK is off: real Grok calls will be made (random test frames will not be accepted)");
 
-  const c = await step("contributor dev session", async () => {
-    const s = DevSessionResponseSchema.parse((await api("POST", "/api/dev/session", { body: { role: "contributor" } })).json);
-    return [s, `user ${s.user_id.slice(0, 8)}`];
+  const c = await step("contributor session", async () => {
+    const s = health.backend === "local" ? await devToken("contributor") : await supabaseToken("contributor");
+    return [s, `${health.backend} user ${s.user_id.slice(0, 8)}`];
   });
 
   const bounty = await step("nearby", async () => {
@@ -190,9 +216,9 @@ async function main(): Promise<void> {
     return [w, `balance $${(w.balance_cents / 100).toFixed(2)}, trust ${w.trust_score}`];
   });
 
-  const r = await step("researcher dev session", async () => {
-    const s = DevSessionResponseSchema.parse((await api("POST", "/api/dev/session", { body: { role: "researcher" } })).json);
-    return [s, `role=${s.role}`];
+  const r = await step("researcher session", async () => {
+    const s = health.backend === "local" ? await devToken("researcher") : await supabaseToken("researcher");
+    return [s, `${health.backend} ${s.role}`];
   });
 
   await step("researcher: submissions list", async () => {

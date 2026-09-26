@@ -10,8 +10,11 @@ export const GET = route(async () => {
   let ok = true;
   try {
     await (await getDb()).query("select 1");
-  } catch {
+  } catch (err) {
     ok = false;
+    // Message only (e.g. "28P01 password authentication failed"); never the connection string.
+    const e = err as { code?: string; message?: string };
+    console.warn("[health] database unavailable:", e.code ?? "", e.message ?? String(err));
   }
   const local = isLocalBackend();
   const body: HealthResponse = {
