@@ -6,6 +6,7 @@ import { pruneGrokbotCache } from "@/lib/grokbot/cache";
 import { pruneRateLimits } from "@/lib/rateLimit";
 import { purgeRejectedMedia } from "@/lib/retention";
 import { getStorage } from "@/lib/storage";
+import { liveRedactionDeps, redactBacklog } from "@/lib/verification/redaction";
 
 export const maxDuration = 60;
 
@@ -28,7 +29,9 @@ const run = route(async (req) => {
   const grokbotCachePruned = await pruneGrokbotCache(db);
   // Sponsor pool housekeeping: release money from ended requests, fund pending ones.
   const allocation = await runAllocation(db);
-  return json({ ok: true, rejected_media: media, rate_limit_windows_pruned: rateLimitWindows, grokbot_cache_pruned: grokbotCachePruned, allocation });
+  // Retry failed / missing face-plate redactions (small batch: this route has 60 s).
+  const redaction = await redactBacklog(db, liveRedactionDeps(getStorage()), 5);
+  return json({ ok: true, rejected_media: media, rate_limit_windows_pruned: rateLimitWindows, grokbot_cache_pruned: grokbotCachePruned, allocation, redaction });
 });
 
 /** Vercel Cron invokes GET (vercel.json, daily); POST for manual runs. */

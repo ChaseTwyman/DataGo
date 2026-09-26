@@ -30,8 +30,9 @@ export async function purgeRejectedMedia(db: Db, storage: ObjectStorage, opts: {
   );
   if (rows.length === 0) return { submissions: 0, photos: 0, cutoff };
   const paths = rows.flatMap((r) =>
-    (Array.isArray(r.media) ? (r.media as { path?: unknown }[]) : [])
-      .map((m) => m.path)
+    (Array.isArray(r.media) ? (r.media as { path?: unknown; redacted_path?: unknown }[]) : [])
+      // Originals and their face/plate-redacted derivatives (000009) go together.
+      .flatMap((m) => [m.path, m.redacted_path])
       // Only the submitter's own folder: a rejected row may reference someone else's photo paths.
       .filter((p): p is string => typeof p === "string" && p.startsWith(`observations/${r.user_id}/`) && !p.includes("..")),
   );

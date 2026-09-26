@@ -1,6 +1,8 @@
 /** Vision calls: live frame checks (fast model) and final verification (reasoning model). */
+import { z } from "zod";
 import {
   buildVerificationJsonSchema,
+  closeObjects,
   frameCheckJsonSchema,
   frameCheckZod,
   parseVerification,
@@ -8,6 +10,7 @@ import {
   relevanceZod,
   type Challenge,
   type FrameCheckResult,
+  type JsonSchema,
   type MockVariant,
   type Protocol,
   type RelevanceResult,
@@ -15,7 +18,7 @@ import {
 } from "@groundtruth/shared";
 import { grokEnv } from "./config";
 import { grokJSON, imagePart } from "./json";
-import { mockFrameCheck, mockRelevance, mockVerification } from "./mocks/fixtures";
+import { mockFrameCheck, mockPrivacyRegions, mockRelevance, mockVerification } from "./mocks/fixtures";
 
 export function frameCheckSystemPrompt(protocol: Protocol): string {
   const elements = protocol.capture.required_elements.map((e) => `${e.id}: ${e.description}`).join("; ");
@@ -146,5 +149,45 @@ export async function verifyCapture(args: {
     reasoningEffort: grokEnv.verificationEffort,
     ...(args.signal ? { signal: args.signal } : {}),
     mock: () => mockVerification(args.protocol, args.variant),
+  });
+}
+
+// ---------- Privacy regions (faces, licence plates) for post-decision redaction ----------
+
+const unit = z.number().min(0).max(1);
+export const PrivacyDetectionSchema = z.object({
+  faces_or_plates_present: z.boolean(),
+  regions: z
+    .array(z.object({ kind: z.enum(["face", "license_plate"]), x: unit, y: unit, w: unit, h: unit, confidence: unit }))
+    .max(64),
+});
+export type PrivacyDetection = z.infer<typeof PrivacyDetectionSchema>;
+
+export const PRIVACY_SYSTEM_PROMPT = [
+  "You find privacy-sensitive regions in a photo so they can be blurred before researchers see it.",
+  "Report every human face (including partial, distant, turned-away heads with visible facial features, faces in reflections, windows and posters) and every vehicle licence plate (readable or not).",
+  "For each, give a bounding box in coordinates normalised to the image: x and y are the top-left corner as a fraction of the image width and height (0 = left/top edge, 1 = right/bottom edge), w and h are the box width and height as fractions of the image width and height.",
+  "Boxes must cover the whole face or plate; when unsure of an edge, make the box larger. When unsure whether something is a face or a plate, include it.",
+  "faces_or_plates_present is true if any face or plate is visible at all, even if you cannot box it precisely.",
+].join(" ");
+
+/**
+ * One fast-vision call per frame. Runs after the decision (never on the verification path), so it
+ * has a longer budget and one SDK retry. Box accuracy is not documented by xAI: callers grow every
+ * box by a safety margin (lib/image/redact.ts) and blur the whole frame if the model says a face or
+ * plate is present but returns no boxes.
+ */
+export async function detectPrivacyRegions(args: { imageBase64: string; timeoutMs?: number }): Promise<PrivacyDetection> {
+  return grokJSON({
+    op: "privacy_regions",
+    model: grokEnv.fastVisionModel,
+    system: PRIVACY_SYSTEM_PROMPT,
+    content: [imagePart(args.imageBase64, "high")],
+    schema: closeObjects(z.toJSONSchema(PrivacyDetectionSchema) as JsonSchema),
+    name: "privacy_regions",
+    parse: (raw) => PrivacyDetectionSchema.parse(raw),
+    timeoutMs: args.timeoutMs ?? 45_000,
+    maxRetries: 1,
+    mock: () => mockPrivacyRegions(),
   });
 }

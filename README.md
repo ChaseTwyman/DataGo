@@ -52,6 +52,9 @@ Migrations (applied in order):
 | `20260926000004_open_data.sql` | Public dataset support, sponsor fields |
 | `20260926000005_verification_hardening.sql` | Server-side capture gate, verifier provenance, quality tier |
 | `20260926000006_accounts.sql` | Account flags (researcher/admin), suspension, deleted-user placeholder, retention, rate limits |
+| `20260926000007_sponsor_pool.sql` | Sponsor pool, contributions, allocation ledger |
+| `20260926000008_grokbot.sql` | Grokbot cache, protocol self-check |
+| `20260926000009_redaction.sql` | `submissions.redaction`, `media[i].redacted_path` guard, researchers read only redacted photos in storage |
 
 ### Request flow
 
@@ -80,14 +83,14 @@ POST /api/submissions ─────────────► responds, then 
 
 ### Verification pipeline
 
-`apps/web/lib/verification/pipeline.ts` runs these stages in order. Each writes a result (status,
+`apps/web/lib/verification/pipeline.ts` runs these stages (session integrity first; the grok-4.7 call then starts concurrently with relevance, and the rest run concurrently once relevance has passed). Each writes a result (status,
 score, reason codes, evidence, duration) into `submissions.checks` as it starts and finishes, which is
 what animates the checklist on the phone and the dashboard.
 
 | # | Stage | What it does |
 |---|---|---|
 | 1 | **Session integrity** | Open, unexpired session; nonce; capture window; and the **server-authoritative capture gate**: the session must have recorded 2 consecutive real all-green frame checks, or the submission is refused with `GATE_NOT_PASSED` and never paid. A failure here stops the pipeline (nothing is sent to a model). |
-| 2 | **Relevance** | Fast vision model (~2 s): is this even the subject of the protocol? Off-topic → `OFF_TOPIC` reject, and the slow reasoning-model stages are skipped. |
+| 2 | **Relevance** | Fast vision model (~2 s): is this even the subject of the protocol? Off-topic → `OFF_TOPIC` reject; the in-flight reasoning call is aborted and its stages are skipped. |
 | 3 | **Challenge-response** | The random challenge (e.g. "step left") was performed; the 3-frame burst shows real parallax. Identical burst frames fail even if the model is fooled. |
 | 4 | **Protocol compliance + extraction** | Required elements, quality, structured fields (depth estimate etc.), plus deterministic extraction sanity rules. |
 | 5 | **Authenticity** | Screen recapture, print, AI generation, editing, internal inconsistencies (grok-4.7, skeptical prompt) **plus a C2PA / IPTC provenance check** that hard-fails with `C2PA_AI_GENERATED` when the file declares itself AI-generated, independent of the model. |
@@ -108,7 +111,29 @@ integrity failures are not.
 `none`. Mock (`MOCK_GROK`) and seed/demo rows are never exported or published.
 
 **Measured on Vercel with real Grok:** frame check ~1.3 s, relevance ~2 s, grok-4.7 verification
-~41 s at `reasoning_effort: medium` (`GROK_VERIFICATION_EFFORT`).
+~41 s at `reasoning_effort: medium` (`GROK_VERIFICATION_EFFORT`). Reasoning tokens are the latency
+(4–13k per call; images are ~2.9k input tokens each). `low` effort was measured and rejected: it
+accepted both pseudo-parallax Imagine fakes in the eval set. Relevance now overlaps the model call
+(~2 s saved). Knobs (defaults unchanged): `VERIFICATION_FRAME_MAX_EDGE` (1536),
+`VERIFICATION_IMAGE_DETAIL` (high|mixed|low), `GROK_VERIFICATION_TIMEOUT_MS` (150000).
+
+### Face / licence-plate redaction
+
+After the decision (`after()` in `POST /api/submissions`), `lib/verification/redaction.ts` asks the
+fast vision model for face and plate boxes in each frame, pixelates + blurs them with sharp and stores
+`observations/<user>/<session>/<n>.redacted.jpg` next to the original (`media[i].redacted_path`,
+summary in `submissions.redaction`). Verification, dHash and C2PA only ever read originals.
+
+- Researchers (dashboard, API) get only redacted URLs, and nothing while redaction is pending or
+  failed. Admins additionally get `original_media_urls`. The contributor sees their own originals.
+  Storage RLS matches: non-admin researchers can read only `*.redacted.jpg`. Photos are never in
+  exports or open data.
+- Failures never change a decision; they are recorded (`redaction.status = failed`, attempts) and
+  retried by the daily cron (5 per run) or `pnpm --filter @groundtruth/web backfill:redaction`.
+- **Limit:** the model finds faces/plates but its boxes are off by 4–10 % of the frame, so each box is
+  grown by max(1× its size, 8 % of the long edge) before blurring. Blurred areas are large and can hide
+  a nearby depth reference (the tire under a plate); admins still have the original. If the model says
+  something is present but returns no box, the whole frame is blurred. Missed detections are possible.
 
 ### Data flow to the open dataset
 
@@ -171,7 +196,8 @@ Copy the examples and fill them in. Neither `.env` is committed.
 | Variable | Notes |
 |---|---|
 | `XAI_API_KEY`, `XAI_BASE_URL` | xAI. **Secret.** |
-| `GROK_REASONING_MODEL`, `GROK_FAST_VISION_MODEL`, `GROK_IMAGE_MODEL`, `GROK_VIDEO_MODEL`, `GROK_VOICE_MODEL`, `GROK_VERIFICATION_EFFORT` | Model names live only in env (`lib/grok/config.ts`). Effort `medium` keeps verification near 40 s. |
+| `GROK_REASONING_MODEL`, `GROK_FAST_VISION_MODEL`, `GROK_IMAGE_MODEL`, `GROK_VIDEO_MODEL`, `GROK_VOICE_MODEL`, `GROK_VERIFICATION_EFFORT` | Model names live only in env (`lib/grok/config.ts`). Effort `medium` keeps verification near 40 s (`low` failed the eval). |
+| `VERIFICATION_FRAME_MAX_EDGE`, `VERIFICATION_IMAGE_DETAIL`, `GROK_VERIFICATION_TIMEOUT_MS` | Verification frame size (1536), per-frame image detail (`high`), call budget (150000 ms). Defaults are the audited configuration. |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public by design. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Secret.** Bypasses RLS. |
 | `DATABASE_URL` | Postgres connection string of the Supabase project. **Secret.** The transaction pooler (6543) works; use the session port (5432) for migrations. |
@@ -363,7 +389,7 @@ researchers read what they manage, and restrictive policies give suspended or an
 
 | Public (no login) | Private |
 |---|---|
-| `/data`, `/api/public/datasets`: coarsened rows of quality-tier observations, CC BY 4.0 | Raw photos (private `observations` bucket, signed URLs only) |
+| `/data`, `/api/public/datasets`: coarsened rows of quality-tier observations, CC BY 4.0 | Raw photos (private `observations` bucket, signed URLs only; researchers get face/plate-redacted copies, originals are admin + contributor only) |
 | Aggregate coverage | Exact location and time, device, trust, free text |
 | | Researcher exports, review queue, red-team runs |
 
@@ -392,7 +418,9 @@ privately and rotated with the script above.
   catches it is the C2PA/IPTC label check and the challenge burst. C2PA labels disappear when a fake is
   re-encoded or re-photographed off a screen; for that case the capture gate (screen/print flag) and
   burst parallax are the defense. A physically staged scene can pass visual checks (PRD §9.4).
-- **Verification takes ~40 s** (grok-4.7 at medium effort), over the PRD's 25 s target.
+- **Verification takes ~40 s** (grok-4.7 at medium effort), over the PRD's 25 s target. Measured: the
+  faster settings (low effort, shorter evidence) let Imagine fakes through, so they were not shipped.
+- **Redaction boxes are approximate** (see above): large blurred areas, possible misses.
 - **Depth values are estimates with confidence,** not measurements.
 - **Free iOS signing expires every 7 days;** no TestFlight/App Store build.
 - **Payouts are simulated** (wallet ledger only).

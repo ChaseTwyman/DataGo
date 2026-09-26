@@ -12,6 +12,14 @@ import { SubmissionRowSchema } from "./submissions";
 export const SubmissionWithMediaSchema = SubmissionRowSchema.extend({
   /** Short-lived signed URLs for `media`, same order. Empty for contributors' realtime payloads. */
   media_urls: z.array(z.string()),
+  /**
+   * Which files media_urls point at (additive, 000009): "redacted" = face/plate-blurred derivatives
+   * (researchers, admins by default; "" while redaction is pending or failed), "original" = the
+   * contributor's own view of their photos.
+   */
+  media_variant: z.enum(["redacted", "original"]).optional(),
+  /** Admins only: signed URLs of the unredacted originals, for audit and review. */
+  original_media_urls: z.array(z.string()).optional(),
   retryable: z.boolean(),
   bounty_title: z.string().nullable(),
   /** Who decided (model | mock | human | none). Optional: older servers omit it. */

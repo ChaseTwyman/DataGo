@@ -108,11 +108,14 @@ export const LenientSubmissionRowSchema = SubmissionRowSchema.extend({
   extracted: z.record(z.string(), z.unknown()).nullable().catch(null),
   field_notes: z.record(z.string(), z.unknown()).nullable().catch(null),
   payout_cents: z.number().int().nullable().catch(null),
+  redaction: SubmissionRowSchema.shape.redaction.catch(null),
 });
-export type LenientSubmissionRow = z.infer<typeof LenientSubmissionRowSchema>;
+export type LenientSubmissionRow= z.infer<typeof LenientSubmissionRowSchema>;
 
 export const LenientSubmissionWithMediaSchema = LenientSubmissionRowSchema.extend({
   media_urls: lenientArray(z.string()),
+  media_variant: z.string().optional().catch(undefined),
+  original_media_urls: lenientArray(z.string()).optional().catch(undefined),
   retryable: z.boolean().catch(false),
   bounty_title: z.string().nullable().catch(null),
   verifier: openString<Verifier>().optional().catch(undefined),
