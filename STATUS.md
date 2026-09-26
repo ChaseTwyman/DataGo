@@ -13,6 +13,18 @@ See `README.md` (setup, architecture, operations, security) and `DEMO.md` (check
 - **Deploy:** from a clean `git worktree` of origin/main only; apply migrations to hosted Supabase first. Vercel env includes CRON_SECRET, NEXT_PUBLIC_SITE_URL, REJECTED_MEDIA_RETENTION_DAYS=30, GROK_* models, LOCAL_BACKEND=0, MOCK_GROK=0, DEMO_MODE=1. Daily retention cron (`/api/cron/retention`) deletes rejected photos after 30 days.
 - **Measured on Vercel (real Grok):** voice token ~1.2 s; frame check ~1.3 s; relevance ~2 s; Imagine ~16 s; grok-4.7 verification ~41 s (reasoning_effort medium); red-team run ~58 s.
 
+## Economy (sponsor pool + platform pricing) — live
+- Sponsors fund a pool (Admin → Funding: sponsors, contributions with optional earmarks, append-only ledger with reversals; public totals at `/funding`). Researchers submit **data requests** with no prices/budgets; the allocation engine funds them (earmarks first, then general pool; caps per request/researcher) or leaves them `pending_funding` with a reason. Money is simulated.
+- Server-only pricing engine (`apps/web/lib/pricing/`): base × scarcity × urgency × demand × supply × pacing, clamped per protocol and fitted so expected payouts never exceed the allocation. Clients get `price` + `surge` + `price_reasons` only. Payout = locked quote (15 min) × quality multiplier.
+- The general pool currently has **$0 available** (existing bounties were migrated as fully funded), so new researcher requests stay pending until an admin records a contribution.
+- Live check: nearby shows reasons like "Few readings here · Event is recent · High demand"; opening a capture session 410 ms.
+
+## Production incident: DB driver (fixed)
+- After the pricing engine shipped, /nearby and /coverage intermittently hung ~150 s or 500'd with statement timeouts. Cause (caught live in `pg_stat_activity`: `active / ClientRead`): postgres.js pipelines queries when more are in flight than connections, and Supabase's transaction pooler (6543) can't handle pipelined messages. Session pooler (5432) was tried and rejected (15-client limit → EMAXCONNSESSION). Fix 0c38473: node-postgres (`pg`) Pool, never pipelines, 30 s statement timeout. Production back on 6543; 36/36 concurrent requests 200, 0.3–1.9 s.
+
+## Web redesign — live
+- One design system (`apps/web/components/ds`): black/hairline/Barlow condensed caps, one accent, dark map; every page restyled (login split layout, dashboard, studio, radar, funding, account, admin, /data). Contrast asserted by tests (≥ 4.5:1).
+
 ## Verification design (after the vitamin-water incident)
 - Incident: a bottle on carpet reached needs_review on a flood bounty (phone gate unlocked in a "degraded" fallback with 0 real frame checks; grok-4.7 timed out; a human rejected it). Separately, seed/mock rows had reached the public dataset — deleted.
 - **Decisions (supersede BUILD_PROMPT M2's degraded fallback):** the shutter unlocks only on the server's `gate_passed` (2 consecutive real all-green frame checks); otherwise "CAN'T VERIFY SCENE" + backoff retry. Sessions that never passed → `GATE_NOT_PASSED` → review, never paid.
