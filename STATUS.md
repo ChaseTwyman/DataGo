@@ -1,6 +1,6 @@
 # GroundTruth — Status
 
-_Last updated: all three build tracks complete (web API, dashboard, mobile). Next: first device run._
+_Last updated: hosted Supabase + real Grok verified from the API. Next: first device run from the Mac._
 
 ## Milestones
 | # | Milestone | State |
@@ -26,10 +26,13 @@ _Last updated: all three build tracks complete (web API, dashboard, mobile). Nex
 - Hosted Supabase: migrations + seed applied, researcher login, anonymous sign-in and RLS reads verified via REST.
 
 ## Real vs mocked / unverified
-- **Real Grok calls**: key verified (models endpoint + one tiny Responses call), but the vision/verification/imagine/voice paths have only run in mock mode.
-- **Hosted DB from the API**: blocked — `DATABASE_URL` password rejected (28P01) on pooler and direct host. Schema is in place (applied earlier with a working password).
-- **Supabase Storage** signed uploads and **realtime** from the apps: untested.
-- **Device-only**: audio (echo, latency, `onBufferEnded`), camera snapshot/photo, DeviceMotion axes, upload, pod install on macOS.
+- **Hosted Supabase end to end** (auth, Storage signed uploads, DB, pipeline, wallet, export, red team): e2e **19/19** with MOCK_GROK=1 after fixing a postgres.js jsonb double-encoding bug that PGlite hid (d9c27f4).
+- **Real Grok, verified once each** (Supabase mode):
+  - voice token: 129 ms;  returns ; phone gets a wss URL.
+  - frame check (grok-4.20): 1.3 s; a blank grey frame correctly returned no elements visible, not green.
+  - Imagine image: 13.6 s. Verification (grok-4.7): **31.6 s** (6.4k in / 2.2k out tokens) — over the PRD's 25 s target.
+- **Finding — AI-fake detection:** the real grok-4.7 did **not** flag the Imagine fake as AI-generated ("no signs of … generation", authenticity 0.3). The red-team run was caught only by  (three identical frames → no parallax). The capture-time defenses (no library import, burst parallax, screen detection at the gate) carry the load; model-only AI detection is weak. Don't claim otherwise in the demo.
+- **Still unverified:** realtime from the apps; everything device-only (audio echo/latency, camera, DeviceMotion, upload from the phone, pod install on macOS).
 
 ## Running it
 - Local, no Supabase: PowerShell `$env:LOCAL_BACKEND="1"; pnpm dev:web` (add `$env:MOCK_GROK="1"` for no xAI calls). Dashboard login: "Continue as demo researcher". Clients poll instead of realtime.
@@ -49,7 +52,7 @@ _Last updated: all three build tracks complete (web API, dashboard, mobile). Nex
 - [x] Hosted Supabase project; anonymous sign-ins on; schema + seed applied.
 - [x] `XAI_API_KEY` added and verified.
 - [x] `apps/mobile/.env` filled (API URL `http://10.90.48.161:3000`, Supabase URL + anon key).
-- [ ] **Fix `DATABASE_URL` password** (reset to letters+digits in Supabase → paste into `apps/web/.env`).
+- [x] `DATABASE_URL` password fixed; API connects to hosted DB.
 - [ ] Mac: Xcode + Apple ID, Node 24, pnpm, `brew install cocoapods watchman`, clone, copy `apps/mobile/.env` (AirDrop/USB), iPhone plugged in + Developer Mode on.
 - [ ] Same Wi-Fi (or hotspot) for Windows laptop, Mac, iPhone. Allow Node through Windows Firewall (Private).
 - [ ] ~20 real test photos in `apps/web/test/fixtures` (see its README).
