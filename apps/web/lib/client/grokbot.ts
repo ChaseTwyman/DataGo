@@ -371,7 +371,7 @@ export function sortRadarDrafts<T extends { funding?: LenientRadarFunding | null
  * Evidence groups in display order. Labels describe what the evidence bears on, never an outcome:
  * the brief summarizes, the reviewer decides.
  */
-export const EVIDENCE_GROUPS: readonly { id: Supports | "other"; label: string }[] = [
+export const EVIDENCE_GROUPS: readonly { id: Supports; label: string }[] = [
   { id: "authentic", label: "Points toward a real capture" },
   { id: "inauthentic", label: "Raises authenticity questions" },
   { id: "protocol_ok", label: "Matches the protocol" },
@@ -382,8 +382,9 @@ export const EVIDENCE_GROUPS: readonly { id: Supports | "other"; label: string }
 
 const STRENGTH_ORDER: Record<string, number> = { strong: 0, moderate: 1, weak: 2 };
 
+/** All neutral: a coloured "strong" next to "points toward a real capture" would read as a nudge. */
 export const STRENGTH_META: Record<Strength, { label: string; tone: Tone }> = {
-  strong: { label: "Strong", tone: "info" },
+  strong: { label: "Strong", tone: "muted" },
   moderate: { label: "Moderate", tone: "muted" },
   weak: { label: "Weak", tone: "muted" },
 };

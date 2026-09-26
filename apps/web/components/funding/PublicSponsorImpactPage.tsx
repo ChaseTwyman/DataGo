@@ -50,7 +50,7 @@ export function PublicSponsorImpactPage({ sponsorId }: { sponsorId: string }) {
         <div className="mt-8 max-w-4xl space-y-4">
           {g.error ? <GrokbotErrorNotice error={g.error} onRetry={() => void g.load(false)} /> : null}
           {g.loading && !g.data ? <GrokbotSkeleton label="Loading the report…" /> : null}
-          {g.data ? <ImpactBody r={g.data} dim={g.loading} /> : null}
+          {g.data ? <ImpactBody r={g.data} dim={g.loading} publicView /> : null}
         </div>
         <p className="mt-16">
           <Link href="/funding" className={`${HEAD} text-[11px] text-white/60 hover:text-white`}>

@@ -41,7 +41,10 @@ export function useGrokbot<T>(fetcher: (refresh: boolean) => Promise<T>, key: st
     setData(null);
     setError(null);
     if (enabled) void load(false);
-    else seq.current++;
+    // Invalidate in-flight answers when the key changes, the panel is disabled, or it unmounts.
+    return () => {
+      seq.current++;
+    };
   }, [key, enabled, load]);
 
   return { data, error, loading, load };

@@ -81,7 +81,7 @@ export function GrokbotErrorNotice({ error, onRetry }: { error: GrokbotErrorView
 }
 
 /** Headline, paragraphs, next steps, sources: the body of a GrokbotMessage. */
-export function GrokbotMessageBody({ message }: { message: LenientGrokbotMessage }) {
+export function GrokbotMessageBody({ message, sources = true }: { message: LenientGrokbotMessage; sources?: boolean }) {
   return (
     <div className="space-y-3 text-sm">
       <p className="font-semibold leading-snug">{message.headline}</p>
@@ -103,7 +103,7 @@ export function GrokbotMessageBody({ message }: { message: LenientGrokbotMessage
           </ul>
         </div>
       ) : null}
-      <GrokbotSources citations={message.citations} />
+      {sources ? <GrokbotSources citations={message.citations} /> : null}
     </div>
   );
 }

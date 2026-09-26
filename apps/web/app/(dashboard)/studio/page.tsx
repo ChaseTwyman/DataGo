@@ -254,7 +254,7 @@ function DraftEditor({ id, initial, onClose, onPublished }: { id: string; initia
       !(await confirm(
         decision.confirm
           ? {
-              title: "Publish anyway?",
+              title: "Publish protocol",
               body: `${decision.concern} Publish anyway? Published protocols can't be edited; you'd draft a new version.`,
               confirmLabel: "Publish anyway",
             }

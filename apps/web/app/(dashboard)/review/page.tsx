@@ -34,8 +34,8 @@ export default function ReviewPage() {
             fresh={stream.freshIds.includes(s.id)}
             brief={false}
             actions={
-              // The brief sits beside the decision, never above it, and never recommends one.
-              <div className="grid w-full gap-3 py-1 md:grid-cols-[minmax(0,1fr)_300px]">
+              // Narrow screens stack the decision first, so the brief is never above the buttons.
+              <div className="grid w-full grid-cols-1 gap-3 py-1 md:grid-cols-[minmax(0,1fr)_300px]">
                 <ReviewBrief submissionId={s.id} autoLoad={stream.submissions.length <= 3} />
                 <ReviewActions s={s} onDone={() => { stream.remove(s.id); void stream.refresh(); }} />
               </div>
@@ -66,7 +66,7 @@ function ReviewActions({ s, onDone }: { s: SubmissionWithMedia; onDone: () => vo
   };
 
   return (
-    <div className="flex w-full flex-col gap-2 md:border-l md:pl-3">
+    <div className="order-first flex w-full flex-col gap-2 md:order-last md:border-l md:pl-3">
       <div className="caps text-[11px] font-semibold">Your decision</div>
       {/* Both buttons look the same on purpose: nothing on this page leans toward either outcome. */}
       <div className="grid grid-cols-2 gap-2">

@@ -1,5 +1,5 @@
 "use client";
-import { CircleCheck, LoaderCircle, ScanSearch, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleHelp, CircleX, LoaderCircle, ScanSearch, TriangleAlert } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api } from "@/lib/client/api";
 import {
@@ -109,7 +109,10 @@ function SelfCheckResult({ job }: { job: Extract<SelfCheckJob, { status: "done" 
                     <TR key={e.id}>
                       <TD className="font-medium">{e.label}</TD>
                       <TD>
-                        <Badge tone={v.tone}>{v.label}</Badge>
+                        <Badge tone={v.tone}>
+                          <VerdictIcon verdict={e.verdict} />
+                          {v.label}
+                        </Badge>
                       </TD>
                       <TD className="text-right tabular-nums">{e.confidence === null ? "—" : `${Math.round(e.confidence * 100)}%`}</TD>
                       <TD className="text-xs text-muted-foreground">{e.suggestion ?? ""}</TD>
@@ -143,4 +146,12 @@ function SelfCheckResult({ job }: { job: Extract<SelfCheckJob, { status: "done" 
       <GrokbotProvenance>AI-generated · from the live frame and relevance checks · {new Date(job.finishedAt).toLocaleTimeString()}</GrokbotProvenance>
     </div>
   );
+}
+
+/** Status = icon + colour + word (ds rule). */
+function VerdictIcon({ verdict }: { verdict: string }) {
+  if (verdict === "ok") return <CircleCheck aria-hidden />;
+  if (verdict === "weak") return <TriangleAlert aria-hidden />;
+  if (verdict === "undetectable") return <CircleX aria-hidden />;
+  return <CircleHelp aria-hidden />;
 }

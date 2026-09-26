@@ -21,10 +21,11 @@ import { toast } from "../Toaster";
 import { Button, buttonVariants } from "../ui/button";
 import { GrokbotErrorNotice, GrokbotMessageBody, GrokbotProvenance, GrokbotSkeleton } from "./GrokbotCard";
 
-const day = (iso: string) => (Number.isNaN(Date.parse(iso)) ? iso : new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }));
+const day = (iso: string) => (Number.isNaN(Date.parse(iso)) ? iso : new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }));
 
 /** Aggregate readouts + highlights + narrative. Used by the admin report and the public page. */
-export function ImpactBody({ r, dim = false }: { r: LenientSponsorImpact; dim?: boolean }) {
+/** `publicView` omits the Sources list: citations are for staff; the public page shows aggregates only (defense in depth). */
+export function ImpactBody({ r, dim = false, publicView = false }: { r: LenientSponsorImpact; dim?: boolean; publicView?: boolean }) {
   return (
     <div className={cn("space-y-4", dim && "opacity-50 transition-opacity")} aria-busy={dim}>
       <p className="caps text-[10px] text-muted-foreground">
@@ -51,7 +52,7 @@ export function ImpactBody({ r, dim = false }: { r: LenientSponsorImpact; dim?: 
       ) : null}
       {r.narrative ? (
         <div className="space-y-3 border-t pt-3">
-          <GrokbotMessageBody message={r.narrative} />
+          <GrokbotMessageBody message={r.narrative} sources={!publicView} />
           <GrokbotProvenance template={isTemplate(r.narrative)}>AI-generated · grounded in the pool ledger and accepted observations</GrokbotProvenance>
         </div>
       ) : null}
