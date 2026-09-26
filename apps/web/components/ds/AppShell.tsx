@@ -92,7 +92,7 @@ function Rail() {
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto py-4" aria-label="Main">
         {groups.map((g) => (
           <div key={g.label} className="flex flex-col">
-            <div className="caps mb-1.5 hidden px-5 text-[9px] tracking-[0.24em] text-muted-foreground/80 lg:block">{g.label}</div>
+            <div className="caps mb-1.5 hidden px-5 text-[9px] tracking-[0.24em] text-muted-foreground lg:block">{g.label}</div>
             <div className="mx-3 mb-1.5 border-t lg:hidden" aria-hidden />
             {g.items.map((n) => {
               const active = pathname === n.href || pathname.startsWith(`${n.href}/`);
@@ -223,7 +223,7 @@ function AccountMenu({ session, onSignOut }: { session: StoredSession; onSignOut
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-haspopup="menu"
+       
         aria-expanded={open}
         className="flex h-9 cursor-pointer items-center gap-2.5 rounded-sm px-1.5 hover:bg-accent"
       >
@@ -233,7 +233,7 @@ function AccountMenu({ session, onSignOut }: { session: StoredSession; onSignOut
         <span className="hidden max-w-40 truncate text-sm xl:inline">{name}</span>
       </button>
       {open ? (
-        <div role="menu" className="absolute top-11 right-0 z-40 w-64 rounded-sm border bg-popover shadow-lg">
+        <div className="absolute top-11 right-0 z-40 w-64 rounded-sm border bg-popover shadow-lg">
           <div className="border-b px-4 py-3">
             <div className="truncate text-sm">{name}</div>
             {me?.email && me.email !== name ? <div className="truncate text-xs text-muted-foreground">{me.email}</div> : null}
@@ -250,7 +250,7 @@ function AccountMenu({ session, onSignOut }: { session: StoredSession; onSignOut
           <div className="border-t py-1">
             <button
               type="button"
-              role="menuitem"
+             
               onClick={() => {
                 setOpen(false);
                 onSignOut();
@@ -268,7 +268,7 @@ function AccountMenu({ session, onSignOut }: { session: StoredSession; onSignOut
 
 function MenuLink({ href, icon: Icon, children }: { href: string; icon: LucideIcon; children: ReactNode }) {
   return (
-    <Link href={href} role="menuitem" className="caps flex h-9 items-center gap-3 px-4 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+    <Link href={href} className="caps flex h-9 items-center gap-3 px-4 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
       <Icon className="size-4" strokeWidth={1.5} aria-hidden /> {children}
     </Link>
   );

@@ -46,7 +46,6 @@ export default function AdminUsersPage() {
         body: `Suspend ${u.email ?? u.id}? They lose access immediately.`,
         confirmLabel: "Suspend",
         tone: "danger",
-        typed: "SUSPEND",
       }))
     )
       return;
