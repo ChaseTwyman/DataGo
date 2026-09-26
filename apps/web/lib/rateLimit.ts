@@ -24,6 +24,13 @@ export const LIMITS = {
   redteam: { name: "redteam", max: 20, windowSeconds: HOUR, what: "red-team runs" },
   // Not in the brief; stops online guessing of the current password through this route.
   passwordChange: { name: "password_change", max: 10, windowSeconds: HOUR, what: "password attempts" },
+  // Forgot password. Per email (normalized) caps mail sent to one inbox and code guesses against
+  // one account; per IP caps one client spraying many emails. Counted whether or not the email has
+  // an account, so a 429 reveals nothing. 10 guesses/hour at a 6-digit code ≈ 1e-5 per hour.
+  resetRequestIp: { name: "reset_request_ip", max: 10, windowSeconds: HOUR, what: "password reset requests from this network" },
+  resetRequestEmail: { name: "reset_request_email", max: 5, windowSeconds: HOUR, what: "password reset emails for this address" },
+  resetConfirmIp: { name: "reset_confirm_ip", max: 30, windowSeconds: HOUR, what: "reset code attempts from this network" },
+  resetConfirmEmail: { name: "reset_confirm_email", max: 10, windowSeconds: HOUR, what: "reset code attempts for this address" },
 } as const satisfies Record<string, Limit>;
 
 export function rateLimited(limit: Limit): HttpError {

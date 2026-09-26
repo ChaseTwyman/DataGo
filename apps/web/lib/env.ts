@@ -64,6 +64,16 @@ export function localSigningSecret(): string {
   return process.env.LOCAL_SIGNING_SECRET || (g.__gtSigningSecret ??= randomBytes(32).toString("hex"));
 }
 
+/**
+ * Where the password-reset email's link lands: `${NEXT_PUBLIC_SITE_URL}/reset-password`. Taken
+ * from env, never from the request's Host header (a forged Host would otherwise put an attacker's
+ * domain into a real reset email). Unset → Supabase falls back to the project's Site URL.
+ */
+export function passwordResetRedirectUrl(): string | undefined {
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
+  return site ? `${site}/reset-password` : undefined;
+}
+
 /** Disable outbound context/hazard HTTP calls (offline dev). Pipeline marks those subchecks skipped. */
 export function isOffline(): boolean {
   return truthy(process.env.OFFLINE_CONTEXT);

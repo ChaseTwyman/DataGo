@@ -4,7 +4,8 @@
  * for their bounties/protocols. Open data stays public with no login.
  *
  * Sign-up goes through our server (Supabase admin API creates the user already confirmed), so no
- * email is ever sent. Anonymous Supabase users are refused by the API.
+ * sign-up email is sent. The only email is the forgot-password code. Anonymous Supabase users are
+ * refused by the API.
  */
 import { z } from "zod";
 import { IsoDate, Uuid } from "./common";
@@ -57,6 +58,30 @@ export const ChangePasswordRequestSchema = z.object({
   new_password: PasswordSchema,
 });
 
+// Forgot password (additive, 2026-09-26): Supabase Auth's recovery email carries a one-time code
+// ({{ .Token }}, 6 digits by default) and a link to /reset-password?token_hash=… Both are redeemed
+// on our server, so the phone needs no deep links. No auth on either route; both are rate-limited.
+
+/** The emailed recovery code. Supabase's OTP length is configurable (6 by default, up to 10). */
+export const ResetCodeSchema = z
+  .string()
+  .transform((s) => s.replace(/\s+/g, ""))
+  .pipe(z.string().regex(/^\d{6,10}$/, "Enter the 6-digit code from the email."));
+
+// POST /api/auth/password-reset/request (no auth) → 202, the SAME body whether or not the email
+// has an account (no account enumeration).
+export const PasswordResetRequestSchema = z.object({ email: EmailSchema });
+export const PasswordResetRequestResponseSchema = z.object({ ok: z.literal(true) });
+
+// POST /api/auth/password-reset/confirm (no auth) → { ok, email }. Either the emailed code (with
+// the email it was sent to) or the link's token_hash. Wrong/expired → 400 RESET_CODE_INVALID.
+// Success sets the password and signs the account out everywhere; the client then signs in.
+export const PasswordResetCodeConfirmSchema = z.object({ email: EmailSchema, code: ResetCodeSchema, new_password: PasswordSchema });
+export const PasswordResetLinkConfirmSchema = z.object({ token_hash: z.string().trim().min(8).max(512), new_password: PasswordSchema });
+export const PasswordResetConfirmRequestSchema = z.union([PasswordResetCodeConfirmSchema, PasswordResetLinkConfirmSchema]);
+export type PasswordResetConfirmRequest = z.infer<typeof PasswordResetConfirmRequestSchema>;
+export const PasswordResetConfirmResponseSchema = z.object({ ok: z.literal(true), email: z.string().nullable() });
+
 // GET /api/me/export → JSON attachment (profile, sessions, submissions + signed media URLs, ledger).
 // DELETE /api/me { confirm: "DELETE" } → 204. Photos, profile, wallet and sessions are deleted;
 // accepted observations already released under the open-data license stay in the public dataset,
@@ -104,4 +129,6 @@ export const ACCOUNT_ERROR_CODES = [
   "RESEARCHER_REVOKED",
   // additive: an admin tried to remove their own admin flag or suspend themselves
   "CANNOT_CHANGE_SELF",
+  // additive: forgot-password code/link is wrong, expired or already used
+  "RESET_CODE_INVALID",
 ] as const;

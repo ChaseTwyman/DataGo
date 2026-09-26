@@ -55,6 +55,7 @@ const BY_CODE: Record<string, string> = {
   RATE_LIMITED: "You've done that a lot in the last hour. Please wait a while and try again.",
   RESEARCHER_REVOKED: "An administrator turned off researcher access for this account. Contact the GroundTruth team.",
   CANNOT_CHANGE_SELF: "You can't remove your own admin access or suspend yourself. Ask another admin.",
+  RESET_CODE_INVALID: "That code is wrong or has expired. Check the latest email, or send a new code.",
 };
 
 function byStatus(status: number): string {
@@ -97,6 +98,8 @@ const FIELD_LABEL: Record<string, string> = {
   password: "Password",
   new_password: "New password",
   current_password: "Current password",
+  code: "Code",
+  confirm_password: "Confirm password",
   display_name: "Name",
   organization: "Organization",
   purpose: "Purpose",

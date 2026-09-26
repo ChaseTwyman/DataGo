@@ -332,6 +332,9 @@ describe("POST /api/me/password", () => {
         set.push(pw);
       },
       deleteUser: async () => undefined,
+      requestPasswordReset: async () => undefined,
+      verifyRecovery: async () => null,
+      revokeSessions: async () => undefined,
     };
   }
 
@@ -473,6 +476,9 @@ describe("DELETE /api/me", () => {
         if (fail) throw new Error("auth down");
         await local.deleteUser(id);
       },
+      requestPasswordReset: (e, r) => local.requestPasswordReset(e, r),
+      verifyRecovery: (p) => local.verifyRecovery(p),
+      revokeSessions: () => local.revokeSessions(),
     });
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect((await deleteMe(req("DELETE", "/api/me", { token: a.token, body: { confirm: "DELETE" } }), noCtx)).status).toBe(500);

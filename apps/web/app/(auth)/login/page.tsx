@@ -135,9 +135,17 @@ function Login() {
                 <Field label="Email" htmlFor="email">
                   <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </Field>
-                <Field label="Password" htmlFor="password" hint="Forgot it? Ask a GroundTruth admin for a temporary password.">
+                <Field label="Password" htmlFor="password">
                   <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
                 </Field>
+                <div className="-mt-1 text-right">
+                  <Link
+                    href={email.trim() ? `/reset-password?email=${encodeURIComponent(email.trim())}` : "/reset-password"}
+                    className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <Button type="submit" className="w-full" disabled={busy}>
                   {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
                   Sign in

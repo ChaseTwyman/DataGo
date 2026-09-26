@@ -13,7 +13,10 @@ import {
   ApiErrorSchema,
   DraftProtocolResponseSchema,
   MeSchema,
+  PasswordResetConfirmResponseSchema,
+  PasswordResetRequestResponseSchema,
   SignupResponseSchema,
+  type PasswordResetConfirmRequest,
   type AdminUserPatchSchema,
   type BecomeResearcherRequestSchema,
   type ChangePasswordRequestSchema,
@@ -157,6 +160,10 @@ export const api = {
   signup: (body: SignupRequest) => apiFetch("/api/auth/signup", SignupResponseSchema, { body, auth: false }),
   devLogin: (email: string, password: string) =>
     apiFetch("/api/dev/login", DevLoginResponseSchema, { body: { email, password }, auth: false }),
+  requestPasswordReset: (email: string) =>
+    apiFetch("/api/auth/password-reset/request", PasswordResetRequestResponseSchema, { body: { email }, auth: false }),
+  confirmPasswordReset: (body: PasswordResetConfirmRequest) =>
+    apiFetch("/api/auth/password-reset/confirm", PasswordResetConfirmResponseSchema, { body, auth: false }),
   me: () => apiFetch("/api/me", MeSchema),
   becomeResearcher: (body: z.input<typeof BecomeResearcherRequestSchema>) => apiFetch("/api/me/researcher", MeSchema, { body }),
   stopResearcher: () => apiFetch("/api/me/researcher", MeSchema, { method: "DELETE" }),
