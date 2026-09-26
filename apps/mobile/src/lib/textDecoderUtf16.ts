@@ -43,13 +43,14 @@ export function patchTextDecoder(target: { TextDecoder?: unknown }): boolean {
   const Original = target.TextDecoder as DecoderCtor | undefined;
   if (typeof Original !== "function") return false;
   if ((Original as unknown as { __utf16Patched?: boolean }).__utf16Patched) return false;
+  const Base: DecoderCtor = Original; // narrowed binding for the closure below
 
   function PatchedTextDecoder(label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean }) {
     const l = String(label ?? "utf-8").trim().toLowerCase();
     if (UTF16_LABELS.has(l)) return new Utf16LEDecoder();
-    return new Original(label, options);
+    return new Base(label, options);
   }
-  PatchedTextDecoder.prototype = Original.prototype;
+  PatchedTextDecoder.prototype = Base.prototype;
   Object.defineProperty(PatchedTextDecoder, "__utf16Patched", { value: true });
 
   Object.defineProperty(target, "TextDecoder", {
