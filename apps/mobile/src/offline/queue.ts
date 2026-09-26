@@ -30,6 +30,8 @@ export interface QueuedFrame {
 export interface QueuedCapture {
   /** = session id (one queued capture per session). */
   id: string;
+  /** Account that captured it: only sent (and shown) while that account is signed in. */
+  user_id: string;
   bounty_title: string;
   session_expires_at: string;
   /** Last moment the server will still accept it (ms since epoch). */
@@ -57,6 +59,8 @@ export interface QueueDeps {
   uploadFrame(uri: string, slot: QueuedFrame["slot"]): Promise<void>;
   submit(body: CreateSubmissionRequest): Promise<{ submission_id: string }>;
   now(): number;
+  /** Signed-in account, or null. Other accounts' captures are left untouched. */
+  currentUser(): string | null;
 }
 
 export const MSG = {
@@ -88,6 +92,7 @@ export function isRetryable(e: unknown): boolean {
 export const shouldQueue = isRetryable;
 
 export interface EnqueueInput {
+  userId: string;
   sessionId: string;
   bountyTitle: string;
   sessionExpiresAt: string;
@@ -115,6 +120,12 @@ export class UploadQueue {
     return this.items;
   }
 
+  /** Entries of the signed-in account (what the UI shows). */
+  mine(): readonly QueuedCapture[] {
+    const u = this.d.currentUser();
+    return u ? this.items.filter((q) => q.user_id === u) : [];
+  }
+
   async init(): Promise<void> {
     if (this.loaded) return;
     try {
@@ -135,6 +146,7 @@ export class UploadQueue {
     }
     const q: QueuedCapture = {
       id: input.sessionId,
+      user_id: input.userId,
       bounty_title: input.bountyTitle,
       session_expires_at: input.sessionExpiresAt,
       deadline: lateUploadDeadline(input.sessionExpiresAt),
@@ -157,7 +169,8 @@ export class UploadQueue {
   async retryNow(): Promise<void> {
     await this.init();
     const now = this.d.now();
-    this.items = this.items.map((q) => (q.status === "waiting" ? { ...q, next_attempt_at: now } : q));
+    const u = this.d.currentUser();
+    this.items = this.items.map((q) => (q.status === "waiting" && q.user_id === u ? { ...q, next_attempt_at: now } : q));
     await this.commit();
     await this.process();
   }
@@ -165,7 +178,7 @@ export class UploadQueue {
   async dismiss(id: string): Promise<void> {
     await this.init();
     const q = this.items.find((x) => x.id === id);
-    if (!q || q.status === "sending") return;
+    if (!q || q.status === "sending" || q.user_id !== this.d.currentUser()) return;
     await this.d.removeFiles(id).catch(() => undefined);
     this.items = this.items.filter((x) => x.id !== id);
     await this.commit();
@@ -173,7 +186,8 @@ export class UploadQueue {
 
   /** When the next waiting capture is due (ms since epoch), or null. */
   nextDueAt(): number | null {
-    const due = this.items.filter((q) => q.status === "waiting").map((q) => Math.min(q.next_attempt_at, q.deadline + 1));
+    const u = this.d.currentUser();
+    const due = this.items.filter((q) => q.status === "waiting" && q.user_id === u).map((q) => Math.min(q.next_attempt_at, q.deadline + 1));
     return due.length ? Math.min(...due) : null;
   }
 
@@ -185,6 +199,8 @@ export class UploadQueue {
         await this.init();
         for (const q of [...this.items]) {
           if (q.status !== "waiting") continue;
+          // Never send another account's capture with this account's token (shared phone).
+          if (q.user_id !== this.d.currentUser()) continue;
           const now = this.d.now();
           if (now > q.deadline) {
             await this.finish(q.id, "discarded", MSG.expired);

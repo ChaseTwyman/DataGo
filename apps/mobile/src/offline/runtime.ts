@@ -51,11 +51,15 @@ export const uploadQueue = new UploadQueue({
   uploadFrame: (uri, slot) => uploadJpeg(uri, { path: slot.path, signed_url: slot.signed_url, token: slot.token }),
   submit: (body) => api.createSubmission(body),
   now: () => Date.now(),
+  currentUser: () => {
+    const s = useApp.getState();
+    return s.session === "signed_in" ? s.userId : null;
+  },
 });
 
 /** Queue entries for the UI (wallet, capture screen). */
 export const useUploadQueue = create<{ items: readonly QueuedCapture[] }>(() => ({ items: [] }));
-uploadQueue.subscribe((items) => useUploadQueue.setState({ items }));
+uploadQueue.subscribe(() => useUploadQueue.setState({ items: uploadQueue.mine() }));
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
@@ -94,7 +98,9 @@ export function startUploadQueue(): () => void {
     if (s === "active") void tick(true);
   });
   const unsubApp = useApp.subscribe((s, prev) => {
-    if (s.ready && s.session === "signed_in" && !(prev.ready && prev.session === "signed_in")) void tick(true);
+    // Account switch / sign-out: re-filter what the UI shows; resume this account's captures.
+    if (s.userId !== prev.userId || s.session !== prev.session) useUploadQueue.setState({ items: uploadQueue.mine() });
+    if (s.ready && s.session === "signed_in" && !(prev.ready && prev.session === "signed_in" && prev.userId === s.userId)) void tick(true);
   });
   return () => {
     sub.remove();

@@ -21,6 +21,7 @@ import { useCaptureGate } from "../../src/capture/useCaptureGate";
 import { log } from "../../src/lib/log";
 import { shouldQueue } from "../../src/offline/queue";
 import { queueChanged, uploadQueue } from "../../src/offline/runtime";
+import { useApp } from "../../src/state/appStore";
 import { useCaptureStore, type ActiveCapture } from "../../src/state/captureStore";
 import { Body, Button, Heading, Icon, IconButton, Label, PermissionNeeded, StatusPill } from "../../src/ui/components";
 import { countdownLabel, indexLabel, tPlus } from "../../src/ui/telemetry";
@@ -142,8 +143,10 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
         // Signal dropped AFTER a gate-passed burst: keep the capture on the phone and send it when
         // signal returns (the server accepts it within its grace). Never for a session whose gate
         // didn't pass, and never for a refusal — those surface as errors as before.
-        if (!s.serverGatePassed || !shouldQueue(e)) throw e;
+        const userId = useApp.getState().userId;
+        if (!s.serverGatePassed || !shouldQueue(e) || !userId) throw e;
         await uploadQueue.enqueue({
+          userId,
           sessionId: session.session_id,
           bountyTitle: bounty.title,
           sessionExpiresAt: session.expires_at,

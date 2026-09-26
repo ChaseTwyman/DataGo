@@ -10,7 +10,9 @@
  *   - anything else is refused; a session that never passed the gate never gets the grace.
  *
  * 90 minutes (not 2 h) because the signed upload URLs are issued when the session opens and live 2 h
- * (Supabase createSignedUploadUrl): 15 min session + 90 min grace ends before they expire.
+ * (Supabase createSignedUploadUrl default; lib/storage/supabase.ts passes no expiry, so this relies on
+ * the SDK default — if it ever shrinks, raise the expiry there or lower this): 15 min session + 90 min
+ * grace ends before they expire.
  */
 export const LATE_UPLOAD_GRACE_MIN = 90;
 /** Clock skew tolerated between phone and server (same as the session-integrity stage). */

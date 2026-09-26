@@ -9,6 +9,7 @@ const EXPIRES = "2026-09-26T12:15:00.000Z";
 
 function harness(opts: { upload?: (i: string) => Promise<void>; submit?: () => Promise<{ submission_id: string }> } = {}) {
   let now = T0;
+  let user: string | null = "u1";
   let disk: QueuedCapture[] = [];
   const files = new Set<string>();
   const calls = { upload: [] as string[], submit: 0, saves: 0 };
@@ -35,12 +36,16 @@ function harness(opts: { upload?: (i: string) => Promise<void>; submit?: () => P
       return (opts.submit ?? (async () => ({ submission_id: "sub-1" })))();
     },
     now: () => now,
+    currentUser: () => user,
   };
   return {
     deps,
     files,
     calls,
     disk: () => disk,
+    signIn: (u: string | null) => {
+      user = u;
+    },
     advance: (ms: number) => {
       now += ms;
     },
@@ -50,6 +55,7 @@ function harness(opts: { upload?: (i: string) => Promise<void>; submit?: () => P
 
 const request = { session_id: "s1", nonce: "n", captured_at: "2026-09-26T12:09:00.000Z" } as unknown as CreateSubmissionRequest;
 const input = {
+  userId: "u1",
   sessionId: "s1",
   bountyTitle: "Midtown flood",
   sessionExpiresAt: EXPIRES,
@@ -171,5 +177,24 @@ describe("offline upload queue", () => {
     await q.enqueue(input);
     await Promise.all([q.retryNow(), q.retryNow(), q.process()]);
     expect(h.calls.submit).toBe(1);
+  });
+  it("is scoped to the account that captured: another account never sends, sees or dismisses it", async () => {
+    const h = harness();
+    const q = h.queue();
+    await q.enqueue(input);
+    h.signIn("u2");
+    await q.retryNow();
+    expect(h.calls.upload).toHaveLength(0);
+    expect(h.calls.submit).toBe(0);
+    expect(q.mine()).toHaveLength(0);
+    expect(q.nextDueAt()).toBeNull();
+    await q.dismiss("s1");
+    expect(q.list()).toHaveLength(1);
+    h.signIn(null);
+    await q.retryNow();
+    expect(h.calls.submit).toBe(0);
+    h.signIn("u1");
+    await q.retryNow();
+    expect(q.mine()[0]).toMatchObject({ status: "sent" });
   });
 });
