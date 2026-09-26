@@ -11,11 +11,20 @@ import MapGL, {
   type MapLayerMouseEvent,
   type MapRef,
 } from "react-map-gl/maplibre";
+import { setWorkerUrl } from "maplibre-gl";
 import { circlePolygon, formatCents, formatSurge, type CellPrice } from "@groundtruth/shared";
+import { MAPLIBRE_WORKER_PATH } from "@/lib/client/maplibreWorker";
 import { coverageFeatures } from "@/lib/client/coverage";
 import { cn } from "@/lib/client/cn";
 
 export const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+
+// maplibre-gl v6 starts an ES-module worker that imports `./maplibre-gl-shared.mjs` relative to
+// itself. Turbopack's hashed chunks break that lookup ("Worker failed to load"), so both files are
+// served as-is from public/ (copies checked against node_modules by lib/client/maplibreWorker.test.ts).
+if (typeof window !== "undefined") {
+  setWorkerUrl(new URL(MAPLIBRE_WORKER_PATH, window.location.origin).href);
+}
 const HATCH = "gt-hatch";
 
 export interface MapPoint {
@@ -165,9 +174,12 @@ export default function HexMap({
     // center/zoom are intentionally read at flyKey change only.
   }, [flyKey, ready]);
 
-  const onLoad = useCallback(() => {
+  // Layers go on as soon as the style is parsed, not on "load" (which waits for every basemap
+  // tile): on slow venue Wi-Fi the hexes must not wait for the basemap.
+  const onStyleData = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (map && !map.hasImage(HATCH)) map.addImage(HATCH, hatchImage());
+    if (!map) return;
+    if (!map.hasImage(HATCH)) map.addImage(HATCH, hatchImage());
     setReady(true);
   }, []);
 
@@ -196,7 +208,7 @@ export default function HexMap({
         initialViewState={{ latitude: center.lat, longitude: center.lng, zoom }}
         mapStyle={MAP_STYLE}
         style={{ width: "100%", height: "100%" }}
-        onLoad={onLoad}
+        onStyleData={onStyleData}
         onClick={onClick}
         interactiveLayerIds={ready ? ["cells-fill", ...(points.length ? ["points"] : [])] : []}
         cursor={cursor}

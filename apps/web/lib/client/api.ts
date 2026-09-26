@@ -168,7 +168,8 @@ export const api = {
     const blob = await res.blob();
     const cd = res.headers.get("content-disposition") ?? "";
     const m = /filename="?([^";]+)"?/i.exec(cd);
-    const ext = format === "geojson" ? "geojson" : format === "csv" ? "csv" : "md";
+    const ct = res.headers.get("content-type") ?? "";
+    const ext = format === "geojson" ? "geojson" : format === "csv" ? "csv" : ct.includes("json") ? "json" : "md";
     const name = m?.[1] ?? `groundtruth-${bountyId.slice(0, 8)}-${format}.${ext}`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
