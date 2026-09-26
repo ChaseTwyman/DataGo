@@ -18,7 +18,8 @@
     "../src/api/http.ts",
     "../src/api/endpoints.ts",
     "../src/api/authFlow.ts",
-    "../src/api/submissionWatch.ts"
+    "../src/api/submissionWatch.ts",
+    "../src/lib/feed.ts"
   ],
   "exclude": []
 }
