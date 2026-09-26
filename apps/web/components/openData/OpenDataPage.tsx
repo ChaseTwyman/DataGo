@@ -30,15 +30,16 @@ export function OpenDataPage() {
     let alive = true;
     const load = async () => {
       try {
-        const res = await fetch("/api/public/datasets");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const res = await fetch("/api/public/datasets", { cache: "no-store" });
+        if (!res.ok) throw new Error("list unavailable");
         const body = PublicDatasetListResponseSchema.parse(await res.json());
         if (alive) {
           setList(body);
           setError(null);
         }
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+      } catch {
+        // Keep showing the last good list; the catalogue refreshes itself every minute.
+        if (alive) setError("The dataset catalogue is temporarily unavailable. It retries automatically, or reload the page.");
       }
     };
     void load();
@@ -102,9 +103,15 @@ export function OpenDataPage() {
 
         <section id="datasets" className="border-t border-white/10">
           <div className="mx-auto max-w-6xl px-4 sm:px-8">
-            {error ? <p className="py-16 text-sm text-red-300">Could not load datasets ({error}).</p> : null}
+            {error && !list ? <Notice>{error}</Notice> : null}
+            {error && list ? <p className={`${HEAD} pt-6 text-[10px] text-white/40`}>Reconnecting… showing the last loaded catalogue.</p> : null}
             {!list && !error ? <p className={`${HEAD} py-16 text-[11px] text-white/40`}>Loading datasets…</p> : null}
-            {list && list.datasets.length === 0 ? <p className="py-16 text-white/60">No published datasets yet.</p> : null}
+            {list && list.datasets.length === 0 ? (
+              <Notice title="No datasets published yet">
+                A dataset appears here as soon as a protocol is published. Rows are added only after verification, so there is
+                nothing unvetted to download.
+              </Notice>
+            ) : null}
             {list?.datasets.map((d) => <DatasetSection key={d.slug} d={d} />)}
           </div>
         </section>
@@ -175,7 +182,10 @@ function DatasetSection({ d }: { d: PublicDatasetSummary }) {
       ) : null}
 
       {d.rows === 0 ? (
-        <p className="mt-10 border-t border-white/15 pt-6 text-white/60">No verified observations yet.</p>
+        <Notice title="Collection under way">
+          No observations have been published yet. A row appears here only after a person approves it or the verification
+          pipeline accepts it at confidence ≥ 0.75. The schema, data dictionary and citation below are ready now.
+        </Notice>
       ) : null}
 
       <dl className="mt-10 grid grid-cols-2 border-t border-white/15 sm:grid-cols-4">
@@ -194,7 +204,7 @@ function DatasetSection({ d }: { d: PublicDatasetSummary }) {
       </dl>
 
       <div className="mt-12 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div>
+        <div className={d.rows === 0 ? "hidden" : undefined}>
           <SectionLabel>Observation hexes</SectionLabel>
           <div className="mt-4 aspect-square w-full border border-white/10">
             <HexCoverage cells={d.cells} accent={ACCENT} className="h-full w-full" />
@@ -211,8 +221,18 @@ function DatasetSection({ d }: { d: PublicDatasetSummary }) {
         </div>
       </div>
 
-      <Preview slug={d.slug} total={d.rows} />
+      {d.rows > 0 ? <Preview slug={d.slug} total={d.rows} /> : null}
     </article>
+  );
+}
+
+/** Calm, on-brand message block (empty states and temporary outages). */
+function Notice({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <div className="my-12 border-l-2 py-2 pl-5" style={{ borderColor: ACCENT }} role="status">
+      {title ? <p className={`${HEAD} text-xs font-semibold text-white`}>{title}</p> : null}
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/60">{children}</p>
+    </div>
   );
 }
 
@@ -315,15 +335,15 @@ function Preview({ slug, total }: { slug: string; total: number }) {
     let alive = true;
     const load = async () => {
       try {
-        const res = await fetch(`/api/public/datasets/${slug}?format=json&limit=${PREVIEW_ROWS}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const res = await fetch(`/api/public/datasets/${slug}?format=json&limit=${PREVIEW_ROWS}`, { cache: "no-store" });
+        if (!res.ok) throw new Error("preview unavailable");
         const body = PublicDatasetJsonResponseSchema.parse(await res.json());
         if (alive) {
           setData(body);
           setError(null);
         }
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+      } catch {
+        if (alive) setError("The preview is temporarily unavailable; downloads still work. It retries automatically.");
       }
     };
     void load();
@@ -345,7 +365,7 @@ function Preview({ slug, total }: { slug: string; total: number }) {
           Structured data
         </span>
       </div>
-      {error ? <p className="py-6 text-sm text-red-300">Preview unavailable ({error}).</p> : null}
+      {error && !data ? <p className="py-6 text-sm text-white/55">{error}</p> : null}
       {data && data.rows.length === 0 ? <p className="py-6 text-sm text-white/50">No verified observations yet.</p> : null}
       {data && data.rows.length > 0 ? (
         <div className="mt-2 max-h-[560px] overflow-auto border-x border-b border-white/10">

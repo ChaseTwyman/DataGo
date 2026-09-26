@@ -71,7 +71,14 @@ export default function BountyPage() {
   };
 
   if (bounty.loading && !b) return <Loading />;
-  if (!b) return <ErrorBox className="m-6" message={bounty.error ?? "Bounty not found"} />;
+  if (!b)
+    return (
+      <ErrorBox
+        className="m-6"
+        message={bounty.error ?? "We couldn't find that bounty. It may have been removed."}
+        onRetry={bounty.error ? () => void bounty.refresh() : undefined}
+      />
+    );
 
   return (
     <div className="flex h-full min-h-0 flex-col">

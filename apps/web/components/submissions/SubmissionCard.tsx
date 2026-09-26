@@ -1,7 +1,7 @@
 "use client";
 import { ChevronDown, ChevronRight, ImageOff, MapPin } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { formatCents, type SubmissionWithMedia } from "@groundtruth/shared";
+import { formatCents, type LenientSubmissionWithMedia as SubmissionWithMedia } from "@groundtruth/shared";
 import { extractedRows, formatScore } from "@/lib/client/checkFormat";
 import { cn, formatTime, shortId, timeAgo } from "@/lib/client/cn";
 import { ReasonCode, SubmissionStatusBadge } from "../status";

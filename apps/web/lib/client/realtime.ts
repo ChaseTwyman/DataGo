@@ -7,7 +7,7 @@
  * Realtime events only invalidate; rows always come from the API so both paths render the same data.
  */
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { SubmissionWithMedia } from "@groundtruth/shared";
+import type { LenientSubmissionWithMedia as SubmissionWithMedia } from "@groundtruth/shared";
 import { getBrowserSupabase, supabaseConfigured } from "@/lib/supabase/browser";
 import { api, errorMessage } from "./api";
 import { useHealth } from "./health";

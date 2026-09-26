@@ -10,12 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
-import { api, errorMessage } from "@/lib/client/api";
+import { api, errorMessage, fieldErrors } from "@/lib/client/api";
+import { fieldErrorSummary } from "@/lib/client/errors";
 import { dollarsToCents, isoToLocalInput, localInputToIso, previewPrices } from "@/lib/client/pricePreview";
 import { useApi } from "@/lib/client/useApi";
 
 const RADIUS_MIN = 100;
 const RADIUS_MAX = 5000;
+/** Fields rendered with their own inline message; others are summarized above the submit button. */
+const INLINE_FIELDS = new Set(["protocol_id", "title", "summary", "radius_m", "starts_at", "ends_at", "base_price_cents", "max_price_cents", "target_per_cell", "budget_cents", "sponsor_name", "sponsor_url"]);
 
 export default function NewBountyPage() {
   const router = useRouter();
@@ -40,6 +43,7 @@ export default function NewBountyPage() {
   const [sponsorUrl, setSponsorUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
 
   const list = protocols.data?.protocols ?? [];
   useEffect(() => {
@@ -69,6 +73,7 @@ export default function NewBountyPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setFields({});
     const starts = localInputToIso(startsAt);
     const ends = localInputToIso(endsAt);
     if (!protocolId) return setError("Choose a protocol.");
@@ -98,7 +103,15 @@ export default function NewBountyPage() {
       });
       router.push(`/bounties/${r.id}`);
     } catch (err) {
-      setError(errorMessage(err));
+      // Validation failures (client-side zod or a server 400/422) go next to the fields they concern.
+      const fe = fieldErrors(err);
+      setFields(fe);
+      const offForm = Object.fromEntries(Object.entries(fe).filter(([k]) => !INLINE_FIELDS.has(k)));
+      setError(
+        Object.keys(fe).length
+          ? ["Some fields need attention.", fieldErrorSummary(offForm)].filter(Boolean).join(" ")
+          : errorMessage(err),
+      );
       setBusy(false);
     }
   };
@@ -157,7 +170,7 @@ export default function NewBountyPage() {
             </CardContent>
           </Card>
 
-          <Field label="Protocol" htmlFor="protocol">
+          <Field label="Protocol" htmlFor="protocol" error={fields.protocol_id}>
             <Select id="protocol" value={protocolId} onChange={(e) => setProtocolId(e.target.value)} required>
               {protocols.loading ? <option>Loading…</option> : null}
               {list.map((p) => (
@@ -170,16 +183,17 @@ export default function NewBountyPage() {
           </Field>
           <ErrorBox message={protocols.error} />
 
-          <Field label="Title" htmlFor="title">
+          <Field label="Title" htmlFor="title" error={fields.title}>
             <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} minLength={3} maxLength={120} required />
           </Field>
-          <Field label="Summary" htmlFor="summary">
+          <Field label="Summary" htmlFor="summary" error={fields.summary}>
             <Textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} maxLength={500} />
           </Field>
 
           <Field
             label={`Radius: ${radius >= 1000 ? `${(radius / 1000).toFixed(2)} km` : `${radius} m`}`}
             htmlFor="radius"
+            error={fields.radius_m}
             hint={`Center ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`}
           >
             <input
@@ -195,10 +209,10 @@ export default function NewBountyPage() {
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Starts" htmlFor="starts">
+            <Field label="Starts" htmlFor="starts" error={fields.starts_at}>
               <Input id="starts" type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
             </Field>
-            <Field label="Ends" htmlFor="ends">
+            <Field label="Ends" htmlFor="ends" error={fields.ends_at}>
               <Input id="ends" type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} required />
             </Field>
           </div>
@@ -214,13 +228,13 @@ export default function NewBountyPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Base price ($)" htmlFor="base">
+            <Field label="Base price ($)" htmlFor="base" error={fields.base_price_cents}>
               <Input id="base" inputMode="decimal" value={base} onChange={(e) => setBase(e.target.value)} required />
             </Field>
-            <Field label="Max price ($)" htmlFor="max">
+            <Field label="Max price ($)" htmlFor="max" error={fields.max_price_cents}>
               <Input id="max" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} required />
             </Field>
-            <Field label="Target per cell" htmlFor="target">
+            <Field label="Target per cell" htmlFor="target" error={fields.target_per_cell}>
               <Input
                 id="target"
                 type="number"
@@ -243,7 +257,7 @@ export default function NewBountyPage() {
                 className="mt-2 w-full accent-[var(--color-primary)]"
               />
             </Field>
-            <Field label="Total budget ($)" htmlFor="budget" className="col-span-2">
+            <Field label="Total budget ($)" htmlFor="budget" className="col-span-2" error={fields.budget_cents}>
               <Input id="budget" inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} required />
             </Field>
           </div>
@@ -252,10 +266,10 @@ export default function NewBountyPage() {
             <p className="text-xs text-muted-foreground">
               Sponsors fund collection; the resulting dataset is published free for everyone (CC BY 4.0, no images).
             </p>
-            <Field label="Sponsor (optional)" htmlFor="sponsor">
+            <Field label="Sponsor (optional)" htmlFor="sponsor" error={fields.sponsor_name}>
               <Input id="sponsor" value={sponsorName} onChange={(e) => setSponsorName(e.target.value)} maxLength={120} placeholder="e.g. City Stormwater Office" />
             </Field>
-            <Field label="Sponsor link (optional)" htmlFor="sponsor-url">
+            <Field label="Sponsor link (optional)" htmlFor="sponsor-url" error={fields.sponsor_url}>
               <Input id="sponsor-url" type="url" value={sponsorUrl} onChange={(e) => setSponsorUrl(e.target.value)} maxLength={300} placeholder="https://" />
             </Field>
           </div>

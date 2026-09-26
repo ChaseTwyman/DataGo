@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Hexagon, LoaderCircle, UserRound } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
-import { DEMO, type HealthResponse } from "@groundtruth/shared";
+import { DEMO, type LenientHealthResponse } from "@groundtruth/shared";
 import { ErrorBox } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,7 @@ function Login() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
-  const [health, setHealth] = useState<HealthResponse | null | "error">(null);
+  const [health, setHealth] = useState<LenientHealthResponse | null | "error">(null);
   const [email, setEmail] = useState<string>(DEMO.researcherEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -126,7 +126,7 @@ function Login() {
               </div>
             ) : null}
 
-            {health === "error" ? <ErrorBox message="Can't reach the API (/api/health). Is the web server running?" /> : null}
+            {health === "error" ? <ErrorBox message="Can't reach the GroundTruth server right now. Check your connection and reload the page." /> : null}
             <ErrorBox message={error} />
           </CardContent>
         </Card>

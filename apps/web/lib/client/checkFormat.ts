@@ -3,11 +3,12 @@
  * components; this module decides label + tone so the rules are testable without React.
  */
 import {
+  LenientStageResultSchema,
   STAGES,
-  StageResultSchema,
+  isKnownReasonCode,
+  isKnownStageId,
   reasonKind,
-  type ReasonCode,
-  type StageResult,
+  type LenientStageResult as StageResult,
   type StageStatus,
 } from "@groundtruth/shared";
 
@@ -46,11 +47,13 @@ export function formatMs(ms: number): string {
 
 /**
  * Checks in pipeline order with every stage present (missing stages shown as pending), so the table
- * has a stable shape while the pipeline is still writing results.
+ * has a stable shape while the pipeline is still writing results. Stages this build doesn't know
+ * (a newer server) are kept, after the known ones, in the order received.
  */
 export function orderedChecks(checks: StageResult[]): StageResult[] {
   const byStage = new Map(checks.map((c) => [c.stage, c]));
-  return STAGES.map(
+  const unknown = checks.filter((c) => !isKnownStageId(c.stage));
+  const known = STAGES.map(
     (s) =>
       byStage.get(s.id) ?? {
         stage: s.id,
@@ -62,26 +65,23 @@ export function orderedChecks(checks: StageResult[]): StageResult[] {
         ms: 0,
       },
   );
+  return [...known, ...unknown];
 }
 
-/** Red-team runs carry `checks: unknown[]`; keep the ones that match the shared stage shape. */
+/** Red-team runs carry `checks: unknown[]`; keep the ones that match the (lenient) stage shape. */
 export function parseChecksLoose(raw: unknown[]): StageResult[] {
   const out: StageResult[] = [];
   for (const r of raw) {
-    const p = StageResultSchema.safeParse(r);
+    const p = LenientStageResultSchema.safeParse(r);
     if (p.success) out.push(p.data);
   }
   return out;
 }
 
-export function reasonTone(code: ReasonCode | string): Tone {
-  let kind: string;
-  try {
-    kind = reasonKind(code as ReasonCode) ?? "info";
-  } catch {
-    kind = "info";
-  }
-  switch (kind) {
+export function reasonTone(code: string): Tone {
+  // Codes from a newer server: neutral info badge (the raw code is still shown for researchers).
+  if (!isKnownReasonCode(code)) return "info";
+  switch (reasonKind(code)) {
     case "integrity":
       return "danger";
     case "protocol":

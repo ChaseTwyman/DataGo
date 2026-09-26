@@ -26,18 +26,27 @@ export function Field({
   htmlFor,
   children,
   className,
+  error,
 }: {
   label: string;
   hint?: string;
   htmlFor?: string;
   children: ReactNode;
   className?: string;
+  /** Field-level validation message (user copy from fieldErrors()). */
+  error?: string;
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-      {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
+      {error ? (
+        <p className="text-[11px] font-medium text-red-700" role="alert">
+          {error}
+        </p>
+      ) : hint ? (
+        <p className="text-[11px] text-muted-foreground">{hint}</p>
+      ) : null}
     </div>
   );
 }

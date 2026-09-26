@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { formatCents } from "@groundtruth/shared";
 import { BountySelect, useSelectedBounty } from "@/components/BountyPicker";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
+import { toast } from "@/components/Toaster";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -107,14 +108,13 @@ const EXPORTS: { format: ExportFormat; label: string; icon: typeof Download }[] 
 
 function ExportBar({ bountyId, count }: { bountyId: string; count: number }) {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const run = async (format: ExportFormat) => {
     setBusy(format);
-    setError(null);
     try {
       await api.download(bountyId, format);
     } catch (e) {
-      setError(errorMessage(e));
+      // A failed export is a toast, never a blank page or a JSON download.
+      toast(`${EXPORTS.find((x) => x.format === format)?.label ?? "Export"} export failed. ${errorMessage(e)}`);
     } finally {
       setBusy(null);
     }
@@ -130,7 +130,6 @@ function ExportBar({ bountyId, count }: { bountyId: string; count: number }) {
           {x.label}
         </Button>
       ))}
-      <ErrorBox message={error} className="w-full" />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { DraftProtocolRequestSchema, type DraftProtocolResponseSchema } from "@groundtruth/shared";
 import type { z } from "zod";
-import { HttpError, json, parseBody, route } from "@/lib/api/http";
+import { grokUnavailable, json, parseBody, route } from "@/lib/api/http";
 import { requireResearcher } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { insertProtocol } from "@/lib/db/repos/protocols";
@@ -17,7 +17,7 @@ export const POST = route(async (req) => {
   try {
     protocol = await draftProtocol(need);
   } catch (err) {
-    if (err instanceof GrokError) throw new HttpError(502, "GROK_UNAVAILABLE", err.message);
+    if (err instanceof GrokError) throw grokUnavailable(err, "protocol draft");
     throw err;
   }
   const db = await getDb();

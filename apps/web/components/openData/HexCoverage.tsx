@@ -10,7 +10,15 @@ import { cellToPolygon } from "@groundtruth/shared";
 export function HexCoverage({ cells, accent, className }: { cells: { h3_cell: string; rows: number }[]; accent: string; className?: string }) {
   const shapes = useMemo(() => {
     if (cells.length === 0) return null;
-    const polys = cells.map((c) => ({ ...c, ring: cellToPolygon(c.h3_cell).coordinates[0] ?? [] }));
+    // A malformed cell id must not take the page down: skip it.
+    const polys = cells.flatMap((c) => {
+      try {
+        return [{ ...c, ring: cellToPolygon(c.h3_cell).coordinates[0] ?? [] }];
+      } catch {
+        return [];
+      }
+    });
+    if (polys.length === 0) return null;
     const all = polys.flatMap((p) => p.ring);
     const lat0 = all.reduce((a, [, lat]) => a + lat, 0) / all.length;
     const k = Math.cos((lat0 * Math.PI) / 180);

@@ -22,6 +22,19 @@ export const forbidden = (message = "Not allowed") => new HttpError(403, "FORBID
 export const notFound = (what = "Not found") => new HttpError(404, "NOT_FOUND", what);
 export const conflict = (code: string, message: string) => new HttpError(409, code, message);
 
+/** Human copy for 5xx responses: never internals (stack, SQL, upstream bodies). */
+export const INTERNAL_MESSAGE = "Something went wrong on our side. Please try again.";
+export const GROK_UNAVAILABLE_MESSAGE = "The AI service is unavailable right now. Please try again in a minute.";
+
+/**
+ * An xAI call failed. The upstream error text (status lines, request ids, provider JSON) is logged
+ * server-side only; clients get a fixed, human message.
+ */
+export function grokUnavailable(err: unknown, what: string): HttpError {
+  console.warn(`[grok] ${what} failed:`, err instanceof Error ? err.message : err);
+  return new HttpError(502, "GROK_UNAVAILABLE", GROK_UNAVAILABLE_MESSAGE);
+}
+
 export function jsonError(status: number, code: string, message: string, details?: unknown): Response {
   const body: ApiError = { error: { code, message, ...(details === undefined ? {} : { details }) } };
   return Response.json(body, { status });
@@ -77,7 +90,7 @@ export function errorResponse(err: unknown): Response {
   if (err instanceof HttpError) return jsonError(err.status, err.code, err.message, err.details);
   if (err instanceof ZodError) return jsonError(400, "VALIDATION_FAILED", "Request failed validation", err.issues);
   console.error("[api] unhandled error", err);
-  return jsonError(500, "INTERNAL", "Internal error");
+  return jsonError(500, "INTERNAL", INTERNAL_MESSAGE);
 }
 
 export type IdParams = { params: Promise<{ id: string }> };

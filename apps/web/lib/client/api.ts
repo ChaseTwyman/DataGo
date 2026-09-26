@@ -1,46 +1,38 @@
 "use client";
 /**
- * Typed fetch wrapper for the GroundTruth API. Every response is parsed with the shared zod
- * contract, so a server/contract drift shows up as a clear "contract_mismatch" error instead of
- * a blank UI.
+ * Typed fetch wrapper for the GroundTruth API. Responses are parsed with the shared LENIENT
+ * read-side schemas (contracts/lenient.ts): new stages, reason codes or enum values from a newer
+ * server render generically. Anything still unreadable becomes code "contract_mismatch"; the UI
+ * shows only errorMessage(e) (lib/client/errors.ts), never the technical detail.
  */
 import { z } from "zod";
 import {
   ApiErrorSchema,
-  BountyDetailSchema,
-  BountyListResponseSchema,
   CoverageResponseSchema,
   CreateBountyRequestSchema,
   CreateBountyResponseSchema,
-  DevSessionResponseSchema,
   ExampleImageResponseSchema,
-  HealthResponseSchema,
+  LenientBountyDetailSchema,
+  LenientBountyListResponseSchema,
+  LenientDevSessionResponseSchema,
+  LenientHealthResponseSchema,
+  LenientProtocolListResponseSchema,
+  LenientRedteamRunListResponseSchema,
+  LenientRedteamRunResponseSchema,
+  LenientReviewResponseSchema,
+  LenientSubmissionListResponseSchema,
+  LenientSubmissionWithMediaSchema,
   PatchBountyRequestSchema,
-  ProtocolListResponseSchema,
-  RedteamRunListResponseSchema,
-  RedteamRunResponseSchema,
-  ReviewResponseSchema,
   SpawnEventResponseSchema,
-  SubmissionListResponseSchema,
-  SubmissionWithMediaSchema,
   type AttackType,
   type CreateBountyRequest,
   type PatchBountyRequest,
   type Role,
 } from "@groundtruth/shared";
+import { ApiClientError } from "./errors";
 import { getAccessToken } from "./session";
 
-export class ApiClientError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly code: string,
-    readonly details?: unknown,
-  ) {
-    super(message);
-    this.name = "ApiClientError";
-  }
-}
+export { ApiClientError, errorMessage, fieldErrors, FriendlyError } from "./errors";
 
 type Unauthorized = () => void;
 let onUnauthorized: Unauthorized | null = null;
@@ -123,16 +115,16 @@ const qs = (params: Record<string, string | number | undefined>) => {
 export type ExportFormat = "csv" | "geojson" | "dictionary";
 
 export const api = {
-  health: () => apiFetch("/api/health", HealthResponseSchema, { auth: false }),
+  health: () => apiFetch("/api/health", LenientHealthResponseSchema, { auth: false }),
   devSession: (role: Role = "researcher") =>
-    apiFetch("/api/dev/session", DevSessionResponseSchema, { body: { role }, auth: false }),
+    apiFetch("/api/dev/session", LenientDevSessionResponseSchema, { body: { role }, auth: false }),
 
-  protocols: () => apiFetch("/api/protocols", ProtocolListResponseSchema),
+  protocols: () => apiFetch("/api/protocols", LenientProtocolListResponseSchema),
   exampleImage: (protocolId: string) =>
     apiFetch(`/api/protocols/${protocolId}/example-image`, ExampleImageResponseSchema, { body: {} }),
 
-  bounties: () => apiFetch("/api/bounties", BountyListResponseSchema),
-  bounty: (id: string) => apiFetch(`/api/bounties/${id}`, BountyDetailSchema),
+  bounties: () => apiFetch("/api/bounties", LenientBountyListResponseSchema),
+  bounty: (id: string) => apiFetch(`/api/bounties/${id}`, LenientBountyDetailSchema),
   coverage: (id: string) => apiFetch(`/api/bounties/${id}/coverage`, CoverageResponseSchema),
   createBounty: (input: z.input<typeof CreateBountyRequestSchema>) => {
     const body: CreateBountyRequest = CreateBountyRequestSchema.parse(input);
@@ -146,16 +138,16 @@ export const api = {
     }),
 
   submissions: (q: { bounty_id?: string; status?: string; limit?: number } = {}) =>
-    apiFetch(`/api/submissions${qs(q)}`, SubmissionListResponseSchema),
-  submission: (id: string) => apiFetch(`/api/submissions/${id}`, SubmissionWithMediaSchema),
+    apiFetch(`/api/submissions${qs(q)}`, LenientSubmissionListResponseSchema),
+  submission: (id: string) => apiFetch(`/api/submissions/${id}`, LenientSubmissionWithMediaSchema),
   review: (id: string, decision: "approve" | "reject", integrity = false, note?: string) =>
-    apiFetch(`/api/submissions/${id}/review`, ReviewResponseSchema, {
+    apiFetch(`/api/submissions/${id}/review`, LenientReviewResponseSchema, {
       body: { decision, integrity: decision === "reject" ? integrity : false, ...(note ? { note } : {}) },
     }),
 
   redteamRun: (bounty_id: string, attack_type: AttackType) =>
-    apiFetch("/api/redteam/run", RedteamRunResponseSchema, { body: { bounty_id, attack_type } }),
-  redteamRuns: (bounty_id?: string) => apiFetch(`/api/redteam/runs${qs({ bounty_id })}`, RedteamRunListResponseSchema),
+    apiFetch("/api/redteam/run", LenientRedteamRunResponseSchema, { body: { bounty_id, attack_type } }),
+  redteamRuns: (bounty_id?: string) => apiFetch(`/api/redteam/runs${qs({ bounty_id })}`, LenientRedteamRunListResponseSchema),
 
   spawnEvent: (lat: number, lng: number, radius_m?: number) =>
     apiFetch("/api/demo/spawn-event", SpawnEventResponseSchema, {
@@ -165,7 +157,12 @@ export const api = {
   /** Exports need the bearer header, so fetch → blob → trigger a download. */
   async download(bountyId: string, format: ExportFormat): Promise<void> {
     const res = await rawFetch(`/api/bounties/${bountyId}/export${qs({ format })}`);
-    const blob = await res.blob();
+    let blob: Blob;
+    try {
+      blob = await res.blob();
+    } catch {
+      throw new ApiClientError("export body interrupted", 0, "network");
+    }
     const cd = res.headers.get("content-disposition") ?? "";
     const m = /filename="?([^";]+)"?/i.exec(cd);
     const ct = res.headers.get("content-type") ?? "";
@@ -181,10 +178,3 @@ export const api = {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
 };
-
-export function errorMessage(e: unknown): string {
-  if (e instanceof ApiClientError) return e.message;
-  if (e instanceof z.ZodError) return z.prettifyError(e);
-  if (e instanceof Error) return e.message;
-  return String(e);
-}

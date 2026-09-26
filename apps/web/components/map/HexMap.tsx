@@ -150,6 +150,22 @@ export default function HexMap({
 }: HexMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [ready, setReady] = useState(false);
+  /** The basemap style never loaded (tile server down, offline, blocked): show a static notice. */
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const readyRef = useRef(false);
+  readyRef.current = ready;
+  // Errors after the style loaded are individual tiles (MapLibre retries them): ignore those.
+  const onError = useCallback(() => {
+    if (!readyRef.current) setFailed(true);
+  }, []);
+  useEffect(() => {
+    if (ready) return;
+    const t = setTimeout(() => {
+      if (!readyRef.current) setFailed(true);
+    }, 20_000);
+    return () => clearTimeout(t);
+  }, [ready, attempt]);
   const [popup, setPopup] = useState<CellPopup | null>(null);
 
   const cellFc = useMemo(() => coverageFeatures(cells), [cells]);
@@ -203,8 +219,18 @@ export default function HexMap({
 
   return (
     <div className={cn("relative h-full w-full", className)}>
+      {failed ? (
+        <MapUnavailable
+          onRetry={() => {
+            setFailed(false);
+            setAttempt((n) => n + 1);
+          }}
+        />
+      ) : null}
       <MapGL
+        key={attempt}
         ref={mapRef}
+        onError={onError}
         initialViewState={{ latitude: center.lat, longitude: center.lng, zoom }}
         mapStyle={MAP_STYLE}
         style={{ width: "100%", height: "100%" }}
@@ -241,6 +267,23 @@ export default function HexMap({
           </Popup>
         ) : null}
       </MapGL>
+    </div>
+  );
+}
+
+/** Static fallback when the basemap can't load. The page's lists and stats don't depend on it. */
+export function MapUnavailable({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/80 p-6 backdrop-blur-sm" role="status">
+      <div className="max-w-xs rounded-lg border bg-card p-4 text-center text-sm shadow-sm">
+        <div className="font-medium">Map unavailable</div>
+        <p className="mt-1 text-muted-foreground">The map tiles couldn&apos;t load. Everything else on this page still works.</p>
+        {onRetry ? (
+          <button type="button" onClick={onRetry} className="mt-3 cursor-pointer text-sm font-medium text-primary underline-offset-4 hover:underline">
+            Try again
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

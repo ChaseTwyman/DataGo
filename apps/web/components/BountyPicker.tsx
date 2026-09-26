@@ -1,7 +1,7 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import type { BountyListItem } from "@groundtruth/shared";
+import type { LenientBountyListItem as BountyListItem } from "@groundtruth/shared";
 import { api } from "@/lib/client/api";
 import { useApi } from "@/lib/client/useApi";
 import { Select } from "./ui/form";

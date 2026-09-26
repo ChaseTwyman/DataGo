@@ -132,12 +132,12 @@ function RedTeam() {
                     src={r.image_url}
                     label={r.attack_type === "ai_generated" ? "AI-generated" : "Red team"}
                     tone="redteam"
-                    alt={`Red-team ${ATTACK_LABEL[r.attack_type]} attack image`}
+                    alt={`Red-team ${(ATTACK_LABEL[r.attack_type as AttackType] ?? "Unknown")} attack image`}
                     className="aspect-[4/3]"
                   />
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold">{ATTACK_LABEL[r.attack_type]}</span>
+                      <span className="font-semibold">{(ATTACK_LABEL[r.attack_type as AttackType] ?? "Unknown")}</span>
                       {r.caught ? (
                         <ToneBadge tone="success" icon={ShieldCheck}>
                           Caught

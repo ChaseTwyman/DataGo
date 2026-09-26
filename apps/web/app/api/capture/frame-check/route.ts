@@ -5,7 +5,7 @@ import {
   isFrameAllGreen,
   type FrameCheckResponse,
 } from "@groundtruth/shared";
-import { conflict, HttpError, json, mockVariantOf, notFound, parseBody, route } from "@/lib/api/http";
+import { conflict, grokUnavailable, HttpError, json, mockVariantOf, notFound, parseBody, route } from "@/lib/api/http";
 import { requireUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getBounty } from "@/lib/db/repos/bounties";
@@ -56,7 +56,7 @@ export const POST = route(async (req) => {
       result = await frameCheck({ protocol: protocol.definition, imageBase64: body.image_base64, ...(variant ? { variant } : {}) });
     } catch (err) {
       await recordFrameCheck(db, session.id, false, GATE_REQUIRED_GREEN);
-      throw new HttpError(502, "GROK_UNAVAILABLE", err instanceof Error ? err.message : "Frame check failed");
+      throw grokUnavailable(err, "frame check");
     }
     const allGreen = isFrameAllGreen(protocol.definition, result);
     const gate = await recordFrameCheck(db, session.id, allGreen && frameChecksCountTowardGate(), GATE_REQUIRED_GREEN);

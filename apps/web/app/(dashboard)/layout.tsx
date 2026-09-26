@@ -3,6 +3,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Loading } from "@/components/page";
 import { Sidebar } from "@/components/Sidebar";
+import { Toaster } from "@/components/Toaster";
 import { setUnauthorizedHandler } from "@/lib/client/api";
 import { signOut } from "@/lib/client/auth";
 import { HealthProvider } from "@/lib/client/health";
@@ -41,6 +42,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         />
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
       </div>
+      <Toaster />
     </HealthProvider>
   );
 }

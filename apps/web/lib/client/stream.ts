@@ -2,7 +2,7 @@
  * Pure state for the live submission stream. The realtime path and the polling path both feed full
  * fetched lists into this reducer, so the UI behaves identically either way.
  */
-import type { SubmissionWithMedia } from "@groundtruth/shared";
+import type { LenientSubmissionWithMedia as SubmissionWithMedia } from "@groundtruth/shared";
 
 export type StreamMode = "realtime" | "polling";
 
@@ -77,7 +77,7 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
 export type HealthState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "ready"; realtime: boolean; backend: "supabase" | "local" };
+  | { status: "ready"; realtime: boolean; backend: string };
 
 /**
  * Realtime only when the server says it is on, the backend is Supabase, and this browser has a

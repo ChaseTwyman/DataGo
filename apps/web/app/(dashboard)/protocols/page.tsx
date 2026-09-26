@@ -1,7 +1,7 @@
 "use client";
 import { LoaderCircle, ShieldAlert, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { ErrorBox, Loading, PageHeader } from "@/components/page";
+import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
 import { SyntheticImage } from "@/components/SyntheticImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,9 @@ export default function ProtocolsPage() {
       <div className="space-y-4 p-6">
         <ErrorBox message={protocols.error ?? error} />
         {protocols.loading && !protocols.data ? <Loading /> : null}
+        {protocols.data && protocols.data.protocols.length === 0 ? (
+          <Empty title="No protocols yet">Published protocols appear here. They define what contributors capture for a bounty.</Empty>
+        ) : null}
         {protocols.data?.protocols.map((p) => {
           const d = p.definition;
           const img = generated[p.id] ?? p.example_image_url;

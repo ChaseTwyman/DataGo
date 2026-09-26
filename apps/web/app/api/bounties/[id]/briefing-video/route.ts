@@ -1,7 +1,7 @@
 import { Uuid, type BriefingVideoResponseSchema } from "@groundtruth/shared";
 import type { z } from "zod";
 import { loadManagedBounty } from "@/lib/api/bountyAccess";
-import { HttpError, json, route, type IdParams } from "@/lib/api/http";
+import { grokUnavailable, json, route, type IdParams } from "@/lib/api/http";
 import { requireUser } from "@/lib/auth";
 import { runInBackground } from "@/lib/background";
 import { completeBriefingVideo, startBriefingVideo } from "@/lib/briefing";
@@ -23,7 +23,7 @@ export const POST = route<IdParams>(async (req, { params }) => {
   try {
     started = await startBriefingVideo(bounty, protocol);
   } catch (err) {
-    if (err instanceof GrokError || err instanceof Error) throw new HttpError(502, "GROK_UNAVAILABLE", err.message);
+    if (err instanceof GrokError || err instanceof Error) throw grokUnavailable(err, "briefing video");
     throw err;
   }
   runInBackground(async () => {

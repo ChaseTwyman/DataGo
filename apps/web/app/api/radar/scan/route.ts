@@ -1,6 +1,6 @@
 import { RadarScanRequestSchema, type RadarScanResponseSchema } from "@groundtruth/shared";
 import type { z } from "zod";
-import { HttpError, json, parseBody, route } from "@/lib/api/http";
+import { grokUnavailable, json, parseBody, route } from "@/lib/api/http";
 import { requireResearcher } from "@/lib/auth";
 import { activeAlertsAt, type NwsAlert } from "@/lib/context/nws";
 import { getDb } from "@/lib/db";
@@ -34,7 +34,7 @@ export const POST = route(async (req) => {
     const res: z.infer<typeof RadarScanResponseSchema> = { drafts, alerts_considered: alerts.length };
     return json(res);
   } catch (err) {
-    if (err instanceof GrokError) throw new HttpError(502, "GROK_UNAVAILABLE", err.message);
+    if (err instanceof GrokError) throw grokUnavailable(err, "radar scan");
     throw err;
   }
 });

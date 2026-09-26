@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import type { HealthResponse } from "@groundtruth/shared";
+import type { LenientHealthResponse as HealthResponse } from "@groundtruth/shared";
 import { api } from "./api";
 import type { HealthState } from "./stream";
 

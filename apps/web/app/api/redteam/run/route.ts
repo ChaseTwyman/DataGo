@@ -1,6 +1,6 @@
 import { RedteamRunRequestSchema } from "@groundtruth/shared";
 import { loadManagedBounty } from "@/lib/api/bountyAccess";
-import { HttpError, json, originOf, parseBody, route } from "@/lib/api/http";
+import { grokUnavailable, json, originOf, parseBody, route } from "@/lib/api/http";
 import { requireResearcher } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { GrokError } from "@/lib/grok/config";
@@ -22,7 +22,7 @@ export const POST = route(async (req) => {
     const res = await runAttack({ db, storage: getStorage(), deps: liveDeps(db), bounty, protocol, attack: body.attack_type, origin: originOf(req) });
     return json(res);
   } catch (err) {
-    if (err instanceof GrokError) throw new HttpError(502, "GROK_UNAVAILABLE", err.message);
+    if (err instanceof GrokError) throw grokUnavailable(err, "red-team run");
     throw err;
   }
 });

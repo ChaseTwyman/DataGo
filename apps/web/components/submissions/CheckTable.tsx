@@ -1,4 +1,4 @@
-import type { StageResult } from "@groundtruth/shared";
+import { stageLabel, type LenientStageResult as StageResult } from "@groundtruth/shared";
 import { formatMs, formatScore, orderedChecks } from "@/lib/client/checkFormat";
 import { ReasonCode, StageStatusBadge } from "../status";
 
@@ -20,7 +20,7 @@ export function CheckTable({ checks, fillMissing = true }: { checks: StageResult
         <tbody>
           {rows.map((c) => (
             <tr key={c.stage} className="border-t align-top">
-              <td className="px-2 py-1.5 font-medium whitespace-nowrap">{c.label}</td>
+              <td className="px-2 py-1.5 font-medium whitespace-nowrap">{stageLabel(c.stage, c.label)}</td>
               <td className="px-2 py-1.5">
                 <StageStatusBadge status={c.status} />
               </td>

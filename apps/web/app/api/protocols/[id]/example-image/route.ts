@@ -1,6 +1,6 @@
 import { Uuid, type ExampleImageResponseSchema } from "@groundtruth/shared";
 import type { z } from "zod";
-import { forbidden, HttpError, json, notFound, originOf, route, type IdParams } from "@/lib/api/http";
+import { forbidden, grokUnavailable, json, notFound, originOf, route, type IdParams } from "@/lib/api/http";
 import { mediaUrl } from "@/lib/api/views";
 import { requireResearcher } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -26,7 +26,7 @@ export const POST = route<IdParams>(async (req, { params }) => {
     const body: z.infer<typeof ExampleImageResponseSchema> = { path, url: url ?? "" };
     return json(body);
   } catch (err) {
-    if (err instanceof GrokError) throw new HttpError(502, "GROK_UNAVAILABLE", err.message);
+    if (err instanceof GrokError) throw grokUnavailable(err, "example image");
     throw err;
   }
 });

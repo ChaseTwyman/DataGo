@@ -1,7 +1,7 @@
 "use client";
 import { CircleCheck, CircleX, LoaderCircle } from "lucide-react";
 import { useState } from "react";
-import type { SubmissionWithMedia } from "@groundtruth/shared";
+import type { LenientSubmissionWithMedia as SubmissionWithMedia } from "@groundtruth/shared";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/page";
 import { SubmissionCard } from "@/components/submissions/SubmissionCard";
 import { Button } from "@/components/ui/button";

@@ -24,7 +24,11 @@ export function PageHeader({
   );
 }
 
-export function ErrorBox({ message, className }: { message: string | null | undefined; className?: string }) {
+/**
+ * Inline failure notice. `message` must already be user copy — pass `errorMessage(e)`
+ * (lib/client/errors.ts), never `e.message`.
+ */
+export function ErrorBox({ message, className, onRetry }: { message: string | null | undefined; className?: string; onRetry?: () => void }) {
   if (!message) return null;
   return (
     <div
@@ -32,7 +36,12 @@ export function ErrorBox({ message, className }: { message: string | null | unde
       className={cn("flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", className)}
     >
       <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-      <span className="break-words whitespace-pre-wrap">{message}</span>
+      <span className="flex-1 break-words whitespace-pre-wrap">{message}</span>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className="shrink-0 cursor-pointer font-medium underline underline-offset-2 hover:text-red-950">
+          Try again
+        </button>
+      ) : null}
     </div>
   );
 }
