@@ -44,6 +44,21 @@ See `README.md` (setup, architecture, operations, security) and `DEMO.md` (check
 - Real-Grok eval: `negative/vitamin-water-bottle` → rejected `OFF_TOPIC` in 2.1 s (0.90). A Grok Imagine fake → `CHALLENGE_FAILED` + `C2PA_AI_GENERATED`. **Not yet proven:** real positive captures being accepted — add tub+ruler / puddle fixtures and run `pnpm eval:verification`.
 - Honest limit: model-only AI-image detection is weak (grok-4.7 did not flag an Imagine fake); C2PA labels vanish when a fake is re-photographed, so the gate's screen/print check and burst parallax cover that case.
 
+## Verification latency (2026-09-26, branch pipeline-speed)
+- Shipped: grok-4.7 starts concurrently with relevance (OFF_TOPIC aborts it); later stages run concurrently (~2 s off the ~45 s). Knobs `VERIFICATION_FRAME_MAX_EDGE`, `VERIFICATION_IMAGE_DETAIL`, `GROK_VERIFICATION_TIMEOUT_MS`; defaults unchanged. Reasoning tokens now logged.
+- Measured locally with real Grok on `negative/imagine-pseudo-burst-{1,2}` (Imagine image → 3 shifted crops, C2PA stripped; only grok-4.7 can catch them). 6 grok-4.7 calls total:
+  | Setting | Out tokens (reasoning) per call | Wall time | Outcome |
+  |---|---|---|---|
+  | medium, 1536 px, high (baseline) | 13.3k (12.3k) | 119 s; other call timed out at 150 s | 1 rejected `CHALLENGE_FAILED`, 1 review (timeout) |
+  | **low** | 1.5k (0.9k) | 10 s / 92 s | **both ACCEPTED** → rejected |
+  | medium + "be terse" + maxLength caps | 4.2k (3.6k) | 11 s / 108 s | 1 rejected, **1 ACCEPTED** → reverted |
+- Findings: latency = reasoning tokens + large server-side variance (10 s vs 92 s for similar token counts); images are ~2.9k input tokens each, so frame size/detail are not a lever. The fast answers were the accepts, so hedged duplicate requests would bias toward less skeptical verdicts (not built). **The 25 s target is not reachable at medium without weakening detection.** Local times are slower than the ~41 s measured on Vercel earlier (different inputs; these fakes make the model deliberate).
+- Also found: the red team's pseudo-parallax attack (one image as shifted crops, C2PA stripped) is caught only stochastically even at medium. Suggested next step (not built): a deterministic check that the burst frames are related by a pure 2D translation/crop (no depth-dependent parallax).
+
+## Face / plate redaction (2026-09-26, branch pipeline-speed)
+- After the decision: fast-vision boxes → pixelate + blur (sharp) → `<n>.redacted.jpg` beside the original; `media[i].redacted_path`, `submissions.redaction`. Researchers get only redacted URLs (nothing while pending/failed); admins also get `original_media_urls`; contributors see their own originals. Storage RLS (0009): non-admin researchers can read only `*.redacted.jpg` (before, any researcher could read every original from storage). Retention/account deletion remove derivatives. Failures retried by the daily cron (5/run) and `backfill:redaction`.
+- Measured limit: model boxes were off by 4–10 % of the frame (all 3 faces exposed with a tight blur). Each box grows by max(1× size, 8 % of long edge): large blurred areas, possible misses.
+
 ## Milestones
 | # | Milestone | State |
 |---|---|---|
@@ -77,6 +92,7 @@ See `README.md` (setup, architecture, operations, security) and `DEMO.md` (check
 - [ ] Add the two Resend CNAMEs above at the `panopticpigskin.tech` registrar; tell Claude which inbox to send a test reset to.
 - [ ] Mac: `git pull`, `.env` API URL = Vercel, Release build to the iPhone (see "Phone build"). The previously installed build no longer works (anonymous sign-in removed).
 - [ ] Take real test photos with the app (positives: tub + ruler, puddles; negatives: random objects, a screen) → fixtures → eval.
+- [ ] Redaction rollout (lead): apply `supabase/migrations/20260926000009_redaction.sql` to hosted Supabase BEFORE deploying; deploy; then `cd apps/web && npx tsx --env-file=.env scripts/backfill-redaction.ts --dry-run` and without `--dry-run` (one fast-vision call per frame). Until backfilled, researchers see no photos on older submissions (fail closed).
 - [ ] Revoke the Supabase access token and Vercel token after the hackathon; move the admin password into a password manager and delete `C:\Users\sumedh\.groundtruth-admin.txt`.
 - [ ] Delete leftover folders `$WT` (repo root, apps/web) and `C:\Users\sumedh\AppData\Local\Temp\{gtm,gtx,gta,gtd,gtr}` when OneDrive/path limits allow.
 
