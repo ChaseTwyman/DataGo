@@ -1,0 +1,19 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# expo
+apps/mobile/ios/
+apps/mobile/android/
+apps/mobile/.expo/
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+# eval outputs
+apps/web/test/fixtures/generated/

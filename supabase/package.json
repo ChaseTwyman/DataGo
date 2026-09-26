@@ -1,0 +1,17 @@
+{
+  "name": "@groundtruth/supabase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint test",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@groundtruth/shared": "workspace:*",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2"
+  }
+}
