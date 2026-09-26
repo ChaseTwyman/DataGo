@@ -15,6 +15,7 @@ export default tseslint.config(
       "**/*.config.js",
       "**/babel.config.js",
       "**/metro.config.js",
+      "**/public/vendor/**",
     ],
   },
   js.configs.recommended,
