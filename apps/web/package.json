@@ -13,7 +13,8 @@
     "eval:verification": "tsx scripts/eval-verification.ts",
     "generate:examples": "tsx scripts/generate-examples.ts",
     "demo:reset": "tsx scripts/demo-reset.ts",
-    "e2e:mock": "tsx scripts/e2e-mock.ts"
+    "e2e:mock": "tsx scripts/e2e-mock.ts",
+    "seed:open-data": "tsx scripts/seed-open-data.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

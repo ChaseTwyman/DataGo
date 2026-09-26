@@ -26,7 +26,8 @@ import type { ObjectStorage } from "./storage";
 
 export const DEMO_SEED_USER_ID = "00000000-0000-4000-8000-0000000000d1";
 
-const seedChecks = (): StageResult[] =>
+/** Pipeline checks for demo/seed rows: every stage passes on a DEMO_WAIVER; no real capture ran. */
+export const seedChecks = (): StageResult[] =>
   pendingChecks().map((c) => ({
     ...c,
     status: c.stage === "session_integrity" ? "skipped" : "pass",
