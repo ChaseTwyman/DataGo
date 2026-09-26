@@ -1,11 +1,12 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { DarkTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { ActivityIndicator, Image, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { boot } from "../src/api";
-import { isTransient } from "../src/api/errors";
+import { queryClient } from "../src/api/queryClient";
+import { AccountGate } from "../src/auth/AccountGate";
 import { useApp } from "../src/state/appStore";
 import { ErrorBox, Label, Muted } from "../src/ui/components";
 import { RouteErrorBoundary } from "../src/ui/ErrorFallback";
@@ -14,17 +15,6 @@ import { C, F, S, TRACK } from "../src/ui/theme";
 
 /** Render crashes anywhere below the root show a calm fallback with "Try again" (Expo Router). */
 export const ErrorBoundary = RouteErrorBoundary;
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 10_000,
-      // Transient failures (offline, 5xx, timeouts) retry quietly with backoff; 4xx do not.
-      retry: (count, err) => count < 3 && isTransient(err),
-      retryDelay: (n) => Math.min(1000 * 2 ** n, 8000),
-    },
-  },
-});
 
 const theme = {
   ...DarkTheme,
@@ -74,23 +64,26 @@ export default function RootLayout() {
         <ThemeProvider value={theme}>
           <StatusBar style="light" />
           <BootGate>
-            <Stack
-              screenOptions={{
-                headerStyle: { backgroundColor: C.bg },
-                headerShadowVisible: false,
-                headerTintColor: C.text,
-                headerTitleStyle,
-                headerBackButtonDisplayMode: "minimal",
-                contentStyle: { backgroundColor: C.bg },
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-              <Stack.Screen name="bounty/[id]" options={{ title: "BRIEFING" }} />
-              <Stack.Screen name="capture/[sessionId]" options={{ headerShown: false, gestureEnabled: false }} />
-              <Stack.Screen name="result/[submissionId]" options={{ title: "VERIFICATION", headerBackVisible: false, gestureEnabled: false }} />
-              <Stack.Screen name="voice-test" options={{ title: "VOICE TEST" }} />
-            </Stack>
+            <AccountGate>
+              <Stack
+                screenOptions={{
+                  headerStyle: { backgroundColor: C.bg },
+                  headerShadowVisible: false,
+                  headerTintColor: C.text,
+                  headerTitleStyle,
+                  headerBackButtonDisplayMode: "minimal",
+                  contentStyle: { backgroundColor: C.bg },
+                }}
+              >
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+                <Stack.Screen name="bounty/[id]" options={{ title: "BRIEFING" }} />
+                <Stack.Screen name="capture/[sessionId]" options={{ headerShown: false, gestureEnabled: false }} />
+                <Stack.Screen name="result/[submissionId]" options={{ title: "VERIFICATION", headerBackVisible: false, gestureEnabled: false }} />
+                <Stack.Screen name="voice-test" options={{ title: "VOICE TEST" }} />
+                <Stack.Screen name="account" options={{ title: "ACCOUNT" }} />
+              </Stack>
+            </AccountGate>
           </BootGate>
         </ThemeProvider>
       </QueryClientProvider>

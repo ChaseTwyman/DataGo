@@ -71,10 +71,14 @@ describe("bootstrapAuth", () => {
   function deps(over: Partial<AuthDeps> = {}) {
     const saved: string[] = [];
     const devCalls: (string | undefined)[] = [];
+    const signOuts: number[] = [];
     const d: AuthDeps = {
       health: async () => health(),
       supabaseConfigured: false,
-      supabaseSignIn: async () => ({ userId: "sb-user", token: "sb" }),
+      supabaseSession: async () => ({ userId: "sb-user", email: "sam@example.com", isAnonymous: false }),
+      supabaseSignOut: async () => {
+        signOuts.push(1);
+      },
       devSession: async (id) => {
         devCalls.push(id);
         return { user_id: id ?? UID, access_token: "dev.x" };
@@ -85,18 +89,39 @@ describe("bootstrapAuth", () => {
       },
       ...over,
     };
-    return { d, saved, devCalls };
+    return { d, saved, devCalls, signOuts };
   }
 
-  it("uses anonymous Supabase auth when the backend is supabase and it is configured", async () => {
-    const { d, devCalls } = deps({ health: async () => health({ backend: "supabase", realtime: true }), supabaseConfigured: true });
-    expect(await bootstrapAuth(d)).toMatchObject({ mode: "supabase", userId: "sb-user", devToken: null });
+  const sb = { health: async () => health({ backend: "supabase", realtime: true }), supabaseConfigured: true } as const;
+
+  it("a persisted account session → signed in (Supabase), no dev session", async () => {
+    const { d, devCalls, signOuts } = deps(sb);
+    expect(await bootstrapAuth(d)).toMatchObject({ status: "signed_in", mode: "supabase", userId: "sb-user", devToken: null });
     expect(devCalls).toEqual([]);
+    expect(signOuts).toEqual([]);
+  });
+
+  it("no session → signed out (Welcome), and never signs in anonymously", async () => {
+    const { d, signOuts } = deps({ ...sb, supabaseSession: async () => null });
+    expect(await bootstrapAuth(d)).toMatchObject({ status: "signed_out", notice: null });
+    expect(signOuts).toEqual([]);
+  });
+
+  it("a legacy anonymous session is signed out, and Welcome explains accounts are required", async () => {
+    const { d, signOuts } = deps({ ...sb, supabaseSession: async () => ({ userId: "anon", email: null, isAnonymous: true }) });
+    expect(await bootstrapAuth(d)).toMatchObject({ status: "signed_out", notice: "legacy_anonymous" });
+    expect(signOuts).toEqual([1]);
+  });
+
+  it("a session without an email is treated as legacy anonymous even if not flagged", async () => {
+    const { d, signOuts } = deps({ ...sb, supabaseSession: async () => ({ userId: "x", email: null, isAnonymous: false }) });
+    expect((await bootstrapAuth(d)).status).toBe("signed_out");
+    expect(signOuts).toEqual([1]);
   });
 
   it("falls back to a dev session and persists the user id", async () => {
     const { d, saved } = deps();
-    expect(await bootstrapAuth(d)).toMatchObject({ mode: "dev", userId: UID, devToken: "dev.x" });
+    expect(await bootstrapAuth(d)).toMatchObject({ status: "signed_in", mode: "dev", userId: UID, devToken: "dev.x" });
     expect(saved).toEqual([UID]);
   });
 

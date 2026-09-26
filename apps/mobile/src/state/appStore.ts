@@ -1,4 +1,5 @@
 import type { LenientHealthResponse as HealthResponse, MockVariant } from "@groundtruth/shared";
+import type { AuthNotice } from "../api/authFlow";
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 
@@ -11,12 +12,18 @@ interface AppState {
   authMode: AuthMode | null;
   userId: string | null;
   devToken: string | null;
+  /** null until boot decides; "signed_out" → Welcome (no app screen mounts). */
+  session: "signed_in" | "signed_out" | null;
+  /** Why Welcome is showing (legacy anonymous session, account required, deleted…). */
+  authNotice: AuthNotice | null;
+  /** Set by a mid-use ACCOUNT_SUSPENDED response; cleared on sign-out. */
+  suspended: boolean;
   /** Dev-only: x-mock-variant sent on frame checks and submissions (mock mode demos). */
   mockVariant: MockVariant;
   onboarded: boolean;
   /** Last wallet balance seen, so the wallet can count up from it after a new credit. */
   lastSeenBalanceCents: number | null;
-  setBoot: (p: Partial<Pick<AppState, "ready" | "bootError" | "health" | "authMode" | "userId" | "devToken">>) => void;
+  setBoot: (p: Partial<Pick<AppState, "ready" | "bootError" | "health" | "authMode" | "userId" | "devToken" | "session" | "authNotice" | "suspended">>) => void;
   setMockVariant: (v: MockVariant) => void;
   setOnboarded: (v: boolean) => void;
   setLastSeenBalance: (c: number) => void;
@@ -31,6 +38,9 @@ export const useApp = create<AppState>((set) => ({
   authMode: null,
   userId: null,
   devToken: null,
+  session: null,
+  authNotice: null,
+  suspended: false,
   mockVariant: "default",
   onboarded: false,
   lastSeenBalanceCents: null,

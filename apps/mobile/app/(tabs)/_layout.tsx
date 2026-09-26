@@ -1,8 +1,8 @@
 import Feather from "@expo/vector-icons/Feather";
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, router, Tabs } from "expo-router";
 import { StyleSheet, type ColorValue } from "react-native";
 import { useApp } from "../../src/state/appStore";
-import type { IconName } from "../../src/ui/components";
+import { IconButton, type IconName } from "../../src/ui/components";
 import { C, F, TRACK } from "../../src/ui/theme";
 
 const icon = (name: IconName) =>
@@ -29,7 +29,14 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="map" options={{ title: "MAP", tabBarIcon: icon("map"), headerShown: false }} />
       <Tabs.Screen name="foryou" options={{ title: "FOR YOU", tabBarIcon: icon("crosshair") }} />
-      <Tabs.Screen name="wallet" options={{ title: "WALLET", tabBarIcon: icon("credit-card") }} />
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          title: "WALLET",
+          tabBarIcon: icon("credit-card"),
+          headerRight: () => <IconButton icon="user" label="Account" onPress={() => router.push("/account")} style={{ marginRight: 4 }} />,
+        }}
+      />
     </Tabs>
   );
 }

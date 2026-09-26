@@ -34,6 +34,10 @@ export interface HttpOptions {
    * obtaining a fresh token and the call is retried once, silently; false/throw → the 401 surfaces.
    */
   reauth?: () => Promise<boolean>;
+  /** Codes for which a refresh cannot help (e.g. ACCOUNT_REQUIRED): no reauth attempt. */
+  noReauthCodes?: ReadonlySet<string>;
+  /** Observes every ApiError an authenticated call finally throws (session handling hooks in here). */
+  onAuthedError?: (e: ApiError) => void;
 }
 
 export interface RequestOptions<S extends z.ZodType> {
@@ -61,9 +65,25 @@ export class Http {
 
   async request<S extends z.ZodType>(method: string, path: string, r: RequestOptions<S>): Promise<z.infer<S>> {
     try {
+      return await this.withReauth(method, path, r);
+    } catch (e) {
+      if (e instanceof ApiError && r.auth !== false) {
+        try {
+          this.o.onAuthedError?.(e);
+        } catch {
+          // An observer must never change what the caller sees.
+        }
+      }
+      throw e;
+    }
+  }
+
+  private async withReauth<S extends z.ZodType>(method: string, path: string, r: RequestOptions<S>): Promise<z.infer<S>> {
+    try {
       return await this.once(method, path, r);
     } catch (e) {
       if (!(e instanceof ApiError) || e.status !== 401 || r.auth === false || !this.o.reauth) throw e;
+      if (this.o.noReauthCodes?.has(e.code)) throw e;
       let renewed = false;
       try {
         renewed = await this.o.reauth();

@@ -23,3 +23,8 @@ export function useBounty(id: string | undefined) {
 export function useWallet() {
   return useQuery({ queryKey: ["wallet"], queryFn: api.wallet, refetchInterval: 15_000 });
 }
+
+/** GET /api/me: who is signed in, roles, suspension, trust + balance. Drives the root gate. */
+export function useMe(enabled = true) {
+  return useQuery({ queryKey: ["me"], enabled, queryFn: api.me, refetchInterval: 60_000 });
+}

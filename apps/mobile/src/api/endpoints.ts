@@ -13,14 +13,23 @@ import {
   LenientNearbyResponseSchema,
   LenientSubmissionWithMediaSchema,
   LenientWalletResponseSchema,
+  MeSchema,
   ProfileResponseSchema,
+  SignupResponseSchema,
   VoiceTokenResponseSchema,
+  type ChangePasswordRequestSchema,
   type CreateSessionRequest,
+  type DeleteAccountRequestSchema,
+  type SignupRequest,
   type CreateSubmissionRequest,
   type FrameCheckRequest,
   type ProfileRequest,
 } from "@groundtruth/shared";
+import { z } from "zod";
 import type { Http } from "./http";
+
+type ChangePasswordRequest = z.infer<typeof ChangePasswordRequestSchema>;
+type DeleteAccountRequest = z.infer<typeof DeleteAccountRequestSchema>;
 
 export function endpoints(http: Http) {
   return {
@@ -50,6 +59,16 @@ export function endpoints(http: Http) {
     wallet: () => http.request("GET", "/api/me/wallet", { schema: LenientWalletResponseSchema }),
     voiceToken: () => http.request("POST", "/api/voice/token", { schema: VoiceTokenResponseSchema, body: {} }),
     profile: (body: ProfileRequest) => http.request("POST", "/api/profile", { schema: ProfileResponseSchema, body }),
+
+    // Accounts (contracts/account.ts)
+    signup: (body: SignupRequest) => http.request("POST", "/api/auth/signup", { schema: SignupResponseSchema, body, auth: false }),
+    me: () => http.request("GET", "/api/me", { schema: MeSchema }),
+    changePassword: (body: ChangePasswordRequest) =>
+      http.request("POST", "/api/me/password", { schema: z.object({ ok: z.boolean() }).loose(), body }),
+    /** The whole export as parsed JSON (shape owned by the server; the phone only saves/shares it). */
+    exportData: () => http.request("GET", "/api/me/export", { schema: z.unknown(), timeoutMs: 60_000 }),
+    /** 204 on success. Body must be exactly { confirm: "DELETE" }. */
+    deleteAccount: (body: DeleteAccountRequest) => http.request("DELETE", "/api/me", { schema: z.unknown(), body }),
   };
 }
 
