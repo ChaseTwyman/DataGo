@@ -24,7 +24,6 @@ import {
   type SignupRequest,
   BriefingVideoResponseSchema,
   CoverageResponseSchema,
-  RadarScanResponseSchema,
   CreateBountyRequestSchema,
   CreateBountyResponseSchema,
   ExampleImageResponseSchema,
@@ -45,7 +44,6 @@ import {
   FundingOverviewSchema,
   PricingPreviewRequestSchema,
   PricingPreviewResponseSchema,
-  PublicFundingResponseSchema,
   RunAllocationResponseSchema,
   SponsorSchema,
   type CreateContributionRequestSchema,
@@ -58,6 +56,14 @@ import {
   type Role,
 } from "@groundtruth/shared";
 import { ApiClientError } from "./errors";
+import {
+  LenientGrokbotMessageSchema,
+  LenientPublicFundingSchema,
+  LenientRadarScanResponseSchema,
+  LenientReviewBriefSchema,
+  LenientSelfCheckSchema,
+  LenientSponsorImpactSchema,
+} from "./grokbot";
 import { getAccessToken } from "./session";
 
 export { ApiClientError, errorMessage, fieldErrors, FriendlyError } from "./errors";
@@ -230,7 +236,7 @@ export const api = {
     apiFetch(`/api/admin/funding/contributions/${id}/reverse`, z.object({ contribution: ContributionSchema }), { body: { amount_cents, note } }),
   adminSetAllocation: (bountyId: string, body: SetAllocationRequest) =>
     apiFetch(`/api/admin/bounties/${bountyId}/allocation`, AllocationResultSchema, { body }),
-  publicFunding: () => apiFetch("/api/public/funding", PublicFundingResponseSchema, { auth: false }),
+  publicFunding: () => apiFetch("/api/public/funding", LenientPublicFundingSchema, { auth: false }),
 
   submissions: (q: { bounty_id?: string; status?: string; limit?: number } = {}) =>
     apiFetch(`/api/submissions${qs(q)}`, LenientSubmissionListResponseSchema),
@@ -245,9 +251,27 @@ export const api = {
   redteamRuns: (bounty_id?: string) => apiFetch(`/api/redteam/runs${qs({ bounty_id })}`, LenientRedteamRunListResponseSchema),
 
   /** Opportunity Radar: NWS alerts + grok-4.7 (x_search, web_search) → drafted bounties. Can take minutes. */
-  radarScan: (body: { lat: number; lng: number; radius_km: number }) => apiFetch("/api/radar/scan", RadarScanResponseSchema, { body }),
+  radarScan: (body: { lat: number; lng: number; radius_km: number }) => apiFetch("/api/radar/scan", LenientRadarScanResponseSchema, { body }),
   /** Starts a Grok Imagine briefing clip (202); poll the bounty for briefing_video_url. */
   briefingVideo: (bountyId: string) => apiFetch(`/api/bounties/${bountyId}/briefing-video`, BriefingVideoResponseSchema, { body: {} }),
+
+  // ---- Grokbot (contracts/grokbot.ts). Explains, drafts, suggests; never changes state.
+  /** Role-scoped explanation of a submission (researcher view). `refresh` asks for a new one. */
+  grokbotExplain: (submissionId: string, refresh = false) =>
+    apiFetch(`/api/grokbot/submissions/${submissionId}/explain${qs({ refresh: refresh ? 1 : undefined })}`, LenientGrokbotMessageSchema),
+  /** Why a request is funded / pending / paused, and what would help (owner or admin). */
+  grokbotBountyStatus: (bountyId: string, refresh = false) =>
+    apiFetch(`/api/grokbot/bounties/${bountyId}/status${qs({ refresh: refresh ? 1 : undefined })}`, LenientGrokbotMessageSchema),
+  /** Evidence + uncertainty for a needs_review submission. Deliberately no verdict. */
+  grokbotReviewBrief: (submissionId: string, refresh = false) =>
+    apiFetch(`/api/grokbot/submissions/${submissionId}/review-brief${qs({ refresh: refresh ? 1 : undefined })}`, LenientReviewBriefSchema),
+  /** Runs the protocol example through the live checks before publishing (~30–60 s). */
+  grokbotSelfCheck: (protocolId: string) => apiFetch(`/api/grokbot/protocols/${protocolId}/self-check`, LenientSelfCheckSchema, { body: {} }),
+  grokbotSponsorImpact: (sponsorId: string, range: { from?: string; to?: string } = {}, refresh = false) =>
+    apiFetch(`/api/grokbot/sponsors/${sponsorId}/impact${qs({ ...range, refresh: refresh ? 1 : undefined })}`, LenientSponsorImpactSchema),
+  /** Public, aggregate-only impact view (no login). */
+  publicSponsorImpact: (sponsorId: string, range: { from?: string; to?: string } = {}) =>
+    apiFetch(`/api/public/sponsors/${sponsorId}/impact${qs(range)}`, LenientSponsorImpactSchema, { auth: false }),
 
   spawnEvent: (lat: number, lng: number, radius_m?: number) =>
     apiFetch("/api/demo/spawn-event", SpawnEventResponseSchema, {

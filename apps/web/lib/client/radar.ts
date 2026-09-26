@@ -8,6 +8,7 @@
  */
 import type { DraftBounty } from "@groundtruth/shared";
 import { ApiClientError, errorMessage } from "./errors";
+import type { RadarDraft } from "./grokbot";
 
 // ---------------------------------------------------------------- scan job
 
@@ -17,7 +18,7 @@ export interface RadarRequest {
   radius_km: number;
 }
 export interface RadarResult {
-  drafts: DraftBounty[];
+  drafts: RadarDraft[];
   alerts_considered: number;
 }
 
