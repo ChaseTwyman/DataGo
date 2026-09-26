@@ -12,6 +12,28 @@ export const MediaItemSchema = z.object({
 });
 export type MediaItem = z.infer<typeof MediaItemSchema>;
 
+/**
+ * A stored media item. `redacted_path` (additive, 000009) is the server-written face/plate-blurred
+ * derivative. Never accepted from clients: the create request uses MediaItemSchema, which strips it.
+ */
+export const MediaItemRowSchema = MediaItemSchema.extend({
+  redacted_path: z.string().min(1).optional(),
+});
+export type MediaItemRow = z.infer<typeof MediaItemRowSchema>;
+
+/** Summary of the post-decision redaction job (000009). Status is a string for forward compatibility. */
+export const RedactionSummarySchema = z.object({
+  status: z.string(), // "pending" | "done" | "failed"
+  at: z.string().optional(),
+  model: z.string().optional(),
+  frames: z
+    .array(z.object({ faces: z.number().int().min(0), plates: z.number().int().min(0), whole_frame: z.boolean().optional() }))
+    .optional(),
+  error: z.string().optional(),
+  attempts: z.number().int().min(0).optional(),
+});
+export type RedactionSummary = z.infer<typeof RedactionSummarySchema>;
+
 export const DeviceInfoSchema = z.object({
   model: z.string().nullable(),
   os: z.string(),
@@ -72,7 +94,7 @@ export const SubmissionRowSchema = z.object({
   session_id: Uuid.nullable(),
   bounty_id: Uuid,
   user_id: Uuid,
-  media: z.array(MediaItemSchema),
+  media: z.array(MediaItemRowSchema),
   lat: z.number(),
   lng: z.number(),
   accuracy_m: z.number().nullable(),
@@ -90,6 +112,8 @@ export const SubmissionRowSchema = z.object({
   payout_cents: z.number().int().nullable(),
   /** Set when the photos were deleted (rejected-photo retention or account deletion); media_urls are then empty. Additive (000006). */
   media_purged_at: z.string().nullable().optional(),
+  /** Face/plate redaction job summary. Additive (000009); null/absent until the job has run. */
+  redaction: RedactionSummarySchema.nullable().optional(),
 });
 export type SubmissionRow = z.infer<typeof SubmissionRowSchema>;
 

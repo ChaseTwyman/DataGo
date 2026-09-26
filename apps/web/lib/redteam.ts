@@ -12,7 +12,7 @@ import {
   type MockVariant,
   type RedteamRunResponse,
 } from "@groundtruth/shared";
-import { mediaUrl } from "./api/views";
+import { mediaUrl, redactedPathOf } from "./api/views";
 import type { Db } from "./db";
 import type { BountyRow } from "./db/repos/bounties";
 import type { ProtocolRow } from "./db/repos/protocols";
@@ -83,7 +83,8 @@ export async function runAttack(args: {
     const src = await latestAccepted(db, bounty.id);
     if (!src) throw new HttpError(409, "NO_SOURCE", "No accepted observation to recycle yet: accept one capture first");
     sourceSubmission = src.id;
-    imagePath = src.media[0]?.path ?? null;
+    // Shown to researchers in the run history: the redacted derivative, never the original photo.
+    imagePath = src.media[0] ? redactedPathOf(src, src.media[0]) : null;
     frames = await Promise.all(src.media.map(async (m) => ({ path: m.path, bytes: await storage.get(m.path) })));
     lat = src.lat;
     lng = src.lng;

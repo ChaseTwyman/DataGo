@@ -17,11 +17,12 @@ import { enforceRateLimit, LIMITS } from "@/lib/rateLimit";
 import { getStorage } from "@/lib/storage";
 import { liveDeps } from "@/lib/verification/deps";
 import { processSubmission } from "@/lib/verification/live";
+import { liveRedactionDeps, redactSubmissionSafely } from "@/lib/verification/redaction";
 import { nonObservationPaths } from "@/lib/verification/syntheticGuard";
 
 /**
  * Creates a submission for an open capture session and starts the verification pipeline in
- * `after()`. Responds immediately with status `pending`; clients watch the row (realtime) or poll
+ * `after()` (then face/plate redaction). Responds immediately with status `pending`; clients watch the row (realtime) or poll
  * GET /api/submissions/:id.
  */
 export const POST = route(async (req) => {
@@ -63,11 +64,15 @@ export const POST = route(async (req) => {
 
   const variant = mockVariantOf(req);
   runInBackground(async () => {
-    await processSubmission(await getDb(), id, {
-      deps: liveDeps(await getDb()),
+    const db = await getDb();
+    await processSubmission(db, id, {
+      deps: liveDeps(db),
       storage: getStorage(),
       ...(variant ? { mockVariant: variant } : {}),
     });
+    // After the decision, from the originals: blurred derivatives for researchers. Never throws and
+    // never changes the decision; failures are retried by the daily cron.
+    await redactSubmissionSafely(db, id, liveRedactionDeps(getStorage()));
   });
   const res: CreateSubmissionResponse = { submission_id: id, status: "pending" };
   return json(res, { status: 202 });
@@ -88,6 +93,6 @@ export const GET = route(async (req) => {
     limit: q.limit,
   });
   const origin = originOf(req);
-  const submissions = await Promise.all(rows.map((s) => submissionWithMedia(s, origin, titles.get(s.bounty_id) ?? null)));
+  const submissions = await Promise.all(rows.map((s) => submissionWithMedia(s, origin, titles.get(s.bounty_id) ?? null, user)));
   return json({ submissions });
 });

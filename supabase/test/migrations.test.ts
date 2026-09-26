@@ -644,3 +644,60 @@ describe("migration 000008 (grokbot)", () => {
     expect(col.rows[0]?.data_type).toBe("jsonb");
   });
 });
+
+describe("migration 000009 (redaction)", () => {
+  const migration = () => readFileSync(join(root, "migrations", "20260926000009_redaction.sql"), "utf8");
+  let n = 0;
+  async function account(opts: { researcher?: boolean; admin?: boolean } = {}) {
+    const id = `00000000-0000-4000-8000-0000000d${String(++n).padStart(4, "0")}`;
+    await db.query(`insert into auth.users (id, is_anonymous, email) values ($1, false, $2)`, [id, `r${n}@t.local`]);
+    await db.query("update public.profiles set is_researcher = $2, is_admin = $3 where id = $1", [id, opts.researcher ?? false, opts.admin ?? false]);
+    return id;
+  }
+
+  it("adds submissions.redaction and is idempotent", async () => {
+    await db.exec(migration());
+    const col = await db.query<{ data_type: string }>(
+      "select data_type from information_schema.columns where table_schema = 'public' and table_name = 'submissions' and column_name = 'redaction'",
+    );
+    expect(col.rows[0]?.data_type).toBe("jsonb");
+  });
+
+  it("media guard refuses a redacted_path outside the observations bucket", async () => {
+    const ok = `[{"path":"observations/${CONTRIB_A}/s/0.jpg","redacted_path":"observations/${CONTRIB_A}/s/0.redacted.jpg","captured_at":"2026-09-26T00:00:00Z"}]`;
+    const bad = `[{"path":"observations/${CONTRIB_A}/s/0.jpg","redacted_path":"synthetic/x.jpg","captured_at":"2026-09-26T00:00:00Z"}]`;
+    const ins = (media: string) =>
+      db.query(`insert into public.submissions (bounty_id, user_id, media, lat, lng, h3_cell, captured_at) values ($1, $2, $3::jsonb, 0, 0, 'c', now())`, [
+        DEMO.bountyId,
+        CONTRIB_A,
+        media,
+      ]);
+    await expect(ins(ok)).resolves.toBeTruthy();
+    await expect(ins(bad)).rejects.toThrow(/SYNTHETIC_MEDIA/);
+  });
+
+  it("storage: non-admin researchers read only redacted derivatives; admins and the owner read originals", async () => {
+    // Real Supabase has RLS on storage.objects; the shim table doesn't, so turn it on here.
+    await db.exec("alter table storage.objects enable row level security; grant select on storage.objects to authenticated;");
+    const owner = await account();
+    const researcher = await account({ researcher: true });
+    const admin = await account({ researcher: true, admin: true });
+    const stranger = await account();
+    const orig = `${owner}/s1/0.jpg`;
+    const red = `${owner}/s1/0.redacted.jpg`;
+    await db.query("insert into storage.objects (bucket_id, name) values ('observations', $1), ('observations', $2)", [orig, red]);
+    const visible = async (uid: string) => {
+      let names: string[] = [];
+      await asUser(uid, async () => {
+        names = (await db.query<{ name: string }>("select name from storage.objects where bucket_id = 'observations' and name like $1 order by name", [`${owner}/%`])).rows.map(
+          (r) => r.name,
+        );
+      });
+      return names;
+    };
+    expect(await visible(researcher)).toEqual([red]);
+    expect(await visible(admin)).toEqual([orig, red]);
+    expect(await visible(owner)).toEqual([orig, red]);
+    expect(await visible(stranger)).toEqual([]);
+  });
+});

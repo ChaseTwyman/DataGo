@@ -163,3 +163,16 @@ export function mockVerification(protocol: Protocol, variant: MockVariant = "def
       return base;
   }
 }
+
+/**
+ * Privacy-region fixture (MOCK_GROK=1): one face and one plate at fixed normalised boxes, so the
+ * redaction path (blur, storage, researcher URLs) is exercised offline.
+ */
+export const MOCK_PRIVACY_REGIONS = [
+  { kind: "face" as const, x: 0.1, y: 0.1, w: 0.2, h: 0.25, confidence: 0.9 },
+  { kind: "license_plate" as const, x: 0.6, y: 0.7, w: 0.25, h: 0.1, confidence: 0.85 },
+];
+
+export function mockPrivacyRegions(): { faces_or_plates_present: boolean; regions: typeof MOCK_PRIVACY_REGIONS } {
+  return { faces_or_plates_present: true, regions: MOCK_PRIVACY_REGIONS.map((r) => ({ ...r })) };
+}

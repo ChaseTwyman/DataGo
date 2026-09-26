@@ -10,6 +10,8 @@ import { loadPricing, type Pricing } from "../pricing/market";
 import type { ProtocolRow } from "../db/repos/protocols";
 import { toSubmissionRow, type SubmissionRecord } from "../db/repos/submissions";
 import { getStorage } from "../storage";
+import { redactedPathFor } from "../image/redact";
+import { ownObservationPath } from "../verification/redaction";
 
 export async function mediaUrl(path: string | null, origin: string, ttl = 3600): Promise<string | null> {
   if (!path) return null;
@@ -86,14 +88,55 @@ export async function bountyDetail(
   };
 }
 
-export async function submissionWithMedia(s: SubmissionRecord, origin: string, bountyTitle: string | null): Promise<SubmissionWithMedia> {
+export interface MediaViewer {
+  id: string;
+  isAdmin: boolean;
+}
+
+/**
+ * The redacted derivative of a stored frame, or null when there is none yet (pending / failed) or the
+ * row's redacted_path is not the one the redaction job writes for this frame (defence in depth: the
+ * path must be the sibling `<n>.redacted.jpg` of the contributor's own original).
+ */
+export function redactedPathOf(s: Pick<SubmissionRecord, "user_id" | "redaction">, m: { path: string; redacted_path?: string | undefined }): string | null {
+  if (s.redaction?.status !== "done" || !m.redacted_path) return null;
+  if (!ownObservationPath(m.path, s.user_id) || m.redacted_path !== redactedPathFor(m.path)) return null;
+  return m.redacted_path;
+}
+
+/**
+ * Who sees which photos:
+ * - the contributor who took them: their originals;
+ * - everyone else (researchers, admins): the face/plate-redacted derivatives, "" while redaction is
+ *   pending or failed (fail closed: never an original instead);
+ * - admins additionally get `original_media_urls` for audit and review.
+ */
+export async function submissionWithMedia(
+  s: SubmissionRecord,
+  origin: string,
+  bountyTitle: string | null,
+  viewer: MediaViewer,
+): Promise<SubmissionWithMedia> {
+  const owner = viewer.id === s.user_id;
+  const sign = (p: string | null) => mediaUrl(p, origin).then((u) => u ?? "");
   // Purged photos (retention / account deletion) no longer exist: no URLs, same array length.
-  const urls = s.media_purged_at ? s.media.map(() => null) : await Promise.all(s.media.map((m) => mediaUrl(m.path, origin)));
+  const purged = !!s.media_purged_at;
+  const urls = purged ? s.media.map(() => "") : await Promise.all(s.media.map((m) => sign(owner ? m.path : redactedPathOf(s, m))));
+  const originals = viewer.isAdmin && !owner ? (purged ? s.media.map(() => "") : await Promise.all(s.media.map((m) => sign(m.path)))) : undefined;
   return {
     ...toSubmissionRow(s),
-    media_urls: urls.map((u) => u ?? ""),
+    media_urls: urls,
+    media_variant: owner ? "original" : "redacted",
+    ...(originals ? { original_media_urls: originals } : {}),
     retryable: s.retryable,
     bounty_title: bountyTitle,
     verifier: s.verifier,
   };
+}
+
+/** A photo reference shown to a researcher outside a submission (e.g. a red-team "recycled" run). */
+export async function researcherMediaUrl(path: string | null, origin: string, viewer: { isAdmin: boolean }): Promise<string | null> {
+  if (!path) return null;
+  if (!path.startsWith("observations/") || viewer.isAdmin) return mediaUrl(path, origin);
+  return mediaUrl(redactedPathFor(path), origin);
 }

@@ -15,5 +15,5 @@ export const GET = route<IdParams>(async (req, { params }) => {
   if (!s) throw notFound("Submission not found");
   const bounty = await getBounty(db, s.bounty_id);
   if (s.user_id !== user.id && !canManageBounty(user, bounty?.created_by ?? null)) throw notFound("Submission not found");
-  return json(await submissionWithMedia(s, originOf(req), bounty?.title ?? null));
+  return json(await submissionWithMedia(s, originOf(req), bounty?.title ?? null, user));
 });

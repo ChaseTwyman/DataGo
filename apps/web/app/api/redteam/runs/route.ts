@@ -1,7 +1,7 @@
 import { AttackTypeSchema, Uuid, type RedteamRunRowSchema } from "@groundtruth/shared";
 import { z } from "zod";
 import { json, originOf, parseQuery, route } from "@/lib/api/http";
-import { mediaUrl } from "@/lib/api/views";
+import { researcherMediaUrl } from "@/lib/api/views";
 import { requireResearcher } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { listBountiesFor } from "@/lib/db/repos/bounties";
@@ -26,7 +26,8 @@ export const GET = route(async (req) => {
       status: r.pipeline_result.status,
       reason_codes: r.pipeline_result.reason_codes ?? [],
       checks: r.pipeline_result.checks ?? [],
-      image_url: await mediaUrl(r.pipeline_result.image_path ?? null, origin),
+      // Older "recycled" runs stored an original observation path: researchers get its redacted sibling.
+      image_url: await researcherMediaUrl(r.pipeline_result.image_path ?? null, origin, user),
       created_at: r.created_at,
     })),
   );

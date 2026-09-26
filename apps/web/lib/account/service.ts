@@ -253,6 +253,9 @@ export async function deleteAccount(db: Db, storage: ObjectStorage, auth: Accoun
     `select distinct m->>'path' as path from public.submissions s, jsonb_array_elements(s.media) m
       where s.user_id = $1 and s.media_purged_at is null
      union
+     select distinct m->>'redacted_path' from public.submissions s, jsonb_array_elements(s.media) m
+      where s.user_id = $1 and s.media_purged_at is null and m ? 'redacted_path'
+     union
      select distinct unnest(upload_paths) from public.capture_sessions where user_id = $1`,
     [userId],
   );

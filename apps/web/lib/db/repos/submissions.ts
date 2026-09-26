@@ -3,7 +3,9 @@ import type {
   FieldNotes,
   GateInfo,
   MediaItem,
+  MediaItemRow,
   ReasonCode,
+  RedactionSummary,
   SensorSnapshot,
   StageResult,
   SubmissionRow,
@@ -28,7 +30,7 @@ export interface SubmissionRecord extends SubmissionRow {
 
 const COLS = `id, session_id, bounty_id, user_id, media, lat, lng, accuracy_m, h3_cell, captured_at, received_at,
   device, sensors, gate, field_notes, status::text as status, checks, reason_codes, confidence, protocol_score,
-  authenticity_score, extracted, phashes, payout_cents, retryable, reviewed_by, reviewed_at, review_note, verifier, media_purged_at`;
+  authenticity_score, extracted, phashes, payout_cents, retryable, reviewed_by, reviewed_at, review_note, verifier, media_purged_at, redaction`;
 
 function map(r: Record<string, unknown>): SubmissionRecord {
   return {
@@ -64,6 +66,7 @@ export function toSubmissionRow(s: SubmissionRecord): SubmissionRow {
     field_notes: s.field_notes,
     payout_cents: s.payout_cents,
     media_purged_at: s.media_purged_at ?? null,
+    redaction: s.redaction ?? null,
   };
 }
 
@@ -259,4 +262,40 @@ export async function latestAccepted(db: Db, bountyId: string | null): Promise<S
     [bountyId],
   );
   return rows[0] ? map(rows[0]) : null;
+}
+
+// ---------- redaction (000009) ----------
+
+/**
+ * Stores the redaction result: media (with redacted_path set) + summary. Only while the photos
+ * still exist: returns false if retention/account deletion purged them meanwhile (the caller then
+ * deletes the derivatives it just wrote). Never touches status, scores, payout or verifier.
+ */
+export async function setRedaction(db: Db, id: string, media: MediaItemRow[], redaction: RedactionSummary): Promise<boolean> {
+  const rows = await db.query<{ id: string }>(
+    "update public.submissions set media = $2::jsonb, redaction = $3::jsonb where id = $1 and media_purged_at is null returning id",
+    [id, json(media), json(redaction)],
+  );
+  return rows.length === 1;
+}
+
+/** Records a failed attempt (summary only; media untouched). */
+export async function setRedactionSummary(db: Db, id: string, redaction: RedactionSummary): Promise<void> {
+  await db.query("update public.submissions set redaction = $2::jsonb where id = $1", [id, json(redaction)]);
+}
+
+export const REDACTION_MAX_ATTEMPTS = 5;
+
+/** Decided submissions whose photos exist and still need a (successful) redaction, newest first. */
+export async function redactionBacklog(db: Db, limit: number): Promise<string[]> {
+  const rows = await db.query<{ id: string }>(
+    `select id from public.submissions
+      where status in ('accepted', 'rejected', 'needs_review') and media_purged_at is null
+        and jsonb_array_length(media) > 0
+        and (redaction is null
+             or (redaction->>'status' <> 'done' and coalesce((redaction->>'attempts')::int, 0) < $1))
+      order by received_at desc limit $2`,
+    [REDACTION_MAX_ATTEMPTS, limit],
+  );
+  return rows.map((r) => r.id);
 }
