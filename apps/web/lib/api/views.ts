@@ -10,7 +10,7 @@ import { loadPricing, type Pricing } from "../pricing/market";
 import type { ProtocolRow } from "../db/repos/protocols";
 import { toSubmissionRow, type SubmissionRecord } from "../db/repos/submissions";
 import { getStorage } from "../storage";
-import { redactedPathFor } from "../image/redact";
+import { isRedactedPath, redactedPathFor } from "../image/redact";
 import { ownObservationPath } from "../verification/redaction";
 
 export async function mediaUrl(path: string | null, origin: string, ttl = 3600): Promise<string | null> {
@@ -137,6 +137,8 @@ export async function submissionWithMedia(
 /** A photo reference shown to a researcher outside a submission (e.g. a red-team "recycled" run). */
 export async function researcherMediaUrl(path: string | null, origin: string, viewer: { isAdmin: boolean }): Promise<string | null> {
   if (!path) return null;
-  if (!path.startsWith("observations/") || viewer.isAdmin) return mediaUrl(path, origin);
-  return mediaUrl(redactedPathFor(path), origin);
+  if (!path.startsWith("observations/") || viewer.isAdmin || isRedactedPath(path)) return mediaUrl(path, origin);
+  const redacted = redactedPathFor(path);
+  // Only a derivative that exists: while redaction is pending there is no photo (never the original).
+  return (await getStorage().exists(redacted)) ? mediaUrl(redacted, origin) : null;
 }

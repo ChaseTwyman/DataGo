@@ -12,7 +12,7 @@
  */
 import type { MediaItemRow, RedactionSummary } from "@groundtruth/shared";
 import type { Db } from "../db";
-import { getSubmission, redactionBacklog, setRedaction, setRedactionSummary } from "../db/repos/submissions";
+import { claimRedaction, getSubmission, redactionBacklog, setRedaction, setRedactionSummary } from "../db/repos/submissions";
 import { grokEnv, isMockGrok } from "../grok/config";
 import { detectPrivacyRegions, type PrivacyDetection } from "../grok/vision";
 import { toModelFrame } from "../image/modelFrame";
@@ -51,6 +51,7 @@ export async function redactSubmission(db: Db, submissionId: string, deps: Redac
   if (!sub || !DECIDED.has(sub.status) || sub.media_purged_at || sub.media.length === 0) return "skipped";
   if (sub.redaction?.status === "done") return "skipped";
   const attempts = (sub.redaction?.attempts ?? 0) + 1;
+  if (!(await claimRedaction(db, submissionId, deps.now().toISOString()))) return "skipped";
   const written: string[] = [];
   try {
     // Frames in parallel (one detection call each); order preserved. allSettled: on a failure every

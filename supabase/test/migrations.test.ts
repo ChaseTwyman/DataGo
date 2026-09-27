@@ -704,15 +704,30 @@ describe("migration 000009 (redaction)", () => {
     await expect(ins(bad)).rejects.toThrow(/SYNTHETIC_MEDIA/);
   });
 
-  it("storage: non-admin researchers read only redacted derivatives; admins and the owner read originals", async () => {
+  it("storage: only the bounty's researcher reads redacted derivatives (never originals); admins and the owner read originals", async () => {
     // Real Supabase has RLS on storage.objects; the shim table doesn't, so turn it on here.
     await db.exec("alter table storage.objects enable row level security; grant select on storage.objects to authenticated;");
     const owner = await account();
     const researcher = await account({ researcher: true });
+    const otherResearcher = await account({ researcher: true });
     const admin = await account({ researcher: true, admin: true });
     const stranger = await account();
-    const orig = `${owner}/s1/0.jpg`;
-    const red = `${owner}/s1/0.redacted.jpg`;
+    const bounty = (
+      await db.query<{ id: string }>(
+        `insert into public.bounties (protocol_id, created_by, title, area, center_lat, center_lng, radius_m, ends_at, base_price_cents, max_price_cents, status)
+         values ($1, $2, 'b', '{}'::jsonb, 0, 0, 100, now() + interval '1 day', 100, 200, 'draft') returning id`,
+        [DEMO.protocolId, researcher],
+      )
+    ).rows[0]!.id;
+    const session = (
+      await db.query<{ id: string }>(
+        `insert into public.capture_sessions (bounty_id, user_id, nonce, challenge, cell, price_quote_cents, quote_expires_at, expires_at)
+         values ($1, $2, 'n', '{}'::jsonb, 'c', 100, now(), now()) returning id`,
+        [bounty, owner],
+      )
+    ).rows[0]!.id;
+    const orig = `${owner}/${session}/0.jpg`;
+    const red = `${owner}/${session}/0.redacted.jpg`;
     await db.query("insert into storage.objects (bucket_id, name) values ('observations', $1), ('observations', $2)", [orig, red]);
     const visible = async (uid: string) => {
       let names: string[] = [];
@@ -724,6 +739,7 @@ describe("migration 000009 (redaction)", () => {
       return names;
     };
     expect(await visible(researcher)).toEqual([red]);
+    expect(await visible(otherResearcher)).toEqual([]);
     expect(await visible(admin)).toEqual([orig, red]);
     expect(await visible(owner)).toEqual([orig, red]);
     expect(await visible(stranger)).toEqual([]);

@@ -27,10 +27,21 @@ begin
   return new;
 end $$;
 
+-- Object names are <user>/<session>/<n>[.redacted].jpg: the session folder names the bounty. Security
+-- definer so the lookup doesn't depend on the caller's RLS on capture_sessions.
+create or replace function public.owns_observation_bounty(object_name text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.capture_sessions cs join public.bounties b on b.id = cs.bounty_id
+     where cs.id::text = (storage.foldername(object_name))[2] and b.created_by = auth.uid()
+  );
+$$;
+
 drop policy if exists observations_researcher_read on storage.objects;
 create policy observations_researcher_read on storage.objects
   for select to authenticated
-  using (bucket_id = 'observations' and public.is_researcher() and name like '%.redacted.jpg');
+  using (bucket_id = 'observations' and public.is_researcher() and name like '%.redacted.jpg'
+         and public.owns_observation_bounty(name));
 
 drop policy if exists observations_admin_read on storage.objects;
 create policy observations_admin_read on storage.objects

@@ -21,6 +21,9 @@ import { PUT as devUpload } from "@/app/api/dev/upload/route";
 import { POST as createSession } from "@/app/api/capture/sessions/route";
 import { POST as createSubmission, GET as listSubmissions } from "@/app/api/submissions/route";
 import { GET as getSubmissionRoute } from "@/app/api/submissions/[id]/route";
+import { POST as redteamRun } from "@/app/api/redteam/run/route";
+import { GET as redteamRuns } from "@/app/api/redteam/runs/route";
+import { researcherMediaUrl } from "@/lib/api/views";
 import { idCtx, passGate, req, setupTestEnv, type TestEnv } from "./helpers";
 
 const noCtx = undefined as unknown;
@@ -291,5 +294,53 @@ describe("redaction job + media access (routes, PGlite, MOCK_GROK)", () => {
       expect(await env.storage.exists(m.path)).toBe(false);
       expect(await env.storage.exists(m.redacted_path!)).toBe(false);
     }
+  });
+
+  it("red-team 'recycled' runs show a non-admin researcher the (single) redacted derivative, admins the original", async () => {
+    const { id } = await submitGenuine();
+    await drainBackground();
+    const src = (await getSubmission(env.db, id))!;
+    const run = await redteamRun(req("POST", "/api/redteam/run", { token: researcher.token, body: { bounty_id: DEMO.bountyId, attack_type: "recycled" } }), noCtx);
+    expect(run.status).toBe(200);
+    const immediate = (await run.json()) as { image_url: string | null };
+    expect(decodeURIComponent(immediate.image_url ?? "")).toContain(`path=${src.media[0]!.redacted_path}&`);
+
+    const list = async (token: string) =>
+      ((await (await redteamRuns(req("GET", `/api/redteam/runs?bounty_id=${DEMO.bountyId}`, { token }), noCtx)).json()) as { runs: { image_url: string | null }[] }).runs[0]!;
+    const asResearcher = decodeURIComponent((await list(researcher.token)).image_url ?? "");
+    expect(asResearcher).toContain(`path=${src.media[0]!.redacted_path}&`);
+    expect(asResearcher).not.toContain(".redacted.redacted");
+    expect(decodeURIComponent((await list(admin)).image_url ?? "")).toContain(`path=${src.media[0]!.path}&`);
+  });
+
+  it("researcherMediaUrl: no URL while the derivative doesn't exist; never double-redacts", async () => {
+    const orig = `observations/${randomUUID()}/s/0.jpg`;
+    expect(await researcherMediaUrl(orig, "http://localhost:3000", { isAdmin: false })).toBeNull();
+    await env.storage.put(redactedPathFor(orig), await noiseJpeg());
+    expect(decodeURIComponent((await researcherMediaUrl(orig, "http://localhost:3000", { isAdmin: false }))!)).toContain(`path=${redactedPathFor(orig)}&`);
+    expect(decodeURIComponent((await researcherMediaUrl(redactedPathFor(orig), "http://localhost:3000", { isAdmin: false }))!)).toContain(`path=${redactedPathFor(orig)}&`);
+  });
+
+  it("a second concurrent run of the job is refused by the claim (no duplicate detection cost)", async () => {
+    const { id } = await submitGenuine();
+    await drainBackground();
+    await env.db.query("update public.submissions set redaction = null where id = $1", [id]);
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const slow: RedactionDeps = {
+      ...liveRedactionDeps(env.storage),
+      detect: async () => {
+        calls++;
+        await gate;
+        return { faces_or_plates_present: false, regions: [] };
+      },
+    };
+    const first = redactSubmission(env.db, id, slow);
+    await vi.waitFor(() => expect(calls).toBeGreaterThan(0));
+    expect(await redactSubmission(env.db, id, slow)).toBe("skipped");
+    release();
+    expect(await first).toBe("done");
+    expect(calls).toBe(3); // one per frame, from the first run only
   });
 });

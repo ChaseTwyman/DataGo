@@ -12,7 +12,7 @@ import {
   type MockVariant,
   type RedteamRunResponse,
 } from "@groundtruth/shared";
-import { mediaUrl, redactedPathOf } from "./api/views";
+import { researcherMediaUrl } from "./api/views";
 import type { Db } from "./db";
 import type { BountyRow } from "./db/repos/bounties";
 import type { ProtocolRow } from "./db/repos/protocols";
@@ -83,8 +83,9 @@ export async function runAttack(args: {
     const src = await latestAccepted(db, bounty.id);
     if (!src) throw new HttpError(409, "NO_SOURCE", "No accepted observation to recycle yet: accept one capture first");
     sourceSubmission = src.id;
-    // Shown to researchers in the run history: the redacted derivative, never the original photo.
-    imagePath = src.media[0] ? redactedPathOf(src, src.media[0]) : null;
+    // The original's path is stored; every read resolves it to the redacted derivative for
+    // researchers (researcherMediaUrl), so a run made before redaction finished still gets it later.
+    imagePath = src.media[0]?.path ?? null;
     frames = await Promise.all(src.media.map(async (m) => ({ path: m.path, bytes: await storage.get(m.path) })));
     lat = src.lat;
     lng = src.lng;
@@ -150,6 +151,7 @@ export async function runAttack(args: {
     caught,
     status,
     reason_codes: result.decision.reasonCodes,
-    image_url: await mediaUrl(imagePath, args.origin),
+    // Never the original photo in the immediate response, whoever ran it.
+    image_url: await researcherMediaUrl(imagePath, args.origin, { isAdmin: false }),
   };
 }

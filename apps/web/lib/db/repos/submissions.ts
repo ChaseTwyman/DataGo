@@ -290,6 +290,26 @@ export async function setRedaction(db: Db, id: string, media: MediaItemRow[], re
   return rows.length === 1;
 }
 
+/**
+ * Claims a submission for one redaction run: {status: "running"} unless it is done or another run
+ * claimed it less than 10 minutes ago (a crashed run's claim expires). Stops the after() job and the
+ * cron/backfill from paying for the same detection twice.
+ */
+export async function claimRedaction(db: Db, id: string, atIso: string): Promise<boolean> {
+  const rows = await db.query<{ id: string }>(
+    `update public.submissions
+        set redaction = jsonb_build_object('status', 'running', 'at', $2::text,
+                                           'attempts', coalesce((redaction->>'attempts')::int, 0))
+      where id = $1 and media_purged_at is null
+        and (redaction is null
+             or (redaction->>'status' <> 'done'
+                 and (redaction->>'status' <> 'running' or (redaction->>'at')::timestamptz < $2::timestamptz - interval '10 minutes')))
+      returning id`,
+    [id, atIso],
+  );
+  return rows.length === 1;
+}
+
 /** Records a failed attempt (summary only; media untouched). */
 export async function setRedactionSummary(db: Db, id: string, redaction: RedactionSummary): Promise<void> {
   await db.query("update public.submissions set redaction = $2::jsonb where id = $1", [id, json(redaction)]);
