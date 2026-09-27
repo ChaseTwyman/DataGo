@@ -1,6 +1,7 @@
 /**
  * Live capture gate: device checks + a frame-check loop (~1.2 s, one in flight, only when the
- * device checks pass): PreviewView.takeSnapshot → 640 px JPEG q 0.6 → base64 →
+ * device checks pass): grab a frame (Android: PreviewView.takeSnapshot; iOS: silent photo, because
+ * VisionCamera 5 throws "takeSnapshot() is not available on iOS!") → 640 px JPEG q 0.6 → base64 →
  * POST /api/capture/frame-check. Shutter button and voice "capture" both call `trigger()`.
  * The shutter unlocks only on the server's `gate_passed`; failures back off (gateMachine) and
  * never unlock.
@@ -9,7 +10,9 @@ import type { LenientBountyDetail as BountyDetail, LenientCreateSessionResponse 
 import * as Haptics from "expo-haptics";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import type { CameraRef } from "react-native-vision-camera";
+import { Platform } from "react-native";
+import type { CameraPhotoOutput, CameraRef } from "react-native-vision-camera";
+import { grabFramePath, type FrameSource } from "./frameGrab";
 import { api } from "../api";
 import {
   cameraStatus,
@@ -32,12 +35,13 @@ function toFileUri(p: string): string {
   return p.startsWith("file://") || p.includes("://") ? p : `file://${p}`;
 }
 
-/** Snapshot the preview and encode a small JPEG for the fast vision model. */
-export async function snapshotBase64(camera: CameraRef): Promise<string> {
-  const snap = await camera.takeSnapshot();
-  const tmp = await snap.saveToTemporaryFileAsync("jpg", 0.9);
-  const ctx = ImageManipulator.manipulate(toFileUri(tmp));
-  ctx.resize(snap.width >= snap.height ? { width: FRAME_LONG_EDGE } : { height: FRAME_LONG_EDGE });
+/** Grab a frame and encode a small JPEG for the fast vision model. */
+export async function snapshotBase64(src: FrameSource): Promise<string> {
+  const path = await grabFramePath(src, Platform.OS);
+  // Render once to learn the upright size (photo width/height can be sensor-oriented), then resize.
+  const full = await ImageManipulator.manipulate(toFileUri(path)).renderAsync();
+  const ctx = ImageManipulator.manipulate(full);
+  ctx.resize(full.width >= full.height ? { width: FRAME_LONG_EDGE } : { height: FRAME_LONG_EDGE });
   const ref = await ctx.renderAsync();
   const out = await ref.saveAsync({ format: SaveFormat.JPEG, compress: FRAME_QUALITY, base64: true });
   if (!out.base64) throw new Error("snapshot encode failed");
@@ -49,9 +53,10 @@ export function useCaptureGate(opts: {
   bounty: BountyDetail;
   session: CreateSessionResponse;
   cameraRef: React.RefObject<CameraRef | null>;
+  photoOutput: CameraPhotoOutput;
   cameraReady: boolean;
 }) {
-  const { protocol, bounty, session, cameraRef, cameraReady } = opts;
+  const { protocol, bounty, session, cameraRef, photoOutput, cameraReady } = opts;
   const reducer = useMemo(() => gateReducer(protocol), [protocol]);
   const [state, dispatch] = useReducer(reducer, session.frame_check_limit, initialGate);
   const stateRef = useRef<GateState>(state);
@@ -78,11 +83,11 @@ export function useCaptureGate(opts: {
       send({ type: "TICK", now });
       const s = stateRef.current;
       const cam = cameraRef.current;
-      if (!cam || !shouldRequestFrame(s, now)) return;
+      if (!shouldRequestFrame(s, now)) return;
       send({ type: "FRAME_REQUESTED", now });
       void (async () => {
         try {
-          const image_base64 = await snapshotBase64(cam);
+          const image_base64 = await snapshotBase64({ camera: cam, photoOutput });
           const r = await api.frameCheck({ session_id: session.session_id, image_base64 });
           if (alive)
             send({
@@ -102,7 +107,7 @@ export function useCaptureGate(opts: {
       alive = false;
       clearInterval(id);
     };
-  }, [cameraReady, cameraRef, send, session.session_id]);
+  }, [cameraReady, cameraRef, photoOutput, send, session.session_id]);
 
   // haptic tick per element turning green; success buzz when the shutter unlocks
   const prevEls = useRef<Record<string, boolean>>({});

@@ -81,7 +81,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
   const cameraRef = useRef<CameraRef>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const photoOutput = usePhotoOutput({ containerFormat: "jpeg", quality: 0.92, qualityPrioritization: "balanced" });
-  const gate = useCaptureGate({ protocol, bounty, session, cameraRef, cameraReady });
+  const gate = useCaptureGate({ protocol, bounty, session, cameraRef, photoOutput, cameraReady });
   const { state, send } = gate;
   const framesRef = useRef<CapturedFrame[]>([]);
   /** Indexes of framesRef already uploaded (reset on every new burst). */
