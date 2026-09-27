@@ -84,7 +84,7 @@ export function BriefingVideo({
   if (!videoUrl && !canManage) return null;
 
   return (
-    <div className={cn("space-y-2 rounded-sm border bg-black/80 p-2 backdrop-blur-sm", className)}>
+    <div data-theme="dark" className={cn("space-y-2 rounded-sm border bg-black/80 p-2 text-foreground backdrop-blur-sm", className)}>
       {videoUrl ? (
         <figure className="relative overflow-hidden rounded-sm bg-black">
           <video

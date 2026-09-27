@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Mark } from "./Mark";
+import { ThemeToggle } from "./ThemeToggle";
 
 /**
  * Split layout for /login and /reset-password: brand panel on the left (hidden below md), the form
@@ -9,7 +10,10 @@ import { Mark } from "./Mark";
  */
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="grid min-h-screen bg-background md:grid-cols-[minmax(0,1.1fr)_minmax(420px,1fr)]">
+    <main className="relative grid min-h-screen bg-background md:grid-cols-[minmax(0,1.1fr)_minmax(420px,1fr)]">
+      <div className="absolute top-4 right-4 z-10 md:top-6 md:right-6">
+        <ThemeToggle />
+      </div>
       <section className="relative hidden flex-col justify-between overflow-hidden border-r p-10 md:flex lg:p-14">
         <HexGrid />
         <div className="relative flex items-center gap-3">
@@ -59,7 +63,7 @@ function HexGrid() {
     <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.07]" aria-hidden>
       <defs>
         <pattern id="gt-hex" width="56" height="97" patternUnits="userSpaceOnUse" patternTransform="scale(1.1)">
-          <path d="M28 0 L56 16.2 L56 48.5 L28 64.7 L0 48.5 L0 16.2 Z M28 64.7 L28 97" fill="none" stroke="#fff" strokeWidth="1" />
+          <path d="M28 0 L56 16.2 L56 48.5 L28 64.7 L0 48.5 L0 16.2 Z M28 64.7 L28 97" fill="none" stroke="currentColor" strokeWidth="1" />
         </pattern>
         <linearGradient id="gt-hex-fade" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#fff" stopOpacity="0" />

@@ -9,6 +9,8 @@ import {
   LogOut,
   Map as MapIcon,
   MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
   Radar,
   Radio,
   Sparkles,
@@ -28,6 +30,8 @@ import { supabaseConfigured } from "@/lib/supabase/browser";
 import { cn } from "@/lib/client/cn";
 import { breadcrumbs } from "./format";
 import { Mark } from "./Mark";
+import { toggleRail } from "./preferences";
+import { ThemeToggle } from "./ThemeToggle";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -54,8 +58,8 @@ const ALWAYS: NavItem[] = [
 ];
 
 /**
- * Dashboard frame: slim left rail (mark, caps nav, accent bar on the active item; icon-only below
- * lg) and a top bar with the breadcrumb, system status and the account menu.
+ * Dashboard frame: slim left rail (mark, caps nav, accent bar on the active item; icon-only when
+ * collapsed) and a top bar with the breadcrumb, system status, theme toggle and the account menu.
  */
 export function AppShell({ session, onSignOut, children }: { session: StoredSession; onSignOut: () => void; children: ReactNode }) {
   return (
@@ -83,23 +87,19 @@ function Rail() {
   ];
 
   return (
-    <aside className="flex w-14 shrink-0 flex-col border-r bg-rail text-rail-foreground lg:w-56">
-      <Link
-        href="/bounties"
-        className="flex h-14 shrink-0 items-center gap-3 border-b px-4 lg:px-5"
-        aria-label="GroundTruth — bounties"
-      >
+    <aside className="gt-rail flex shrink-0 flex-col overflow-hidden border-r bg-rail text-rail-foreground">
+      <Link href="/bounties" className="gt-rail-item flex h-14 shrink-0 items-center gap-3 border-b" aria-label="GroundTruth — bounties">
         <Mark className="size-6 shrink-0" />
-        <span className="hidden min-w-0 lg:block">
+        <div className="gt-only-expanded min-w-0">
           <span className="caps block text-[13px] leading-none font-semibold tracking-[0.3em]">GroundTruth</span>
           <span className="caps mt-1 block text-[9px] leading-none tracking-[0.22em] text-muted-foreground">Researcher console</span>
-        </span>
+        </div>
       </Link>
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto py-4" aria-label="Main">
         {groups.map((g) => (
           <div key={g.label} className="flex flex-col">
-            <div className="caps mb-1.5 hidden px-5 text-[9px] tracking-[0.24em] text-muted-foreground lg:block">{g.label}</div>
-            <div className="mx-3 mb-1.5 border-t lg:hidden" aria-hidden />
+            <div className="gt-only-expanded caps mb-1.5 px-5 text-[9px] tracking-[0.24em] text-muted-foreground">{g.label}</div>
+            <div className="gt-only-collapsed mx-3 mb-1.5 border-t" aria-hidden />
             {g.items.map((n) => {
               const active = pathname === n.href || pathname.startsWith(`${n.href}/`);
               const Icon = n.icon;
@@ -110,19 +110,31 @@ function Rail() {
                   aria-current={active ? "page" : undefined}
                   title={n.label}
                   className={cn(
-                    "caps relative flex h-9 items-center justify-center gap-3 text-xs tracking-[0.14em] transition-colors lg:justify-start lg:px-5",
-                    active ? "bg-white/[0.05] text-foreground" : "text-muted-foreground hover:bg-white/[0.03] hover:text-foreground",
+                    "gt-rail-item caps relative flex h-9 items-center gap-3 text-xs tracking-[0.14em] transition-colors",
+                    active ? "bg-foreground/[0.06] text-foreground" : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
                   )}
                 >
                   <span className={cn("absolute inset-y-1.5 left-0 w-0.5", active ? "bg-primary" : "bg-transparent")} aria-hidden />
                   <Icon className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
-                  <span className="hidden truncate lg:inline">{n.label}</span>
+                  <span className="gt-only-expanded truncate">{n.label}</span>
                 </Link>
               );
             })}
           </div>
         ))}
       </nav>
+      <div className="mt-auto border-t">
+        <button
+          type="button"
+          onClick={toggleRail}
+          className="gt-rail-item caps flex h-11 w-full cursor-pointer items-center gap-3 text-xs tracking-[0.14em] text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+        >
+          <PanelLeftClose className="gt-only-expanded size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+          <PanelLeftOpen className="gt-only-collapsed size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+          <span className="gt-only-expanded truncate">Collapse sidebar</span>
+          <span className="gt-only-collapsed sr-only">Expand sidebar</span>
+        </button>
+      </div>
     </aside>
   );
 }
@@ -157,8 +169,9 @@ function TopBar({ session, onSignOut }: { session: StoredSession; onSignOut: () 
           ))}
         </ol>
       </nav>
-      <div className="flex shrink-0 items-center gap-5">
+      <div className="flex shrink-0 items-center gap-3 sm:gap-5">
         <SystemStatus />
+        <ThemeToggle />
         <AccountMenu session={session} onSignOut={onSignOut} />
       </div>
     </div>

@@ -4,9 +4,11 @@
  * accent for money and the primary action. Amber only for surge and caution. Status colours always
  * travel with an icon and a word, never alone.
  *
- * app/globals.css mirrors these values as CSS variables (--background, --card, ...). Keep the two in
- * step: test/designTokens.test.ts parses globals.css and fails if they drift, and asserts every
- * text pair below is at least 4.5:1 (WCAG AA body text).
+ * COLORS is the dark theme (the default). LIGHT_COLORS is the same roles on cool paper, with the
+ * accent and status colours darkened so they still read as text. app/globals.css mirrors both as
+ * CSS variables (--background, --card, ...): :root / [data-theme="dark"] and [data-theme="light"].
+ * test/designTokens.test.ts parses globals.css and fails if they drift, and asserts every text
+ * pair below is at least 4.5:1 (WCAG AA body text) in both themes.
  *
  * Pure data, no React: imported by the node test.
  */
@@ -34,6 +36,28 @@ export const COLORS = {
 } as const;
 
 export type ColorToken = keyof typeof COLORS;
+
+/**
+ * Light theme, same roles as COLORS. Status and accent are darker so they stay ≥ 4.5:1 as text on
+ * the paper backgrounds and still hold white (`onAccent` / `onStatus`) when used as fills.
+ */
+export const LIGHT_COLORS: Record<ColorToken, string> = {
+  background: "#F4F6F8",
+  card: "#FFFFFF",
+  surface: "#ECEEF2",
+  surface2: "#E2E5EB",
+  hairline: "#C8CDD6",
+  input: "#8B939F",
+  foreground: "#0C0E12",
+  muted: "#525864",
+  accent: "#1B4F8A",
+  onAccent: "#FFFFFF",
+  success: "#0A6E3C",
+  warning: "#8A5A00",
+  danger: "#B02822",
+  info: "#1D4F91",
+  onStatus: "#FFFFFF",
+};
 
 /** CSS custom property that carries each token in globals.css. */
 export const CSS_VAR: Record<ColorToken, string> = {

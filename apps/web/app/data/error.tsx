@@ -4,7 +4,7 @@ import Link from "next/link";
 /** /data crashed while rendering: same black open-data look, no technical detail. */
 export default function DataError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white" role="alert">
+    <main data-theme="dark" className="flex min-h-screen items-center justify-center bg-black px-4 text-white" role="alert">
       <div className="max-w-md border-l-2 border-primary py-2 pl-6">
         <p className="text-[11px] caps text-white/50">Open data</p>
         <h1 className="mt-3 caps text-2xl font-semibold tracking-[0.08em]">Temporarily unavailable</h1>
