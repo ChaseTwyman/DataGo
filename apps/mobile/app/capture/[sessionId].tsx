@@ -30,6 +30,7 @@ import { CaptionList } from "../../src/voice/CaptionList";
 import { CAPTURE_DONE_RESPONSE_INSTRUCTIONS } from "../../src/voice/instructions";
 import type { ToolContext } from "../../src/voice/tools";
 import { useGrokVoice } from "../../src/voice/useGrokVoice";
+import { VoiceDiagnostics } from "../../src/voice/VoiceDiagnostics";
 
 export { RouteErrorBoundary as ErrorBoundary } from "../../src/ui/ErrorFallback";
 
@@ -97,6 +98,8 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
   /** The capture was saved to the upload queue (no signal); it sends itself later. */
   const [queued, setQueued] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
+  /** Long-press the voice pill: playback counters, to tell "no audio arrived" from "audio didn't play". */
+  const [voiceDebug, setVoiceDebug] = useState(false);
   /** Read by submit: the result screen's companion stays quiet if the guide was turned off here. */
   const voiceOnRef = useRef(voiceOn);
   voiceOnRef.current = voiceOn;
@@ -296,6 +299,11 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
           />
           <View style={{ alignItems: "center", gap: 4 }}>
             <MissionClock />
+            <Pressable
+              onLongPress={() => setVoiceDebug((v) => !v)}
+              accessibilityRole="button"
+              accessibilityHint="Long-press to show voice diagnostics"
+            >
             <StatusPill
               tone={voice.status === "open" ? (voice.agentSpeaking ? "info" : "ok") : "neutral"}
               text={
@@ -312,6 +320,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
               icon={voice.status === "open" ? (voice.agentSpeaking ? "volume-2" : "mic") : voiceOn ? "radio" : "mic-off"}
               style={{ backgroundColor: C.scrim, alignSelf: "center" }}
             />
+            </Pressable>
           </View>
           <IconButton
             icon={voiceOn ? "mic" : "mic-off"}
@@ -338,7 +347,10 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
               </Text>
             </Pressable>
           ) : (
+            <>
+            {voiceDebug ? <VoiceDiagnostics status={voice.status} error={voice.error} stats={voice.playbackStats} /> : null}
             <CaptionList captions={voice.captions} max={landscape ? 1 : 3} lines={landscape ? 2 : undefined} />
+            </>
           )}
         </View>
       </View>

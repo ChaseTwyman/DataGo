@@ -210,6 +210,8 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
     sessionRef.current?.endAfterSpeech();
   }, []);
 
+  /** Playback counters for the long-press voice diagnostics (null before the first connect). */
+  const playbackStats = useCallback(() => playerRef.current?.stats() ?? null, []);
   const setCameraStatus = useCallback((s: CameraStatusPayload) => sessionRef.current?.setCameraStatus(s), []);
   const injectContext = useCallback((text: string, instructions?: string) => sessionRef.current?.injectContext(text, instructions), []);
 
@@ -247,5 +249,6 @@ export function useGrokVoice(opts: UseGrokVoiceOptions) {
     injectContext,
     speak,
     endAfterSpeech,
+    playbackStats,
   };
 }

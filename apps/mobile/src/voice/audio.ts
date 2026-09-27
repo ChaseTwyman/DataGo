@@ -131,3 +131,15 @@ export class ChunkBuffer {
     return this.chunks.length;
   }
 }
+
+/** No audio-clock progress for this long while audio is queued ⇒ the output driver has stopped. */
+export const PLAYBACK_STALL_MS = 1500;
+
+/**
+ * Pure watchdog decision: rebuild when audio is queued and the clock hasn't advanced for STALL_MS.
+ * (react-native-audio-api does not observe AVAudioEngineConfigurationChange; when the camera or a
+ * route change reconfigures the session, the engine can stop silently while captions keep coming.)
+ */
+export function playbackStalled(p: { outstanding: number; clockAdvancedAt: number; now: number }): boolean {
+  return p.outstanding > 0 && p.now - p.clockAdvancedAt >= PLAYBACK_STALL_MS;
+}

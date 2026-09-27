@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   base64ToBytes,
+  PLAYBACK_STALL_MS,
+  playbackStalled,
   bytesLEToInt16,
   bytesToBase64,
   ChunkBuffer,
@@ -66,5 +68,13 @@ describe("PCM16 helpers", () => {
     b.push("c");
     expect(b.drain()).toEqual(["b", "c"]);
     expect(b.size).toBe(0);
+  });
+});
+
+describe("playbackStalled", () => {
+  it("fires only when audio is queued and the clock has been stuck for the stall window", () => {
+    expect(playbackStalled({ outstanding: 3, clockAdvancedAt: 0, now: PLAYBACK_STALL_MS })).toBe(true);
+    expect(playbackStalled({ outstanding: 3, clockAdvancedAt: 0, now: PLAYBACK_STALL_MS - 1 })).toBe(false);
+    expect(playbackStalled({ outstanding: 0, clockAdvancedAt: 0, now: 60_000 })).toBe(false);
   });
 });
