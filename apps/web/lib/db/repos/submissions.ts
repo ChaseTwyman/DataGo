@@ -202,11 +202,22 @@ export async function setReviewOutcome(
 // ---------- pipeline lookups ----------
 
 /** Every stored perceptual hash except this submission's. */
-export async function priorHashes(db: Db, excludeId: string | null): Promise<{ id: string; phashes: string[] }[]> {
-  return db.query<{ id: string; phashes: string[] }>(
-    `select id, phashes from public.submissions where cardinality(phashes) > 0 and ($1::uuid is null or id <> $1::uuid)`,
+export interface PriorHashes {
+  id: string;
+  phashes: string[];
+  /** Where/when the prior was captured: lets a revisit of the same spot be told apart from a recycled photo. */
+  bounty_id?: string;
+  h3_cell?: string;
+  captured_at?: string;
+}
+
+export async function priorHashes(db: Db, excludeId: string | null): Promise<PriorHashes[]> {
+  const rows = await db.query<{ id: string; phashes: string[]; bounty_id: string; h3_cell: string; captured_at: unknown }>(
+    `select id, phashes, bounty_id, h3_cell, captured_at from public.submissions
+      where cardinality(phashes) > 0 and ($1::uuid is null or id <> $1::uuid)`,
     [excludeId],
   );
+  return rows.map((r) => ({ ...r, captured_at: toIso(r.captured_at) }));
 }
 
 export async function countUserCellSince(db: Db, userId: string, cell: string, sinceIso: string, excludeId: string | null): Promise<number> {

@@ -115,6 +115,7 @@ export const MANUAL_CHECKS: Record<string, string> = {
   EXTRACTION_IMPLAUSIBLE: "Re-read the measurement against the reference object in the photos.",
   EXTRACTION_LOW_CONFIDENCE: "The model was unsure of the reading: estimate it yourself from the reference object.",
   LOW_TRUST_REVIEW: "Compare this capture with the contributor's earlier accepted captures.",
+  REVISIT_SIMILAR: "Near-identical to an earlier reading of this spot one revisit interval ago: check the water level or scene actually changed and it is not the same photo.",
   VELOCITY_LIMIT: "Many captures in this cell in a short time: check they show different moments.",
   IMPOSSIBLE_TRAVEL: "Check the capture time and place against the contributor's previous capture.",
   LOW_CONFIDENCE: "Scores were borderline: check each required element is clearly visible.",

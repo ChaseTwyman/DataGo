@@ -17,6 +17,7 @@ import type {
 } from "@groundtruth/shared";
 import type { NwsAlert } from "../context/nws";
 import type { SessionRow } from "../db/repos/sessions";
+import type { PriorHashes } from "../db/repos/submissions";
 
 export type PipelineSource = "live" | "redteam" | "eval";
 
@@ -78,7 +79,7 @@ export interface PipelineDeps {
   verifier: "model" | "mock";
   precipitationMm(lat: number, lng: number, at: Date, lookbackHours: number): Promise<number>;
   alertsAt(lat: number, lng: number): Promise<NwsAlert[]>;
-  priorHashes(excludeId: string | null): Promise<{ id: string; phashes: string[] }[]>;
+  priorHashes(excludeId: string | null): Promise<PriorHashes[]>;
   countUserCellSince(userId: string, cell: string, sinceIso: string, excludeId: string | null): Promise<number>;
   previousUserSubmission(userId: string, beforeIso: string, excludeId: string | null): Promise<{ lat: number; lng: number; captured_at: string } | null>;
   acceptedNear(

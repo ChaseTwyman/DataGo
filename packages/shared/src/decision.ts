@@ -76,6 +76,8 @@ const REVIEW_CAP: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
   "GATE_DEGRADED",
   "EXTRACTION_IMPLAUSIBLE",
   "EXTRACTION_LOW_CONFIDENCE",
+  // Looks like an earlier reading of the same spot one revisit interval ago: a human confirms it.
+  "REVISIT_SIMILAR",
 ]);
 
 /**

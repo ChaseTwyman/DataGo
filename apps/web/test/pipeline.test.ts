@@ -255,6 +255,67 @@ describe("duplicates stage", () => {
     expect(r.decision.status).toBe("rejected");
     expect(r.decision.reasonCodes).toContain("DUPLICATE");
   });
+
+  describe("revisits (same spot, one revisit interval later)", () => {
+    const flip = (h: string) => (BigInt(`0x${h}`) ^ 1n).toString(16).padStart(16, "0"); // Hamming 1
+    const minutesBefore = (iso: string, m: number) => new Date(Date.parse(iso) - m * 60_000).toISOString();
+    type PriorOpts = Partial<{ minutes: number; cell: string; bounty: string; exact: boolean; id: string }>;
+    const prior = async (input: PipelineInput, over: PriorOpts = {}) => {
+      const hs = await Promise.all(input.frames.map((f) => dHash(f.bytes!)));
+      return {
+        id: over.id ?? "00000000-0000-4000-8000-0000000000bb",
+        phashes: over.exact ? hs : hs.map(flip),
+        bounty_id: over.bounty ?? input.bounty.id,
+        h3_cell: over.cell ?? input.h3_cell,
+        captured_at: minutesBefore(input.captured_at, over.minutes ?? 30),
+      };
+    };
+
+    it("near-identical reading of the same cell 30/60/120 min earlier → REVISIT_SIMILAR, capped at review (not rejected)", async () => {
+      for (const minutes of [30, 60, 120]) {
+        const input = await baseInput();
+        const p = await prior(input, { minutes });
+        const r = await runPipeline(input, deps({ priorHashes: async () => [p] }), memorySink());
+        expect(stage(r, "duplicates").reasonCodes).toEqual(["REVISIT_SIMILAR"]);
+        expect(stage(r, "duplicates").status).toBe("warn");
+        expect(r.decision.status).toBe("needs_review");
+        expect(r.decision.reasonCodes).not.toContain("DUPLICATE");
+      }
+    });
+
+    it("an exact copy of an earlier burst stays DUPLICATE even one interval later (recycled attack)", async () => {
+      const input = await baseInput();
+      const p = await prior(input, { minutes: 60, exact: true });
+      const r = await runPipeline(input, deps({ priorHashes: async () => [p] }), memorySink());
+      expect(r.decision.status).toBe("rejected");
+      expect(r.decision.reasonCodes).toContain("DUPLICATE");
+    });
+
+    it("stays DUPLICATE when the prior is too recent, too old, on another cell or bounty, or any match is not a revisit", async () => {
+      const cases: PriorOpts[] = [{ minutes: 5 }, { minutes: 24 * 60 }, { cell: "892a1008003ffff" }, { bounty: "00000000-0000-4000-8000-00000000dddd" }];
+      for (const c of cases) {
+        const input = await baseInput();
+        const p = await prior(input, c);
+        const r = await runPipeline(input, deps({ priorHashes: async () => [p] }), memorySink());
+        expect(r.decision.reasonCodes, JSON.stringify(c)).toContain("DUPLICATE");
+        expect(r.decision.status).toBe("rejected");
+      }
+      const input = await baseInput();
+      const ok = await prior(input, { minutes: 60 });
+      const other = await prior(input, { minutes: 60, cell: "892a1008003ffff", id: "00000000-0000-4000-8000-0000000000cc" });
+      const r = await runPipeline(input, deps({ priorHashes: async () => [ok, other] }), memorySink());
+      expect(r.decision.reasonCodes).toContain("DUPLICATE");
+    });
+
+    it("a protocol without a revisit schedule keeps the plain DUPLICATE rule", async () => {
+      const { revisit: _r, ...noRevisit } = streetFloodDepth;
+      void _r;
+      const input = await baseInput({ protocol: noRevisit });
+      const p = await prior(input, { minutes: 60 });
+      const r = await runPipeline(input, deps({ priorHashes: async () => [p] }), memorySink());
+      expect(r.decision.reasonCodes).toContain("DUPLICATE");
+    });
+  });
 });
 
 describe("corroboration stage", () => {

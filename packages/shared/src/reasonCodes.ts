@@ -40,6 +40,9 @@ export const FIXED_REASON_CODES = [
   "EXTRACTION_MISSING",
   "EXTRACTION_IMPLAUSIBLE",
   "EXTRACTION_LOW_CONFIDENCE",
+  // Near-identical to an earlier reading of the same cell taken one revisit interval earlier
+  // (a genuine +30/+60/+120 min revisit with the same framing). Review, never an accusation.
+  "REVISIT_SIMILAR",
 ] as const;
 
 export type FixedReasonCode = (typeof FIXED_REASON_CODES)[number];
@@ -88,6 +91,7 @@ const KIND: Record<FixedReasonCode, ReasonKind> = {
   GATE_NOT_PASSED: "review",
   EXTRACTION_IMPLAUSIBLE: "review",
   EXTRACTION_LOW_CONFIDENCE: "review",
+  REVISIT_SIMILAR: "review",
   DEMO_WAIVER: "info",
   GATE_DEGRADED: "info",
 };
@@ -130,6 +134,7 @@ const CONTRIBUTOR_TEXT: Partial<Record<FixedReasonCode, string>> = {
   GATE_NOT_PASSED: "A reviewer will take a look.",
   EXTRACTION_IMPLAUSIBLE: "A reviewer will take a look.",
   EXTRACTION_LOW_CONFIDENCE: "A reviewer will take a look.",
+  REVISIT_SIMILAR: "A reviewer will take a look.",
   REVIEWER_REJECTED: "A reviewer couldn't accept this capture.",
   GATE_DEGRADED: "The live scene check ran in limited mode.",
 };

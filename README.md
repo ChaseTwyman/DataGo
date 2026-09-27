@@ -55,6 +55,7 @@ Migrations (applied in order):
 | `20260926000007_sponsor_pool.sql` | Sponsor pool, contributions, allocation ledger |
 | `20260926000008_grokbot.sql` | Grokbot cache, protocol self-check |
 | `20260926000009_redaction.sql` | `submissions.redaction`, `media[i].redacted_path` guard, researchers read only redacted photos in storage |
+| `20260926000010_missions.sql` | Revisit missions, `submissions.revisit_of` / `mission_id`, impact cards |
 
 ### Request flow
 

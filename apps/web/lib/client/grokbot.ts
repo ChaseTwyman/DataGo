@@ -170,6 +170,7 @@ export const REASON_NAMES: Record<string, string> = {
   AI_GENERATED_SUSPECTED: "Possibly AI-generated",
   EDITED_SUSPECTED: "Possibly edited",
   DUPLICATE: "Duplicate of an earlier capture",
+  REVISIT_SIMILAR: "Very similar to an earlier reading of this spot",
   VELOCITY_LIMIT: "Too many captures too quickly",
   IMPOSSIBLE_TRAVEL: "Impossible travel between captures",
   WEATHER_IMPLAUSIBLE: "Weather doesn't match",
