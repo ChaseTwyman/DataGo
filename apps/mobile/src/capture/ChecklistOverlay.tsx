@@ -10,7 +10,8 @@ import { Icon } from "../ui/components";
 import { C, F, R, S, TRACK } from "../ui/theme";
 import { checklistRows, verifyCause, verifyMessage, verifyStatus, type ChecklistRow, type GateState } from "./gateMachine";
 
-export function ChecklistOverlay({ protocol, state }: { protocol: Protocol; state: GateState }) {
+/** `compact`: landscape side panel (short screen) — tighter rows, smaller type. */
+export function ChecklistOverlay({ protocol, state, compact = false }: { protocol: Protocol; state: GateState; compact?: boolean }) {
   const rows = checklistRows(protocol, state);
   const done = rows.filter((r) => r.ok).length;
   return (
@@ -19,7 +20,7 @@ export function ChecklistOverlay({ protocol, state }: { protocol: Protocol; stat
         {`CHECKLIST · ${done}/${rows.length}`}
       </Text>
       {rows.map((r) => (
-        <Row key={r.id} r={r} />
+        <Row key={r.id} r={r} compact={compact} />
       ))}
       <VerifyBanner state={state} />
     </View>
@@ -55,7 +56,7 @@ function VerifyBanner({ state }: { state: GateState }) {
   );
 }
 
-function Row({ r }: { r: ChecklistRow }) {
+function Row({ r, compact }: { r: ChecklistRow; compact: boolean }) {
   const color = r.ok ? C.green : r.kind === "integrity" ? C.red : C.amber;
   // Tick animation: a short scale pop when a row turns green.
   const scale = useRef(new Animated.Value(1)).current;
@@ -68,7 +69,7 @@ function Row({ r }: { r: ChecklistRow }) {
     wasOk.current = r.ok;
   }, [r.ok, scale]);
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: S.md, minHeight: 36 }} accessibilityLabel={`${r.label}: ${r.ok ? "done" : "missing"}`}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: compact ? S.sm : S.md, minHeight: compact ? 28 : 36 }} accessibilityLabel={`${r.label}: ${r.ok ? "done" : "missing"}`}>
       <Animated.View
         style={{
           width: 26,
@@ -84,7 +85,7 @@ function Row({ r }: { r: ChecklistRow }) {
       >
         <Icon name={r.ok ? "check" : r.kind === "integrity" ? "x" : "minus"} size={16} color={r.ok ? C.bg : color} />
       </Animated.View>
-      <Text style={{ color: r.ok ? C.text : color, fontFamily: r.ok ? F.bodyMedium : F.bodySemi, fontSize: 17, flex: 1 }} numberOfLines={2}>
+      <Text style={{ color: r.ok ? C.text : color, fontFamily: r.ok ? F.bodyMedium : F.bodySemi, fontSize: compact ? 15 : 17, flex: 1 }} numberOfLines={compact ? 1 : 2}>
         {r.label}
       </Text>
     </View>

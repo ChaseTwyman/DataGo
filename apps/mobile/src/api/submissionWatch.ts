@@ -123,7 +123,12 @@ export function resultView(
       return { kind: "needs_review", title: "Needs review", messages: ["Looks good. A reviewer will confirm within 24 hours."], retryable: false };
     case "rejected": {
       if (codes.some(isIntegrityCode) || codes.length === 0) {
-        return { kind: "integrity_reject", title: "Not verified", messages: [NEUTRAL_INTEGRITY_MESSAGE], retryable: false };
+        // Still never says which integrity check fired, but framing fixes (a missing scale object,
+        // blur) are safe to share — hiding them left honest contributors guessing.
+        const fixes = [
+          ...new Set(codes.filter((c) => reasonKind(c) === "protocol" && c !== "OFF_TOPIC").map((c) => contributorMessage(c, label(c)))),
+        ];
+        return { kind: "integrity_reject", title: "Not verified", messages: [NEUTRAL_INTEGRITY_MESSAGE, ...fixes], retryable: false };
       }
       // Pass the protocol so OFF_TOPIC says what to aim at ("Point the camera at: water surface, …").
       const msgs = [

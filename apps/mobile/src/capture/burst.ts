@@ -22,6 +22,25 @@ export interface BurstDeps {
 }
 
 /**
+ * Floor on the spacing between challenge frames. Protocols often ask for ~700 ms, which gave people
+ * 1.4 s to "step closer" — too short to show any movement, so real captures failed the challenge.
+ */
+export const MIN_CHALLENGE_INTERVAL_MS = 1200;
+
+export function burstIntervalMs(protocolIntervalMs: number): number {
+  return Math.max(protocolIntervalMs, MIN_CHALLENGE_INTERVAL_MS);
+}
+
+/** Long edge (px) of uploaded frames: verification sees ≤1536 px; full 12 MP JPEGs made upload ~20 s. */
+export const UPLOAD_LONG_EDGE = 2560;
+
+/** Resize target keeping aspect ratio, or null when the frame is already small enough. */
+export function uploadResize(width: number, height: number, longEdge = UPLOAD_LONG_EDGE): { width: number } | { height: number } | null {
+  if (!(width > 0 && height > 0) || Math.max(width, height) <= longEdge) return null;
+  return width >= height ? { width: longEdge } : { height: longEdge };
+}
+
+/**
  * Frame i is scheduled at t0 + i × interval; if a capture overruns, the next one fires immediately
  * rather than drifting the whole burst.
  */

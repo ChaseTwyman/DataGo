@@ -7,14 +7,14 @@ import type { CreateSubmissionRequest, FieldQuestion } from "@groundtruth/shared
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Camera, useCameraPermission, usePhotoOutput, type CameraRef } from "react-native-vision-camera";
 import { api } from "../../src/api";
 import { toUserMessage, UserFacingError } from "../../src/api/errors";
-import { CHALLENGE_LEAD_MS, runBurst, sensorSnapshot, toMediaItems, type CapturedFrame } from "../../src/capture/burst";
+import { burstIntervalMs, CHALLENGE_LEAD_MS, runBurst, sensorSnapshot, toMediaItems, type CapturedFrame } from "../../src/capture/burst";
 import { ChecklistOverlay } from "../../src/capture/ChecklistOverlay";
-import { deviceInfo, photoCapturer, uploadJpeg } from "../../src/capture/nativeCapture";
+import { deviceInfo, photoCapturer, shrinkForUpload, uploadJpeg } from "../../src/capture/nativeCapture";
 import { isPreCapture } from "../../src/capture/gateMachine";
 import { uploadFrames } from "../../src/capture/upload";
 import { useCaptureGate } from "../../src/capture/useCaptureGate";
@@ -78,6 +78,11 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
   const { session, bounty } = active;
   const protocol = session.protocol;
   const insets = useSafeAreaInsets();
+  // Landscape: the checklist + shutter move to a right-hand panel so the camera view stays visible
+  // (stacked top bar + bottom sheet covered the whole ~390 pt tall screen).
+  const win = useWindowDimensions();
+  const landscape = win.width > win.height;
+  const panelW = landscape ? Math.min(360, Math.round(win.width * 0.42)) : 0;
   const cameraRef = useRef<CameraRef>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const photoOutput = usePhotoOutput({ containerFormat: "jpeg", quality: 0.92, qualityPrioritization: "balanced" });
@@ -229,12 +234,13 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
       if (cancelled) return;
       send({ type: "BURST_STARTED" });
       try {
-        const frames = await runBurst(protocol.capture.frames, protocol.capture.frame_interval_ms, {
+        const shot = await runBurst(protocol.capture.frames, burstIntervalMs(protocol.capture.frame_interval_ms), {
           capture: photoCapturer(photoOutput),
           sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
           now: () => Date.now(),
           onFrame: () => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
         });
+        const frames = await Promise.all(shot.map(shrinkForUpload));
         framesRef.current = frames;
         uploadedRef.current = new Set();
         setBurstError(null);
@@ -278,7 +284,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
       />
 
       {/* top: captions + controls */}
-      <View style={[styles.topBar, { paddingTop: insets.top + S.sm }]}>
+      <View style={[styles.topBar, landscape ? { paddingTop: insets.top + S.xs, left: insets.left, right: panelW } : { paddingTop: insets.top + S.sm }]}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: S.sm }}>
           <IconButton
             icon="x"
@@ -316,7 +322,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
             onPress={() => setVoiceOn((v) => !v)}
           />
         </View>
-        <View style={styles.captions}>
+        <View style={[styles.captions, landscape && styles.captionsCompact]}>
           {voiceDown ? (
             // Voice is optional: a calm notice + one action, never an error wall or alert.
             <Pressable
@@ -332,21 +338,33 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
               </Text>
             </Pressable>
           ) : (
-            <CaptionList captions={voice.captions} max={3} />
+            <CaptionList captions={voice.captions} max={landscape ? 1 : 3} lines={landscape ? 2 : undefined} />
           )}
         </View>
       </View>
 
       {showChallenge ? (
-        <View style={styles.challenge} pointerEvents="none" accessibilityLiveRegion="assertive">
+        <View
+          style={[styles.challenge, landscape && { top: "22%", left: insets.left + S.lg, right: panelW + S.lg, padding: S.lg }]}
+          pointerEvents="none"
+          accessibilityLiveRegion="assertive"
+        >
           <Label color={C.amber}>Challenge</Label>
-          <Text style={styles.challengeText}>{session.challenge.instruction}</Text>
+          <Text style={[styles.challengeText, landscape && { fontSize: 24, lineHeight: 28 }]}>{session.challenge.instruction}</Text>
+          <Text style={styles.challengeHint}>{state.phase === "capturing" ? "Keep moving slowly" : "Start moving when it says capturing"}</Text>
           <Text style={styles.challengeClock}>{state.phase === "capturing" ? "CAPTURING" : countdown !== null ? countdownLabel(countdown) : ""}</Text>
         </View>
       ) : null}
 
       {/* bottom sheet */}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + S.md }]}>
+      <View
+        style={
+          landscape
+            ? [styles.sidePanel, { width: panelW, paddingTop: insets.top + S.sm, paddingRight: insets.right + S.md, paddingBottom: insets.bottom + S.sm }]
+            : [styles.sheet, { paddingBottom: insets.bottom + S.md }]
+        }
+      >
+        <PanelScroll scroll={landscape}>
         {queued ? (
           <View style={{ gap: S.md }} accessibilityLiveRegion="polite">
             <StatusPill tone="info" icon="wifi-off" text="Waiting for signal — your capture is saved" />
@@ -374,7 +392,7 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
           />
         ) : (
           <View style={{ gap: S.md }}>
-            <ChecklistOverlay protocol={protocol} state={state} />
+            <ChecklistOverlay protocol={protocol} state={state} compact={landscape} />
             {state.lastHint && state.phase !== "ready" && state.phase !== "cant_verify" ? (
               <View style={{ flexDirection: "row", gap: S.sm, alignItems: "flex-start" }}>
                 <Icon name="corner-down-right" size={16} color={C.accent} style={{ marginTop: 3 }} />
@@ -393,8 +411,19 @@ function CaptureInner({ active }: { active: ActiveCapture }) {
             </Label>
           </View>
         )}
+        </PanelScroll>
       </View>
     </View>
+  );
+}
+
+/** Landscape side panel scrolls (short screen, content pinned to the bottom); the portrait sheet sizes to its content. */
+function PanelScroll({ scroll, children }: { scroll: boolean; children: React.ReactNode }) {
+  if (!scroll) return <>{children}</>;
+  return (
+    <ScrollView bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} showsVerticalScrollIndicator={false}>
+      {children}
+    </ScrollView>
   );
 }
 
@@ -527,6 +556,7 @@ const styles = StyleSheet.create({
   topBar: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: S.lg, gap: S.sm },
   clock: { color: C.text, fontFamily: F.numeralRegular, fontSize: 20, letterSpacing: TRACK.label, fontVariant: ["tabular-nums"], textShadowColor: "rgba(0,0,0,0.9)", textShadowRadius: 6 },
   captions: { backgroundColor: C.scrim, borderRadius: R.md, padding: S.md, minHeight: 56, borderWidth: StyleSheet.hairlineWidth, borderColor: C.hairline },
+  captionsCompact: { padding: S.sm, minHeight: 0 },
   challenge: {
     position: "absolute",
     top: "32%",
@@ -541,6 +571,7 @@ const styles = StyleSheet.create({
     gap: S.sm,
   },
   challengeText: { color: C.text, fontFamily: F.display, fontSize: 30, lineHeight: 34, letterSpacing: TRACK.heading, textAlign: "center", textTransform: "uppercase" },
+  challengeHint: { color: C.text, fontFamily: F.bodyMedium, fontSize: 16, textAlign: "center" },
   challengeClock: { color: C.amber, fontFamily: F.numeral, fontSize: T.numeralHero, fontVariant: ["tabular-nums"] },
   sheet: {
     position: "absolute",
@@ -551,6 +582,16 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: C.hairline,
     padding: S.lg,
+  },
+  sidePanel: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: C.scrim,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: C.hairline,
+    paddingLeft: S.md,
   },
   shutter: { minHeight: 68, borderRadius: R.sm, borderWidth: 2, flexDirection: "row", gap: S.md, alignItems: "center", justifyContent: "center", paddingHorizontal: S.lg },
   shutterText: { fontFamily: F.display, fontSize: 20, letterSpacing: TRACK.heading, textTransform: "uppercase", flexShrink: 1, textAlign: "center" },

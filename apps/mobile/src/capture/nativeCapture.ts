@@ -4,11 +4,12 @@
  */
 import type { DeviceInfo, SignedUpload } from "@groundtruth/shared";
 import Constants from "expo-constants";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as Device from "expo-device";
 import { File, UploadType } from "expo-file-system";
 import { Platform } from "react-native";
 import type { CameraPhotoOutput } from "react-native-vision-camera";
-import type { CapturedFrame } from "./burst";
+import { uploadResize, type CapturedFrame } from "./burst";
 import { UploadError } from "./upload";
 
 const toFileUri = (p: string) => (p.includes("://") ? p : `file://${p}`);
@@ -38,6 +39,40 @@ export function photoCapturer(output: CameraPhotoOutput) {
       photo.dispose();
     }
   };
+}
+
+/**
+ * Shrink a burst frame for upload (after the burst, so frame timing is unaffected). Re-encoding also
+ * drops the embedded EXIF/GPS; the metadata the server needs travels in the submission JSON. On any
+ * failure the original frame is kept.
+ */
+export async function shrinkForUpload(f: CapturedFrame): Promise<CapturedFrame> {
+  try {
+    const full = await ImageManipulator.manipulate(f.uri).renderAsync();
+    const target = uploadResize(full.width, full.height);
+    if (!target) return f;
+    const ctx = ImageManipulator.manipulate(full);
+    ctx.resize(target);
+    const ref = await ctx.renderAsync();
+    const out = await ref.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+    return {
+      ...f,
+      uri: out.uri,
+      width: out.width,
+      height: out.height,
+      exif: {
+        ...f.exif,
+        // Pixels are now upright (the manipulator bakes the capture orientation in).
+        capture_orientation: f.exif.orientation,
+        orientation: "up",
+        width: out.width,
+        height: out.height,
+        upload_long_edge: Math.max(out.width, out.height),
+      },
+    };
+  } catch {
+    return f;
+  }
 }
 
 export async function uploadJpeg(uri: string, target: SignedUpload): Promise<void> {

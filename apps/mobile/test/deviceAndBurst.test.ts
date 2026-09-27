@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runBurst, sensorSnapshot, toMediaItems, type CapturedFrame } from "../src/capture/burst";
+import { burstIntervalMs, MIN_CHALLENGE_INTERVAL_MS, runBurst, sensorSnapshot, toMediaItems, UPLOAD_LONG_EDGE, uploadResize, type CapturedFrame } from "../src/capture/burst";
 import { rollDeviationDeg, rotationMagnitude, SteadinessTracker, tiltOk } from "../src/capture/deviceMath";
 
 const G = 9.81;
@@ -95,5 +95,28 @@ describe("runBurst", () => {
     const items = toMediaItems([mk(0, 0), mk(1, 600)], ["observations/u/s/0.jpg", "observations/u/s/1.jpg"]);
     expect(items[1]).toMatchObject({ path: "observations/u/s/1.jpg", width: 4032, height: 3024 });
     expect(sensorSnapshot(3.14159, 12.345, true, null)).toEqual({ tilt_deg: 3.1, rotation_rate: 12.3, heading_deg: null, steady: true });
+  });
+});
+
+describe("burstIntervalMs", () => {
+  it("stretches short protocol intervals so a motion challenge is physically doable", () => {
+    expect(burstIntervalMs(700)).toBe(MIN_CHALLENGE_INTERVAL_MS);
+    expect(2 * burstIntervalMs(700)).toBeGreaterThanOrEqual(2400); // 3 frames span ≥ 2.4 s
+  });
+  it("keeps longer protocol intervals", () => {
+    expect(burstIntervalMs(2000)).toBe(2000);
+  });
+});
+
+describe("uploadResize", () => {
+  it("shrinks a 12 MP landscape frame to the upload long edge", () => {
+    expect(uploadResize(4032, 3024)).toEqual({ width: UPLOAD_LONG_EDGE });
+  });
+  it("uses height for portrait frames", () => {
+    expect(uploadResize(3024, 4032)).toEqual({ height: UPLOAD_LONG_EDGE });
+  });
+  it("leaves small or unknown-size frames alone", () => {
+    expect(uploadResize(1920, 1080)).toBeNull();
+    expect(uploadResize(0, 0)).toBeNull();
   });
 });

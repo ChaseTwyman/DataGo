@@ -192,11 +192,22 @@ describe("resultView (PRD §7.5)", () => {
   const base = (status: SubmissionRow["status"], codes: string[]) =>
     ({ status, reason_codes: codes, payout_cents: status === "accepted" ? 1000 : null }) as Pick<SubmissionRow, "status" | "reason_codes" | "payout_cents">;
 
-  it("integrity rejects only ever show the neutral message", () => {
-    for (const codes of [["SCREEN_RECAPTURE"], ["DUPLICATE", "BLURRY"], ["CHALLENGE_FAILED", "MISSING_ELEMENT:waterline"]]) {
+  it("integrity rejects never name the integrity check", () => {
+    for (const codes of [["SCREEN_RECAPTURE"], ["AI_GENERATED_SUSPECTED", "C2PA_AI_GENERATED"], ["CHALLENGE_FAILED", "OFF_TOPIC", "DAYLIGHT_MISMATCH"]]) {
       const v = resultView(base("rejected", codes), streetFloodDepth, { sessionOpen: true });
       expect(v).toEqual({ kind: "integrity_reject", title: "Not verified", messages: ["We couldn't verify this capture."], retryable: false });
     }
+  });
+
+  it("integrity rejects still list safe framing fixes after the neutral line", () => {
+    const v = resultView(base("rejected", ["CHALLENGE_FAILED", "MISSING_ELEMENT:waterline", "BLURRY"]), streetFloodDepth, { sessionOpen: true });
+    expect(v.kind).toBe("integrity_reject");
+    expect(v.messages).toEqual([
+      "We couldn't verify this capture.",
+      "Missing from the shot: Waterline visible.",
+      "The photo was blurry. Hold the phone steady and try again.",
+    ]);
+    expect(v.retryable).toBe(false);
   });
 
   it("protocol rejects give specific fixes and one-tap retry while the session is open", () => {
