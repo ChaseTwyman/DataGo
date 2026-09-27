@@ -12,11 +12,11 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-white",
-        destructive: "bg-destructive text-status-foreground hover:bg-[#ff7a73]",
-        success: "bg-success text-status-foreground hover:bg-[#6ae6a3]",
+        default: "bg-primary text-primary-foreground hover:bg-[var(--primary-hover)]",
+        destructive: "bg-destructive text-status-foreground hover:bg-[var(--destructive-hover)]",
+        success: "bg-success text-status-foreground hover:bg-[var(--success-hover)]",
         outline: "border border-input bg-transparent text-foreground hover:border-muted-foreground hover:bg-accent",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-[#2a2d33]",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-[var(--secondary-hover)]",
         ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },

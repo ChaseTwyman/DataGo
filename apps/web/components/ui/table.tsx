@@ -17,7 +17,7 @@ export const TBody = ({ className, ...p }: HTMLAttributes<HTMLTableSectionElemen
   <tbody className={cn("[&_tr:last-child]:border-0", className)} {...p} />
 );
 export const TR = ({ className, ...p }: HTMLAttributes<HTMLTableRowElement>) => (
-  <tr className={cn("border-b transition-colors hover:bg-white/[0.03]", className)} {...p} />
+  <tr className={cn("border-b transition-colors hover:bg-foreground/[0.04]", className)} {...p} />
 );
 export const TH = ({ className, ...p }: ThHTMLAttributes<HTMLTableCellElement>) => (
   <th

@@ -20,7 +20,7 @@ export function PublicSponsorImpactPage({ sponsorId }: { sponsorId: string }) {
   const [period, setPeriod] = useState<ImpactPeriod>("all");
   const g = useGrokbot(() => api.publicSponsorImpact(sponsorId, impactRange(period)), `public-impact:${sponsorId}:${period}`);
   return (
-    <div className="min-h-screen bg-black text-white antialiased">
+    <div data-theme="dark" className="min-h-screen bg-black text-white antialiased">
       <header className="border-b border-white/10">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-8">
           <Link href="/data" className={`${HEAD} flex items-center gap-2.5 text-sm font-semibold tracking-[0.35em]!`}>

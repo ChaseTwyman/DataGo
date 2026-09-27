@@ -87,7 +87,7 @@ export default function RadarPage() {
             cursor="crosshair"
             className="absolute inset-0"
           />
-          <p className="caps pointer-events-none absolute top-3 left-3 rounded-sm border bg-black/80 px-2.5 py-1.5 text-[10px] text-muted-foreground backdrop-blur-sm">
+          <p data-theme="dark" className="caps pointer-events-none absolute top-3 left-3 rounded-sm border bg-black/80 px-2.5 py-1.5 text-[10px] text-muted-foreground backdrop-blur-sm">
             Click the map to move the scan center
           </p>
         </div>

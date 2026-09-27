@@ -2,10 +2,13 @@
 
 /*
  * GroundTruth design system — mission-control look shared with the phone app and /data.
- * Colour values mirror components/ds/tokens.ts; test/designTokens.test.ts fails if they drift and
- * checks every text pair for WCAG AA contrast. Dark only: the product has one theme.
+ * Colour values mirror components/ds/tokens.ts (COLORS and LIGHT_COLORS). test/designTokens.test.ts
+ * fails if they drift and checks every text pair for WCAG AA contrast in both themes.
+ * Dark is the default. [data-theme="light"] on <html> switches the console; a nested
+ * [data-theme="dark"] keeps map chrome on the dark basemap.
  */
-:root {
+:root,
+[data-theme="dark"] {
   color-scheme: dark;
   --radius: 2px;
 
@@ -17,14 +20,18 @@
   --popover-foreground: #ffffff;
   --primary: #d6e4ff;
   --primary-foreground: #000000;
+  --primary-hover: #ffffff;
   --secondary: #1e2126;
   --secondary-foreground: #ffffff;
+  --secondary-hover: #2a2d33;
   --muted: #15171a;
   --muted-foreground: #8a8f98;
   --accent: #1e2126;
   --accent-foreground: #ffffff;
   --destructive: #ff5a52;
+  --destructive-hover: #ff7a73;
   --success: #3ddc84;
+  --success-hover: #6ae6a3;
   --warning: #ffb020;
   --info: #8ab4ff;
   --status-foreground: #000000;
@@ -33,6 +40,39 @@
   --ring: #d6e4ff;
   --rail: #000000;
   --rail-foreground: #ffffff;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #f4f6f8;
+  --foreground: #0c0e12;
+  --card: #ffffff;
+  --card-foreground: #0c0e12;
+  --popover: #ffffff;
+  --popover-foreground: #0c0e12;
+  --primary: #1b4f8a;
+  --primary-foreground: #ffffff;
+  --primary-hover: #2463a8;
+  --secondary: #e2e5eb;
+  --secondary-foreground: #0c0e12;
+  --secondary-hover: #d4d8df;
+  --muted: #eceef2;
+  --muted-foreground: #525864;
+  --accent: #e2e5eb;
+  --accent-foreground: #0c0e12;
+  --destructive: #b02822;
+  --destructive-hover: #c43a32;
+  --success: #0a6e3c;
+  --success-hover: #0c8550;
+  --warning: #8a5a00;
+  --info: #1d4f91;
+  --status-foreground: #ffffff;
+  --border: #c8cdd6;
+  --input: #8b939f;
+  --ring: #1b4f8a;
+  --rail: #ffffff;
+  --rail-foreground: #0c0e12;
 }
 
 @theme inline {
@@ -97,7 +137,7 @@
 @layer base {
   * {
     border-color: var(--color-border);
-    scrollbar-color: #2a2d33 transparent;
+    scrollbar-color: var(--border) transparent;
   }
   html,
   body {
@@ -111,7 +151,7 @@
     -moz-osx-font-smoothing: grayscale;
   }
   ::selection {
-    background: rgb(214 228 255 / 0.3);
+    background: color-mix(in srgb, var(--primary) 28%, transparent);
   }
   :focus-visible {
     outline: 2px solid var(--color-ring);
@@ -130,7 +170,7 @@
 /* A new row or card arriving over realtime: a brief accent wash. */
 @keyframes gt-arrive {
   from {
-    background-color: rgb(214 228 255 / 0.14);
+    background-color: color-mix(in srgb, var(--primary) 16%, transparent);
   }
   to {
     background-color: transparent;
@@ -220,4 +260,90 @@
 }
 .maplibregl-ctrl-attrib-button {
   filter: invert(1);
+}
+
+/* Light-theme shadows: the dark theme's heavy drop shadows read as smudges on paper. */
+[data-theme="light"] .shadow-md {
+  box-shadow: 0 8px 24px rgb(12 14 18 / 0.08);
+}
+[data-theme="light"] .shadow-lg {
+  box-shadow: 0 12px 40px rgb(12 14 18 / 0.12);
+}
+
+/* Theme toggle icons. The inactive label is display:none so it leaves the accessibility tree. */
+html:not([data-theme="light"]) .theme-when-light {
+  display: none;
+}
+[data-theme="light"] .theme-when-dark {
+  display: none;
+}
+
+/*
+ * Sidebar. Expanded from the lg breakpoint (1024px) up, icon rail below, unless the user has
+ * chosen (data-rail on <html>, set by the collapse button and restored before paint).
+ */
+.gt-rail {
+  width: 3.5rem;
+  transition: width 180ms ease;
+}
+.gt-rail-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+.gt-only-collapsed {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  html:not([data-rail="collapsed"]) .gt-rail {
+    width: 14rem;
+  }
+  html:not([data-rail="collapsed"]) .gt-rail-item {
+    justify-content: flex-start;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  html:not([data-rail="expanded"]) .gt-only-expanded {
+    display: none;
+  }
+  html:not([data-rail="expanded"]) .gt-only-collapsed {
+    display: revert;
+  }
+}
+
+html[data-rail="expanded"] .gt-rail {
+  width: 14rem;
+}
+html[data-rail="expanded"] .gt-rail-item {
+  justify-content: flex-start;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+html[data-rail="expanded"] .gt-only-collapsed {
+  display: none;
+}
+
+html[data-rail="collapsed"] .gt-rail {
+  width: 3.5rem;
+}
+html[data-rail="collapsed"] .gt-rail-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+html[data-rail="collapsed"] .gt-only-expanded {
+  display: none;
+}
+html[data-rail="collapsed"] .gt-only-collapsed {
+  display: revert;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gt-rail {
+    transition: none;
+  }
 }

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow, Barlow_Condensed } from "next/font/google";
 import type { ReactNode } from "react";
+import { ThemeBoot } from "@/components/ds/ThemeBoot";
+import { THEME_BOOT_SCRIPT } from "@/components/ds/preferences";
 import "./globals.css";
 
 // Barlow / Barlow Condensed: SIL Open Font License 1.1, same families as the phone app.
@@ -18,12 +20,16 @@ export const metadata: Metadata = {
   applicationName: "GroundTruth",
 };
 
-export const viewport: Viewport = { themeColor: "#000000", colorScheme: "dark" };
+export const viewport: Viewport = { themeColor: "#000000", colorScheme: "dark light" };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${barlow.variable} ${barlowCondensed.variable}`}>
-      <body>{children}</body>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${barlow.variable} ${barlowCondensed.variable}`}>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <ThemeBoot />
+        {children}
+      </body>
     </html>
   );
 }

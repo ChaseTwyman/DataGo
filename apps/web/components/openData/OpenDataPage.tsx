@@ -64,7 +64,7 @@ export function OpenDataPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-black text-white antialiased">
+    <div data-theme="dark" className="min-h-screen bg-black text-white antialiased">
       <header className="sticky top-0 z-10 border-b border-white/10 bg-black/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-8">
           <Link href="/data" className={`${HEAD} flex items-center gap-2.5 text-sm font-semibold tracking-[0.35em]!`}>

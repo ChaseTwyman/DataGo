@@ -35,7 +35,7 @@ export function SubmissionCard({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full cursor-pointer items-start gap-3 p-3 text-left hover:bg-white/[0.02]"
+        className="flex w-full cursor-pointer items-start gap-3 p-3 text-left hover:bg-foreground/[0.03]"
       >
         <div className="size-14 shrink-0 overflow-hidden rounded-sm border bg-muted">
           {thumb ? (

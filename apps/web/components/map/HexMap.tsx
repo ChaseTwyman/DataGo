@@ -219,7 +219,7 @@ export default function HexMap({
   );
 
   return (
-    <div className={cn("relative h-full w-full", className)}>
+    <div data-theme="dark" className={cn("relative h-full w-full text-foreground", className)}>
       {failed ? (
         <MapUnavailable
           onRetry={() => {

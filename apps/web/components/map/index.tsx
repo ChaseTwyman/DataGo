@@ -8,7 +8,7 @@ import type { HexMapProps } from "./HexMap";
 const HexMapInner = dynamic<HexMapProps>(() => import("./HexMap"), {
   ssr: false,
   loading: () => (
-    <div className="caps flex h-full w-full items-center justify-center bg-[#0c0c0c] text-[10px] text-muted-foreground" role="status">
+    <div data-theme="dark" className="caps flex h-full w-full items-center justify-center bg-[#0c0c0c] text-[10px] text-muted-foreground" role="status">
       <span className="gt-skeleton mr-2 inline-block size-1.5 rounded-full bg-primary" aria-hidden />
       Loading map…
     </div>
@@ -21,7 +21,7 @@ const HexMapInner = dynamic<HexMapProps>(() => import("./HexMap"), {
  */
 const MapBoundary = catchError(function MapFallback(props: { className?: string }, { retry }: ErrorInfo) {
   return (
-    <div className={`relative h-full w-full bg-[#0c0c0c] ${props.className ?? ""}`} role="status">
+    <div data-theme="dark" className={`relative h-full w-full bg-[#0c0c0c] text-foreground ${props.className ?? ""}`} role="status">
       <div className="absolute inset-0 flex items-center justify-center p-6">
         <div className="max-w-xs border-l-2 border-warning py-1 pl-4 text-sm">
           <div className="caps text-xs font-semibold">Map unavailable</div>

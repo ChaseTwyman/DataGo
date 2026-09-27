@@ -33,7 +33,8 @@ export {
   Skeleton,
 } from "./primitives";
 export { ExactTime, RelativeTime } from "./RelativeTime";
-export { COLORS, contrast, TEXT_PAIRS } from "./tokens";
+export { ThemeToggle } from "./ThemeToggle";
+export { COLORS, LIGHT_COLORS, contrast, TEXT_PAIRS } from "./tokens";
 
 export { Badge, TONE_CLASSES } from "../ui/badge";
 export { Button, buttonVariants, type ButtonProps } from "../ui/button";
