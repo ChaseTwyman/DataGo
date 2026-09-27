@@ -86,6 +86,7 @@ export const LenientProtocolSchema = ProtocolSchema.extend({
   capture: P.capture.extend({
     mode: P.capture.shape.mode.catch("burst"),
     orientation: P.capture.shape.orientation.catch("any"),
+    setting: P.capture.shape.setting.catch(undefined),
     field_questions: lenientArray(LenientFieldQuestionSchema),
   }),
   // Clients never evaluate extraction rules (the server does); unknown rule kinds are dropped.

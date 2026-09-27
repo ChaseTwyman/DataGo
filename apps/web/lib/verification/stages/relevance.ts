@@ -8,7 +8,7 @@
  * contributor is told what was expected). If this call errors, the stage errors (→ review); it never
  * passes by default.
  */
-import { isOffTopic, OFF_TOPIC_CONFIDENCE, type Subcheck } from "@groundtruth/shared";
+import { isOffTopic, OFF_TOPIC_CONFIDENCE, subjectEvidentlyVisible, type Subcheck } from "@groundtruth/shared";
 import { toModelFrame } from "../../image/modelFrame";
 import type { Stage, StageOutcome } from "../types";
 
@@ -48,7 +48,7 @@ export const relevance: Stage = {
       r.off_topic.value ? "yes" : "no"
     } (${r.off_topic.confidence.toFixed(2)})`;
 
-    if (isOffTopic(r)) {
+    if (isOffTopic(r, protocol)) {
       return {
         status: "fail",
         score: 0,
@@ -58,11 +58,13 @@ export const relevance: Stage = {
       };
     }
     const doubtful = r.off_topic.value || !r.subject_match.value;
+    // An off-topic verdict overruled because the subject's core elements are visible (isOffTopic).
+    const overruled = isOffTopic(r) && subjectEvidentlyVisible(r, protocol);
     return {
       status: doubtful ? "warn" : "pass",
       score: doubtful ? 0.5 : r.subject_match.confidence,
       reasonCodes: [],
-      evidence: [saw],
+      evidence: overruled ? [saw, "Off-topic verdict overruled: most required elements of the subject are visible"] : [saw],
       subchecks: [{ id: "subject", label: "Scene of the protocol subject", status: doubtful ? "warn" : "pass", detail: subjectDetail }, ...elements],
     };
   },

@@ -5,7 +5,7 @@
  * An Open-Meteo failure throws → stage `error` → needs_review (never auto-accept). NWS is advisory
  * (US only, often zone-based), so its failure only skips that subcheck.
  */
-import { insideBountyArea, type ReasonCode, type Subcheck } from "@groundtruth/shared";
+import { insideBountyArea, isIndoorProtocol, type ReasonCode, type Subcheck } from "@groundtruth/shared";
 import { expectedLighting, lightingCompatible } from "../../context/daylight";
 import type { Stage, StageOutcome } from "../types";
 
@@ -72,15 +72,20 @@ export const context: Stage = {
       }
     }
 
-    // daylight vs the model's view of the scene
+    // daylight vs the model's view of the scene (outdoor protocols only: indoors, lamps decide the light)
     const expected = expectedLighting(input.lat, input.lng, at);
+    const indoor = isIndoorProtocol(input.protocol);
     let seen: string | null = null;
-    try {
-      seen = (await ctx.model()).scene.lighting;
-    } catch {
-      seen = null; // model failure is reported by its own stages
+    if (!indoor) {
+      try {
+        seen = (await ctx.model()).scene.lighting;
+      } catch {
+        seen = null; // model failure is reported by its own stages
+      }
     }
-    if (!seen || seen === "unclear") {
+    if (indoor) {
+      sub.push({ id: "daylight", label: "Daylight matches", status: "skipped", detail: "Indoor protocol: daylight not applicable" });
+    } else if (!seen || seen === "unclear") {
       sub.push({ id: "daylight", label: "Daylight matches", status: "skipped", detail: `Expected ${expected}; model: ${seen ?? "unavailable"}` });
     } else {
       const ok = lightingCompatible(expected, seen as "day" | "dusk_dawn" | "night");
@@ -96,7 +101,7 @@ export const context: Stage = {
       status: hardFail ? "fail" : warned ? "warn" : "pass",
       score: Math.round(score * 1000) / 1000,
       reasonCodes: codes,
-      evidence: evidence.length ? evidence : [`Expected lighting: ${expected}`],
+      evidence: evidence.length ? evidence : [indoor ? "Indoor protocol: inside the bounty area and window" : `Expected lighting: ${expected}`],
       subchecks: sub,
     };
   },

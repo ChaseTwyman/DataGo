@@ -9,6 +9,7 @@
 import type { VerificationOutput } from "@groundtruth/shared";
 import { grokEnv } from "../../grok/config";
 import { toModelFrame } from "../../image/modelFrame";
+import { burstIntervalMs } from "../burstTiming";
 import type { PipelineDeps, PipelineInput } from "../types";
 
 export interface ModelAccessor {
@@ -33,7 +34,11 @@ export function modelAccessor(input: PipelineInput, deps: PipelineDeps): ModelAc
                 protocol: input.protocol,
                 challenge: input.challenge,
                 framesBase64: resized.map((b) => b.toString("base64")),
-                intervalMs: input.protocol.capture.frame_interval_ms,
+                // Loaded frames only, so the timing matches the frames the model actually sees.
+                intervalMs: burstIntervalMs(
+                  input.frames.filter((f) => f.bytes).map((f) => f.captured_at),
+                  input.protocol.capture.frame_interval_ms,
+                ),
                 signal: controller.signal,
                 ...(input.mockVariant ? { variant: input.mockVariant } : {}),
               });

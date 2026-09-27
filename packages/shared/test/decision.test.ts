@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StageResult } from "../src/checks";
-import { decide, type DecisionInput } from "../src/decision";
+import { CHALLENGE_SOFT_PENALTY, decide, OPTIONAL_ELEMENT_PENALTY, STATIC_BURST_SUBCHECK, type DecisionInput } from "../src/decision";
 import type { ReasonCode } from "../src/reasonCodes";
 
 function stage(id: StageResult["stage"], status: StageResult["status"], codes: ReasonCode[] = []): StageResult {
@@ -37,9 +37,7 @@ describe("decide — hard fails", () => {
     ["context", "OUTSIDE_AREA", "context"],
     ["context", "OUTSIDE_WINDOW", "context"],
     ["duplicates", "DUPLICATE", "integrity"],
-    ["challenge", "CHALLENGE_FAILED", "integrity"],
     ["session_integrity", "SYNTHETIC_MEDIA", "integrity"],
-    ["authenticity", "C2PA_AI_GENERATED", "integrity"],
     ["authenticity", "C2PA_AI_GENERATED", "integrity"],
   ];
   for (const [st, code, kind] of cases) {
@@ -150,4 +148,83 @@ describe("decide — errors and review caps", () => {
       expect(d.reasonCodes).toContain(code);
     });
   }
+});
+
+describe("decide — the motion challenge is a soft signal", () => {
+  const challengeFailed = (): StageResult[] => withCode("challenge", "CHALLENGE_FAILED");
+
+  it("a failed challenge alone, authentic capture → accepted with slightly lower confidence", () => {
+    const base = decide(input());
+    const d = decide(input({ stages: challengeFailed() }));
+    expect(d.status).toBe("accepted");
+    expect(d.reasonCodes).toContain("CHALLENGE_FAILED");
+    expect(d.confidence).toBeCloseTo(base.confidence - CHALLENGE_SOFT_PENALTY, 5);
+    expect(d.payoutMultiplier).toBeGreaterThan(0);
+  });
+
+  it("the cashew case (auth 0.8 = min, protocol 0.8, trust 0.5) is accepted", () => {
+    const d = decide(input({ stages: challengeFailed(), protocolScore: 0.8, authenticityScore: 0.8 }));
+    expect(d.status).toBe("accepted");
+  });
+
+  const concerns: [string, Partial<DecisionInput>][] = [
+    ["AI suspected (weak)", { authenticity: { ai_generated: { suspected: true, confidence: 0.6 } } }],
+    ["screen recapture (weak)", { authenticity: { screen_recapture: { suspected: true, confidence: 0.5 } } }],
+    ["printed photo (weak)", { authenticity: { printed_photo: { suspected: true, confidence: 0.5 } } }],
+    ["edited suspected", { authenticity: { edited_or_composited: { suspected: true, confidence: 0.5 } } }],
+    ["authenticity below the protocol minimum", { authenticityScore: 0.79 }],
+  ];
+  for (const [name, over] of concerns) {
+    it(`challenge failed + ${name} → rejected (integrity), as before`, () => {
+      const d = decide(input({ stages: challengeFailed(), ...over }));
+      expect(d.status).toBe("rejected");
+      expect(d.rejectionKind).toBe("integrity");
+      expect(d.retryable).toBe(false);
+      expect(d.reasonCodes).toContain("CHALLENGE_FAILED");
+    });
+  }
+
+  it("challenge failed + authenticity stage fail → rejected", () => {
+    const stages = challengeFailed().map((s) => (s.stage === "authenticity" ? stage("authenticity", "fail") : s));
+    expect(decide(input({ stages })).status).toBe("rejected");
+  });
+
+  it("identical burst frames (static burst) are never auto-accepted, even when authentic", () => {
+    const stages = allPass().map((s) =>
+      s.stage === "challenge"
+        ? { ...stage("challenge", "fail", ["CHALLENGE_FAILED"]), subchecks: [{ id: STATIC_BURST_SUBCHECK, label: "Movement", status: "fail" as const }] }
+        : s,
+    );
+    const d = decide(input({ stages, protocolScore: 1, authenticityScore: 1, corroborationScore: 1, trustScore: 0.9 }));
+    expect(d.status).toBe("needs_review");
+  });
+});
+
+describe("decide — optional (secondary) elements", () => {
+  it("a missing optional element lowers confidence but does not reject", () => {
+    const base = decide(input());
+    const d = decide(input({ stages: withCode("protocol", "MISSING_ELEMENT:scale_object"), optionalElements: ["scale_object"] }));
+    expect(d.status).toBe("accepted");
+    expect(d.confidence).toBeCloseTo(base.confidence - OPTIONAL_ELEMENT_PENALTY, 5);
+  });
+  it("an optional element confidently absent does not reject", () => {
+    const d = decide(input({ optionalElements: ["scale_object"], elements: [{ id: "scale_object", present: false, confidence: 0.95 }] }));
+    expect(d.status).toBe("accepted");
+  });
+  it("a required (non-optional) element still rejects", () => {
+    const d = decide(input({ stages: withCode("protocol", "MISSING_ELEMENT:package_front"), optionalElements: ["scale_object"] }));
+    expect(d.status).toBe("rejected");
+    expect(d.rejectionKind).toBe("protocol");
+  });
+  it("the reported cashew rejection (challenge + scale object) is accepted with sane scores", () => {
+    const stages = allPass().map((s) =>
+      s.stage === "challenge"
+        ? stage("challenge", "warn", ["CHALLENGE_FAILED"])
+        : s.stage === "protocol"
+          ? stage("protocol", "warn", ["MISSING_ELEMENT:scale_object"])
+          : s,
+    );
+    const d = decide(input({ stages, optionalElements: ["scale_object"], protocolScore: 0.85, authenticityScore: 0.9 }));
+    expect(d.status).toBe("accepted");
+  });
 });

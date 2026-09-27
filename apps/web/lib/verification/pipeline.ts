@@ -12,6 +12,7 @@
  */
 import {
   decide,
+  optionalElementIds,
   pendingChecks,
   stageLabel,
   type Decision,
@@ -155,6 +156,7 @@ export async function runPipeline(input: PipelineInput, deps: PipelineDeps, sink
     trustScore: input.trustScore,
     minProtocolScore: input.protocol.acceptance.min_protocol_score,
     minAuthenticityScore: input.protocol.acceptance.min_authenticity_score,
+    optionalElements: optionalElementIds(input.protocol),
     ...(model ? { authenticity: model.authenticity, elements: model.elements } : {}),
     ...(input.protocol.acceptance.element_absent_reject_confidence !== undefined
       ? { elementAbsentConfidence: input.protocol.acceptance.element_absent_reject_confidence }

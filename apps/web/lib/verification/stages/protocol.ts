@@ -18,11 +18,20 @@ export const protocolStage: Stage = {
     const sub: Subcheck[] = [];
     const codes: ReasonCode[] = [];
 
+    // Optional (secondary) elements warn when missing; decide() prices them in, never rejects on them.
+    let requiredMissing = false;
     for (const el of protocol.capture.required_elements) {
       const seen = m.elements.find((e) => e.id === el.id);
       const ok = !!seen && seen.present && seen.confidence >= ELEMENT_MIN_CONFIDENCE;
-      sub.push({ id: `element:${el.id}`, label: el.label, status: ok ? "pass" : "fail", detail: seen?.evidence ?? "Not reported by the model" });
+      const optional = el.optional === true;
+      sub.push({
+        id: `element:${el.id}`,
+        label: optional ? `${el.label} (optional)` : el.label,
+        status: ok ? "pass" : optional ? "warn" : "fail",
+        detail: seen?.evidence ?? "Not reported by the model",
+      });
       if (!ok) codes.push(missingElement(el.id));
+      if (!ok && !optional) requiredMissing = true;
     }
     const q = m.quality;
     sub.push({ id: "blur", label: "Sharp", status: q.blur_ok ? "pass" : "fail" });
@@ -48,7 +57,7 @@ export const protocolStage: Stage = {
     }
     codes.push(...sanity.codes);
 
-    const failed = codes.some((c) => c.startsWith("MISSING_ELEMENT:") || c === "BLURRY" || c === "EXTRACTION_MISSING") || !scoreOk;
+    const failed = requiredMissing || codes.some((c) => c === "BLURRY" || c === "EXTRACTION_MISSING") || !scoreOk;
     const warned = codes.length > 0;
     const extracted = Object.entries(m.extraction)
       .filter(([, v]) => v !== null && v !== "")

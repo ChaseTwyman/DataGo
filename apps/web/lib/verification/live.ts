@@ -74,11 +74,11 @@ async function process(db: Db, submissionId: string, opts: ProcessOptions): Prom
   // Load frames. Synthetic paths are never even read in the live pipeline (session integrity rejects).
   const frames: PipelineFrame[] = await Promise.all(
     sub.media.map(async (m) => {
-      if (!isObservationPath(m.path)) return { path: m.path, bytes: null };
+      if (!isObservationPath(m.path)) return { path: m.path, bytes: null, captured_at: m.captured_at };
       try {
-        return { path: m.path, bytes: await opts.storage.get(m.path) };
+        return { path: m.path, bytes: await opts.storage.get(m.path), captured_at: m.captured_at };
       } catch {
-        return { path: m.path, bytes: null };
+        return { path: m.path, bytes: null, captured_at: m.captured_at };
       }
     }),
   );

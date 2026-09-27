@@ -134,11 +134,13 @@ describe("runPipeline", () => {
     expect(seen.at(-1)).toBe(8);
   });
 
-  it("identical burst frames → CHALLENGE_FAILED even when the model is fooled", async () => {
+  it("identical burst frames → CHALLENGE_FAILED and never auto-accepted, even when the model is fooled", async () => {
     const one = await randomJpeg(320, 240);
     const input = await baseInput({ frames: [0, 1, 2].map((i) => ({ path: `x/${i}.jpg`, bytes: one })) });
     const r = await runPipeline(input, deps(), memorySink());
-    expect(r.decision.status).toBe("rejected");
+    // Was a hard reject until the challenge became a soft signal (2026-09-27); still a human decides.
+    expect(r.decision.status).toBe("needs_review");
+    expect(stage(r, "challenge").status).toBe("fail");
     expect(stage(r, "challenge").reasonCodes).toContain("CHALLENGE_FAILED");
   });
 

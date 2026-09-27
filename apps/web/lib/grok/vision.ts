@@ -20,12 +20,26 @@ import { grokEnv } from "./config";
 import { grokJSON, imagePart } from "./json";
 import { mockFrameCheck, mockPrivacyRegions, mockRelevance, mockVerification } from "./mocks/fixtures";
 
+/** "id: description" per element; optional (secondary) ones are tagged so models treat them as nice-to-have. */
+function elementList(protocol: Protocol): string {
+  return protocol.capture.required_elements.map((e) => `${e.id}${e.optional ? " (optional)" : ""}: ${e.description}`).join("; ");
+}
+
+/**
+ * Shared by the frame-check and verification prompts. Contributors hold the phone either way and
+ * the stored frame's EXIF rotation varies; the reasoning model marked genuine portrait captures
+ * BAD_FRAMING against `orientation: "landscape"` (2026-09-27 cashew test).
+ */
+const ORIENTATION_RULE =
+  "Orientation (portrait vs landscape) is never a quality criterion: never set framing_ok false and never lower a score because the photo is portrait instead of landscape or vice versa. framing_ok is only about whether the required elements are inside the frame and unobstructed.";
+
 export function frameCheckSystemPrompt(protocol: Protocol): string {
-  const elements = protocol.capture.required_elements.map((e) => `${e.id}: ${e.description}`).join("; ");
   return [
     `You are the real-time camera assistant for a scientific data-collection protocol called "${protocol.name}".`,
     "You see one low-resolution frame from a phone camera.",
-    `Required elements: ${elements}.`,
+    `Required elements: ${elementList(protocol)}.`,
+    "Elements marked (optional) are nice to have: report them, but only hint about them once everything else is in place.",
+    ORIENTATION_RULE,
     "Judge only what is visible; do not assume.",
     "Set `suspected_screen_or_print` if you see moiré, a pixel grid, a screen bezel or display glare, or paper edges and print texture.",
     "Give one short imperative hint that would most improve the shot.",
@@ -60,15 +74,16 @@ export async function frameCheck(args: {
 }
 
 export function relevanceSystemPrompt(protocol: Protocol): string {
-  const elements = protocol.capture.required_elements.map((e) => `${e.id}: ${e.description}`).join("; ");
   return [
     `You screen photos submitted to a scientific data-collection protocol called "${protocol.name}".`,
     `What the protocol collects: ${protocol.why_it_matters}`,
-    `Required elements: ${elements}.`,
-    "You see one frame from the contributor's burst. Decide only whether it shows a real-world scene of this protocol's subject at all; quality and authenticity are judged later by someone else.",
-    "subject_match: does the frame show the kind of scene the protocol is about?",
+    `Required elements: ${elementList(protocol)}.`,
+    "You see one frame from the contributor's burst. Decide only whether it shows a real-world scene of this protocol's subject at all; quality, completeness and authenticity are judged later by someone else.",
+    "subject_match: does the frame show the protocol's subject? If the main subject is visible, subject_match is true even when other required elements are missing, the framing is imperfect, the orientation is portrait or landscape, or other objects clutter the scene.",
     "elements: for each required element, is it visible in this frame?",
-    "off_topic: set value true when the frame clearly shows something unrelated to the protocol (for example an indoor object, a person's face, a product, a pet, a blank wall, a screen showing unrelated content). what_it_is: a short plain description of what the frame actually shows (max 20 words). Judge only what is visible; do not assume.",
+    // Tried and rejected (2026-09-27): listing "an indoor object" and "a product" as off-topic
+    // examples. They made the model call a cashew jar off-topic for a packaged-goods protocol.
+    "off_topic: set value true only when the protocol's subject is genuinely absent and the frame shows something unrelated to it (for example a person's face, a pet, a blank wall, a screen showing unrelated content, or an object of a different kind than the protocol asks for). Missing secondary elements, framing, orientation or background clutter never make a frame off-topic. what_it_is: a short plain description of what the frame actually shows (max 20 words). Judge only what is visible; do not assume.",
   ].join(" ");
 }
 
@@ -104,6 +119,14 @@ export function verificationSystemPrompt(protocol: Protocol, challenge: Challeng
     `You receive ${frames} frames captured ${intervalMs} ms apart while the contributor was instructed: "${challenge.instruction}".`,
     `Expected if genuine: "${challenge.expect}".`,
     `Protocol: ${JSON.stringify(protocol)}.`,
+    // Leniency rules (2026-09-27): authentic indoor captures were rejected on a strict reading of a
+    // ~1.4 s challenge, a missing secondary element, and orientation. Fakes are caught by the
+    // authenticity checks, not by these.
+    "The challenge is a light liveness hint, not the main test, and the burst is short: any small change in viewpoint, scale, framing or perspective between frames counts as performed, even if it is slight or not exactly in the requested direction. Set challenge.performed false only when the frames show no camera movement at all or are identical copies of one image.",
+    "protocol_score measures only the required elements, image quality and the extraction; do not lower it for the challenge, for orientation, or for background clutter.",
+    "Elements marked optional: true are secondary: report them honestly, but a missing optional element lowers protocol_score by at most 0.1.",
+    ORIENTATION_RULE,
+    ...(protocol.capture.setting === "indoor" ? ["This is an indoor protocol: artificial lighting at any hour is expected and is not an inconsistency."] : []),
     "For every judgment, cite specific visual evidence.",
     "Check whether the frames show a real three-dimensional scene with natural parallax between frames, or a flat surface such as a screen or print.",
     "Look for signs of AI generation, editing, or compositing, and for internal inconsistencies (for example dry pavement beside supposed floodwater, mismatched shadows or reflections).",

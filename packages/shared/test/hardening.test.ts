@@ -10,7 +10,7 @@ import { checkExtraction } from "../src/extractionSanity";
 import { streetFloodDepth, ProtocolSchema, type Protocol } from "../src/protocols";
 import { qualityTier, verifierAfterReview, PUBLISH_MIN_CONFIDENCE } from "../src/provenance";
 import { contributorMessage, reasonKind, ReasonCodeSchema, type ReasonCode } from "../src/reasonCodes";
-import { isOffTopic, relevanceJsonSchema, relevanceZod, OFF_TOPIC_CONFIDENCE } from "../src/verificationSchema";
+import { isFrameAllGreen, isOffTopic, relevanceJsonSchema, relevanceZod, OFF_TOPIC_CONFIDENCE } from "../src/verificationSchema";
 
 function stage(id: StageResult["stage"], status: StageResult["status"], codes: ReasonCode[] = []): StageResult {
   return { stage: id, label: id, status, score: null, reasonCodes: codes, evidence: [], ms: 1 };
@@ -175,6 +175,42 @@ describe("relevance schema", () => {
     expect(isOffTopic(r(true, OFF_TOPIC_CONFIDENCE))).toBe(true);
     expect(isOffTopic(r(true, 0.69))).toBe(false);
     expect(isOffTopic(r(false, 0.99))).toBe(false);
+  });
+
+  it("isOffTopic(r, protocol): overruled when most core elements are visible (cashew false negative)", () => {
+    const els = streetFloodDepth.capture.required_elements;
+    const verdict = (visible: string[]) => ({
+      subject_match: { value: false, confidence: 0.9 },
+      elements: els.map((e) => ({ id: e.id, visible: visible.includes(e.id), confidence: 0.9 })),
+      off_topic: { value: true, confidence: 0.8, what_it_is: "Jar of cashews on white table with earbuds" },
+    });
+    // 2 of 3 core elements visible → the subject is there; not off-topic.
+    expect(isOffTopic(verdict(["water_surface", "reference_object"]), streetFloodDepth)).toBe(false);
+    // 1 of 3 → still off-topic (a curb with no water is not a flood scene).
+    expect(isOffTopic(verdict(["reference_object"]), streetFloodDepth)).toBe(true);
+    // Optional elements don't count toward the core: with waterline optional, 1 of 2 core is not a majority.
+    const withOptional = {
+      ...streetFloodDepth,
+      capture: { ...streetFloodDepth.capture, required_elements: els.map((e) => (e.id === "waterline" ? { ...e, optional: true } : e)) },
+    };
+    expect(isOffTopic(verdict(["reference_object", "waterline"]), withOptional)).toBe(true);
+    // Nothing visible (the vitamin-water bottle): off-topic.
+    expect(isOffTopic(verdict([]), streetFloodDepth)).toBe(true);
+  });
+
+  it("isFrameAllGreen ignores optional elements", () => {
+    const els = streetFloodDepth.capture.required_elements;
+    const p = { ...streetFloodDepth, capture: { ...streetFloodDepth.capture, required_elements: els.map((e) => (e.id === "waterline" ? { ...e, optional: true } : e)) } };
+    const fc = {
+      elements: els.filter((e) => e.id !== "waterline").map((e) => ({ id: e.id, visible: true, confidence: 0.9 })),
+      framing_ok: true,
+      blur_ok: true,
+      lighting_ok: true,
+      suspected_screen_or_print: { value: false, confidence: 0.1 },
+      hint: "Hold still.",
+    };
+    expect(isFrameAllGreen(p, fc)).toBe(true);
+    expect(isFrameAllGreen(streetFloodDepth, fc)).toBe(false);
   });
 });
 

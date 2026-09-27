@@ -25,6 +25,8 @@ export interface PipelineFrame {
   path: string;
   /** null when the upload is missing or was deliberately not loaded (synthetic path in live mode). */
   bytes: Buffer | null;
+  /** Client capture time of this frame (submission media[].captured_at), when known. */
+  captured_at?: string | null;
 }
 
 export interface PipelineBounty {

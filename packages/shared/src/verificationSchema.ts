@@ -64,8 +64,25 @@ export function relevanceJsonSchema(protocol: Protocol): JsonSchema {
   return toStrictJsonSchema(relevanceZod(protocol));
 }
 
-export function isOffTopic(r: RelevanceResult): boolean {
-  return r.off_topic.value && r.off_topic.confidence >= OFF_TOPIC_CONFIDENCE;
+/**
+ * Off-topic = the protocol's subject is genuinely absent. With the protocol, a verdict is overruled
+ * when most of the non-optional elements are reported visible at ≥ OFF_TOPIC_CONFIDENCE: the fast
+ * model once called a cashew jar "off-topic" (0.80) while reporting the package front and brand
+ * visible at 0.90 (it was reacting to missing secondary elements and clutter). Missing secondary
+ * elements, framing, or orientation are judged later and are never "off-topic".
+ */
+export function isOffTopic(r: RelevanceResult, protocol?: Protocol): boolean {
+  if (!(r.off_topic.value && r.off_topic.confidence >= OFF_TOPIC_CONFIDENCE)) return false;
+  if (!protocol) return true;
+  return !subjectEvidentlyVisible(r, protocol);
+}
+
+/** More than half of the non-optional required elements visible at ≥ OFF_TOPIC_CONFIDENCE. */
+export function subjectEvidentlyVisible(r: RelevanceResult, protocol: Protocol): boolean {
+  const core = protocol.capture.required_elements.filter((e) => e.optional !== true);
+  if (core.length === 0) return false;
+  const seen = core.filter((el) => r.elements.some((e) => e.id === el.id && e.visible && e.confidence >= OFF_TOPIC_CONFIDENCE));
+  return seen.length * 2 > core.length;
 }
 
 // ---------- Verification (reasoning vision) ----------
@@ -143,11 +160,14 @@ export function closeObjects(node: JsonSchema): JsonSchema {
   return node;
 }
 
-/** A frame check is all-green when every required element is visible and quality flags pass. */
+/**
+ * A frame check is all-green when every non-optional required element is visible and quality flags
+ * pass. Optional (secondary) elements are coached but never hold the gate closed.
+ */
 export function isFrameAllGreen(protocol: Protocol, fc: FrameCheckResult, minConfidence = 0.5): boolean {
   const visible = new Set(
     fc.elements.filter((e) => e.visible && e.confidence >= minConfidence).map((e) => e.id),
   );
-  const allElements = protocol.capture.required_elements.every((e) => visible.has(e.id));
+  const allElements = protocol.capture.required_elements.every((e) => e.optional === true || visible.has(e.id));
   return allElements && fc.framing_ok && fc.blur_ok && fc.lighting_ok && !fc.suspected_screen_or_print.value;
 }

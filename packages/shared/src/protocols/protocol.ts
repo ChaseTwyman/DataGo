@@ -11,11 +11,28 @@ const JsonSchemaObject = z
   })
   .passthrough();
 
+/**
+ * `optional: true` marks a secondary element (nice to have, e.g. a scale object beside a product):
+ * it is still coached and checked, but its absence only lowers confidence (decide(): OPTIONAL_ELEMENT_PENALTY)
+ * and never rejects or blocks the live capture gate. Omitted = required, the original behaviour.
+ * Chosen over a `priority` enum: one boolean covers the need and keeps old protocols valid unchanged.
+ */
 export const RequiredElementSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_]*$/),
   label: z.string().min(1),
   description: z.string().min(1),
+  optional: z.boolean().optional(),
 });
+
+/** Ids of the protocol's optional (secondary) elements. */
+export function optionalElementIds(protocol: Protocol): string[] {
+  return protocol.capture.required_elements.filter((e) => e.optional === true).map((e) => e.id);
+}
+
+/** True when the protocol is captured indoors: outdoor-only context checks (daylight) do not apply. */
+export function isIndoorProtocol(protocol: Protocol): boolean {
+  return protocol.capture.setting === "indoor";
+}
 
 export const ChallengeSchema = z.object({
   id: z.string().min(1),
@@ -84,7 +101,16 @@ export const ProtocolSchema = z.object({
     mode: z.enum(["burst", "single"]),
     frames: z.number().int().min(1).max(6),
     frame_interval_ms: z.number().int().min(100).max(3000),
+    /**
+     * Coaching preference only: the verifier never penalises portrait vs landscape (the phone's
+     * EXIF rotation decides how a frame is stored; contributors hold the phone either way).
+     */
     orientation: z.enum(["landscape", "portrait", "any"]),
+    /**
+     * Where captures happen. "indoor" skips outdoor-only context checks (daylight vs sun position:
+     * a packaged-goods photo under a lamp at 1 am is not a mismatch). Omitted = "outdoor".
+     */
+    setting: z.enum(["outdoor", "indoor"]).optional(),
     max_tilt_deg: z.number().min(1).max(90),
     required_elements: z.array(RequiredElementSchema).min(1),
     framing_tips: z.array(z.string()),
